@@ -160,9 +160,19 @@ struct DashboardView: View {
             PendingApprovalsView()
         }
         .sheet(isPresented: $showingReportSheet) {
-            // TODO: Add Report View here
-            Text("Report View Coming Soon")
-                .presentationDetents([.medium])
+            NavigationStack {
+                ReportView()
+                    .navigationTitle("Report")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Done") {
+                                showingReportSheet = false
+                            }
+                        }
+                    }
+            }
+            .presentationDetents([.large])
         }
         .onAppear {
             if let projectId = project?.id{
