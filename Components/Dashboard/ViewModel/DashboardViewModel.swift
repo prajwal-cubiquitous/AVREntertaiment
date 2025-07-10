@@ -12,22 +12,8 @@ import SwiftUI
 struct DepartmentBudget: Equatable {
     let department: String
     let totalBudget: Double
-    let spentBudget: Double
-    let remainingBudget: Double
+    let approvedBudget: Double
     let color: Color
-    
-    var spentPercentage: Double {
-        guard totalBudget > 0 else { return 0 }
-        return spentBudget / totalBudget
-    }
-    
-    // MARK: - Equatable conformance
-    static func == (lhs: DepartmentBudget, rhs: DepartmentBudget) -> Bool {
-        return lhs.department == rhs.department &&
-               lhs.totalBudget == rhs.totalBudget &&
-               lhs.spentBudget == rhs.spentBudget &&
-               lhs.remainingBudget == rhs.remainingBudget
-    }
 }
 
 struct NotificationItem {
@@ -73,12 +59,8 @@ class DashboardViewModel: ObservableObject {
     
     // MARK: - Computed Properties for Project Data
     var totalProjectBudgetFormatted: String {
-        guard let project = project else { return "₹0.00" }
-        let totalBudget = project.budget
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.locale = Locale(identifier: "en_IN")
-        return formatter.string(from: NSNumber(value: totalBudget)) ?? "₹0.00"
+        let total = departmentBudgets.reduce(0) { $0 + $1.totalBudget }
+        return total.formattedCurrency
     }
     
     // MARK: - Update Project Method
@@ -127,8 +109,7 @@ class DashboardViewModel: ObservableObject {
             DepartmentBudget(
                 department: department,
                 totalBudget: budget.total,
-                spentBudget: budget.spent, // TODO: Load actual spent amounts from expenses
-                remainingBudget: budget.total - budget.spent,
+                approvedBudget: 0, // Placeholder, will be updated
                 color: colorForDepartment(department)
             )
         }.sorted { $0.department < $1.department }
@@ -152,34 +133,42 @@ class DashboardViewModel: ObservableObject {
             guard let document = snapshot.documents.first else { return }
             let project = try document.data(as: Project.self)
             
-            var budgets: [String: (total: Double, spent: Double)] = [:]
+            var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
             
             // Add department budgets from project
             for (department, amount) in project.departments {
-                budgets[department] = (total: amount, spent: 0)
+                departmentBudgetDict[department] = (Double(amount), 0)
             }
             
-            // Calculate spent amounts from expenses
+            // Fetch and calculate approved amounts from expenses
             let expensesSnapshot = try await document.reference
                 .collection("expenses")
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
             for expenseDoc in expensesSnapshot.documents {
-                let expense = try expenseDoc.data(as: Expense.self)
-                budgets[expense.department]?.spent += expense.amount
+                if let expense = try? expenseDoc.data(as: Expense.self) {
+                    let department = expense.department
+                    var currentValues = departmentBudgetDict[department] ?? (0, 0)
+                    currentValues.approved += expense.amount
+                    departmentBudgetDict[department] = currentValues
+                }
             }
             
             // Convert to DepartmentBudget objects
-            departmentBudgets = budgets.map { (department, budget) in
+            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint]
+            let budgets = departmentBudgetDict.enumerated().map { index, entry in
                 DepartmentBudget(
-                    department: department,
-                    totalBudget: budget.total,
-                    spentBudget: budget.spent,
-                    remainingBudget: budget.total - budget.spent,
-                    color: colorForDepartment(department)
+                    department: entry.key,
+                    totalBudget: entry.value.total,
+                    approvedBudget: entry.value.approved,
+                    color: colors[index % colors.count]
                 )
-            }.sorted { $0.department < $1.department }
+            }
+            
+            await MainActor.run {
+                self.departmentBudgets = budgets.sorted { $0.totalBudget > $1.totalBudget }
+            }
             
         } catch {
             print("Error loading project: \(error)")
@@ -249,22 +238,19 @@ class DashboardViewModel: ObservableObject {
             DepartmentBudget(
                 department: "Set Design",
                 totalBudget: 300000,
-                spentBudget: 280000,
-                remainingBudget: 20000,
+                approvedBudget: 0, // Placeholder, will be updated
                 color: .blue
             ),
             DepartmentBudget(
                 department: "Costumes",
                 totalBudget: 100000,
-                spentBudget: 45000,
-                remainingBudget: 55000,
+                approvedBudget: 0, // Placeholder, will be updated
                 color: .green
             ),
             DepartmentBudget(
                 department: "Miscellaneous",
                 totalBudget: 50000,
-                spentBudget: 20000,
-                remainingBudget: 30000,
+                approvedBudget: 0, // Placeholder, will be updated
                 color: .purple
             )
         ]

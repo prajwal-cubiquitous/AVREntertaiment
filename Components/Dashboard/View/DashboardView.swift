@@ -13,6 +13,7 @@ struct DashboardView: View {
     @State private var showingNotifications = false
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
+    @State private var showingReportSheet = false
     
     // Accept a single project as parameter
     let project: Project?
@@ -53,6 +54,28 @@ struct DashboardView: View {
                     .padding(.bottom, DesignSystem.Spacing.extraLarge)
                 }
                 
+                // Floating Report Button
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showingReportSheet = true
+                        }) {
+                            HStack {
+                                Image(systemName: "doc.text.fill")
+                                Text("Report")
+                            }
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .clipShape(Capsule())
+                            .shadow(radius: 5)
+                        }
+                        .padding()
+                    }
+                }
+
                 // Notification popup overlay
                 if showingNotifications {
                     Color.black.opacity(0.1)
@@ -133,6 +156,11 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingPendingApprovals) {
             PendingApprovalsView()
+        }
+        .sheet(isPresented: $showingReportSheet) {
+            // TODO: Add Report View here
+            Text("Report View Coming Soon")
+                .presentationDetents([.medium])
         }
         .onAppear {
             if let projectId = project?.id{
@@ -360,51 +388,7 @@ struct DashboardView: View {
             
             VStack(spacing: DesignSystem.Spacing.medium) {
                 ForEach(viewModel.departmentBudgets, id: \.department) { budget in
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                        HStack {
-                            Text(budget.department)
-                                .font(DesignSystem.Typography.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            Text("₹\(budget.spentBudget.formattedCurrency) / ₹\(budget.totalBudget.formattedCurrency)")
-                                .font(DesignSystem.Typography.caption1)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        // Progress bar with animation
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(.systemFill))
-                                    .frame(height: 12)
-                                
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(budget.color.gradient)
-                                    .frame(width: geometry.size.width * budget.spentPercentage, height: 12)
-                                    .animation(.easeInOut(duration: 1.0), value: budget.spentPercentage)
-                            }
-                        }
-                        .frame(height: 12)
-                        
-                        // Percentage indicator
-                        HStack {
-                            Text("\(Int(budget.spentPercentage * 100))% utilized")
-                                .font(DesignSystem.Typography.caption2)
-                                .foregroundColor(.secondary)
-                            
-                            Spacer()
-                            
-                            Text("₹\(budget.remainingBudget.formattedCurrency) remaining")
-                                .font(DesignSystem.Typography.caption2)
-                                .foregroundColor(budget.remainingBudget > 0 ? .green : .red)
-                        }
-                    }
-                    .padding(DesignSystem.Spacing.medium)
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    BudgetComparisonRow(budget: budget)
                 }
             }
             .padding(DesignSystem.Spacing.medium)
@@ -415,32 +399,77 @@ struct DashboardView: View {
     }
 }
 
+// MARK: - Budget Comparison Row
+private struct BudgetComparisonRow: View {
+    let budget: DepartmentBudget
+    
+    private var spentPercentage: Double {
+        budget.approvedBudget / budget.totalBudget
+    }
+    
+    private var remainingAmount: Double {
+        budget.totalBudget - budget.approvedBudget
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Text(budget.department)
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("₹\(budget.approvedBudget.formattedCurrency) / ₹\(budget.totalBudget.formattedCurrency)")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Progress bar with animation
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(.systemFill))
+                        .frame(height: 12)
+                    
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(budget.color.gradient)
+                        .frame(width: geometry.size.width * spentPercentage, height: 12)
+                        .animation(.easeInOut(duration: 1.0), value: spentPercentage)
+                }
+            }
+            .frame(height: 12)
+            
+            // Percentage indicator
+            HStack {
+                Text("\(Int(spentPercentage * 100))% utilized")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("₹\(remainingAmount.formattedCurrency) remaining")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundColor(remainingAmount > 0 ? .green : .red)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+}
+
 // MARK: - Enhanced Department Budget Card
 struct EnhancedDepartmentBudgetCard: View {
     let budget: DepartmentBudget
     let isSelected: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            // Header with icon
-            HStack {
-                Image(systemName: iconForDepartment(budget.department))
-                    .font(DesignSystem.Typography.title3)
-                    .foregroundColor(budget.color)
-                    .symbolRenderingMode(.hierarchical)
-                
-                Spacer()
-                
-                // Status indicator
-                Circle()
-                    .fill(budget.spentPercentage > 0.8 ? .red : budget.spentPercentage > 0.5 ? .orange : .green)
-                    .frame(width: 8, height: 8)
-            }
-            
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             // Department name
             Text(budget.department)
                 .font(DesignSystem.Typography.headline)
-                .fontWeight(.semibold)
                 .foregroundColor(.primary)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -461,7 +490,7 @@ struct EnhancedDepartmentBudgetCard: View {
                         .foregroundColor(.primary)
                 }
                 
-                // Spent amount
+                // Spent amount (Approved expenses)
                 HStack {
                     Text("Spent:")
                         .font(DesignSystem.Typography.caption1)
@@ -469,10 +498,10 @@ struct EnhancedDepartmentBudgetCard: View {
                     
                     Spacer()
                     
-                    Text("₹\(budget.spentBudget.formattedCurrency)")
+                    Text("₹\(budget.approvedBudget.formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(budget.color)
+                        .fontWeight(.semibold)
+                        .foregroundColor(budget.approvedBudget > budget.totalBudget ? .red : .primary)
                 }
                 
                 // Remaining amount
@@ -483,47 +512,33 @@ struct EnhancedDepartmentBudgetCard: View {
                     
                     Spacer()
                     
-                    Text("₹\(budget.remainingBudget.formattedCurrency)")
+                    Text("₹\((budget.totalBudget - budget.approvedBudget).formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(budget.remainingBudget > 0 ? .green : .red)
+                        .fontWeight(.semibold)
+                        .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)
                 }
             }
             
             // Progress bar
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color(.systemFill))
-                            .frame(height: 8)
-                        
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(budget.color.gradient)
-                            .frame(width: geometry.size.width * budget.spentPercentage, height: 8)
-                            .animation(.easeInOut(duration: 0.8), value: budget.spentPercentage)
-                    }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(height: 8)
+                    
+                    // Progress
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(budget.color)
+                        .frame(width: min(CGFloat(budget.approvedBudget / budget.totalBudget) * geometry.size.width, geometry.size.width), height: 8)
                 }
-                .frame(height: 8)
-                
-                Text("\(Int(budget.spentPercentage * 100))% utilized")
-                    .font(DesignSystem.Typography.caption2)
-                    .foregroundColor(.secondary)
             }
+            .frame(height: 8)
+            .padding(.top, 4)
         }
-        .padding(DesignSystem.Spacing.medium)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
-                .fill(Color(.secondarySystemGroupedBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
-                        .stroke(isSelected ? budget.color : Color.clear, lineWidth: 2)
-                )
-        )
-        .scaleEffect(isSelected ? 1.02 : 1.0)
-        .cardStyle(shadow: isSelected ? DesignSystem.Shadow.large : DesignSystem.Shadow.medium)
-        .animation(.easeInOut(duration: 0.3), value: isSelected)
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
     }
     
     private func iconForDepartment(_ department: String) -> String {
