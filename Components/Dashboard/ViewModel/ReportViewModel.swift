@@ -21,6 +21,7 @@ class ReportViewModel: ObservableObject {
     @Published var expenses: [Expense] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var departmentNames: [String] = []
     
     // Filter properties
     @Published var selectedDateRange: DateRange = .thisMonth
@@ -29,12 +30,16 @@ class ReportViewModel: ObservableObject {
     private let db = Firestore.firestore()
     
     // MARK: - Date Range Enum
-    enum DateRange: String, CaseIterable {
+    enum DateRange: String, CaseIterable, CustomStringConvertible {
         case thisMonth = "This Month"
         case lastMonth = "Last Month"
         case thisQuarter = "This Quarter"
         case thisYear = "This Year"
         case custom = "Custom"
+        
+        var description: String {
+            return self.rawValue
+        }
         
         var dateInterval: DateInterval {
             let calendar = Calendar.current
@@ -71,13 +76,30 @@ class ReportViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Computed Properties
-    var availableDepartments: [String] {
-        var departments = Set<String>()
-        departments.insert("All")
-        departmentBudgets.forEach { departments.insert($0.department) }
-        return Array(departments).sorted()
+    func fetchDepartmentNames(from documentID: String) {
+        let db = Firestore.firestore()
+        
+        db.collection("projects_ios").document(documentID).getDocument { snapshot, error in
+            if let error = error {
+                print("Error fetching document: \(error)")
+                return
+            }
+            
+            guard let data = snapshot?.data(),
+                  let departments = data["departments"] as? [String: Any] else {
+                print("Departments field missing or wrong type.")
+                return
+            }
+            
+            var keys = Array(departments.keys).sorted()
+            keys.insert("All", at: 0) // Add "All" at the beginning
+
+            DispatchQueue.main.async {
+                self.departmentNames = keys
+            }
+        }
     }
+    
     
     var filteredExpenses: [Expense] {
         let dateInterval = selectedDateRange.dateInterval
@@ -154,6 +176,33 @@ class ReportViewModel: ObservableObject {
             }
         }
     }
+    
+    func loadApprovedExpenses(projectId: String) async {
+            let db = Firestore.firestore()
+            let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
+            print("DEBUG 1 : \(selectedDepartment)")
+            do {
+                let snapshot = try await expenseCollectionRef
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .whereField("department", isEqualTo: selectedDepartment)
+                    .getDocuments()
+                
+                var loadedExpenses: [Expense] = []
+                for doc in snapshot.documents {
+                    if let expense = try? doc.data(as: Expense.self) {
+                        loadedExpenses.append(expense)
+                    }
+                }
+                
+                // Assign to your published expenses list on the main thread
+                await MainActor.run {
+                    self.expenses = loadedExpenses
+                    print(loadedExpenses)
+                }
+            } catch {
+                print("Failed to load approved expenses: \(error)")
+            }
+        }
     
     private func loadExpenses() async {
         do {

@@ -161,7 +161,7 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingReportSheet) {
             // TODO: Add Report View here
-            ReportView()
+            ReportView(projectId: project?.id)
                 .presentationDetents([.large])
         }
         .onAppear {
