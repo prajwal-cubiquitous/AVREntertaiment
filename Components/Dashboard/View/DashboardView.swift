@@ -14,6 +14,7 @@ struct DashboardView: View {
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
     @State private var showingReportSheet = false
+    @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     
     // Accept a single project as parameter
     let project: Project?
@@ -21,6 +22,7 @@ struct DashboardView: View {
     init(project: Project? = nil) {
         self.project = project
         self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project))
+        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0]))
     }
     
     var body: some View {
@@ -276,7 +278,8 @@ struct DashboardView: View {
                     ForEach(viewModel.departmentBudgets, id: \.department) { budget in
                         EnhancedDepartmentBudgetCard(
                             budget: budget,
-                            isSelected: selectedDepartment == budget.department
+                            isSelected: selectedDepartment == budget.department,
+                            viewModel: ProjectDetialViewModel
                         )
                         .onTapGesture {
                             withAnimation(.easeInOut(duration: 0.3)) {
@@ -464,6 +467,8 @@ private struct BudgetComparisonRow: View {
 struct EnhancedDepartmentBudgetCard: View {
     let budget: DepartmentBudget
     let isSelected: Bool
+    @ObservedObject var viewModel: ProjectDetailViewModel
+
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -498,10 +503,11 @@ struct EnhancedDepartmentBudgetCard: View {
                     
                     Spacer()
                     
-                    Text("₹\(budget.approvedBudget.formattedCurrency)")
+                    Text("₹\(Int(viewModel.approvedAmount(for: budget.department)))")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(budget.approvedBudget > budget.totalBudget ? .red : .primary)
+
                 }
                 
                 // Remaining amount
@@ -512,7 +518,7 @@ struct EnhancedDepartmentBudgetCard: View {
                     
                     Spacer()
                     
-                    Text("₹\((budget.totalBudget - budget.approvedBudget).formattedCurrency)")
+                    Text("₹\(Int(viewModel.remainingBudget(for: budget.department, allocatedBudget: budget.totalBudget)))")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)

@@ -82,6 +82,22 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
 // MARK: - Updated Sample Data
 extension Project {
     static let sampleData: [Project] = [
+        Project(id: "128YgC7uVnge9RLxVfisdhihfrgG",
+                name: "",
+                description: "",
+                // The total budget MUST match the sum of the categories
+                budget: 0000,
+                status: "ACTIVE",
+                startDate: "",
+                endDate: "",
+                teamMembers: ["user1", "user2", "user3"],
+                managerId: "manager1",
+                // The new dictionary for department breakdown
+                departments: [:
+
+                ],
+                createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 30)),
+                updatedAt: Timestamp(date: Date().addingTimeInterval(-3600))),
         Project(id: "128YgC7uVnge9RLxVrgG",
                 name: "Movie Production A",
                 description: "Action thriller movie production...",
