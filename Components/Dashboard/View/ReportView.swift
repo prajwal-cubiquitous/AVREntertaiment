@@ -14,43 +14,44 @@ struct ReportView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                LazyVStack(spacing: DesignSystem.Spacing.large) {
-                    // Hero Section
-                    heroSection
-                    
-                    // Quick Stats Cards
-                    quickStatsSection
-                    
-                    // Filters Section
-                    filtersSection
-                    
-                    // Chart Section
-                    chartSection
-                    
-                    // Department Budget Summary Section
-                    departmentBudgetSummarySection
-                    
-                    // Export Section
-                    exportSection
-                }
-                .padding(.horizontal)
-                .padding(.top, DesignSystem.Spacing.small)
-                .onAppear {
-                    if let projectId = projectId {
-                        viewModel.fetchDepartmentNames(from: projectId)
-                        Task {
-                            await viewModel.loadApprovedExpenses(projectId: projectId)
-                            await viewModel.loadDepartmentBudgets(projectId: projectId)
-                        }
+            ZStack {
+                // Scrollable Content
+                ScrollView {
+                    LazyVStack(spacing: DesignSystem.Spacing.large) {
+                        // Filters Section
+                        filtersSection
+                        
+                        // Chart Section
+                        chartSection
+                        
+                        // Department Budget Summary Section
+                        departmentBudgetSummarySection
                     }
-                }
-                .onChange(of: viewModel.selectedDepartment) {
-                    Task {
+                    .padding(.horizontal)
+                    .padding(.top, DesignSystem.Spacing.small)
+                    .padding(.bottom, 100) // Add bottom padding to avoid floating buttons
+                    .onAppear {
                         if let projectId = projectId {
-                            await viewModel.loadApprovedExpenses(projectId: projectId)
+                            viewModel.fetchDepartmentNames(from: projectId)
+                            Task {
+                                await viewModel.loadApprovedExpenses(projectId: projectId)
+                                await viewModel.loadDepartmentBudgets(projectId: projectId)
+                            }
                         }
                     }
+                    .onChange(of: viewModel.selectedDepartment) {
+                        Task {
+                            if let projectId = projectId {
+                                await viewModel.loadApprovedExpenses(projectId: projectId)
+                            }
+                        }
+                    }
+                }
+                
+                // Floating Export Buttons
+                VStack {
+                    Spacer()
+                    floatingExportButtons
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -73,56 +74,6 @@ struct ReportView: View {
                 }
             }
             .background(Color(.systemGroupedBackground))
-        }
-    }
-    
-    // MARK: - Hero Section
-    private var heroSection: some View {
-        VStack(spacing: DesignSystem.Spacing.medium) {
-            // Icon and Title
-            VStack(spacing: DesignSystem.Spacing.small) {
-                Image(systemName: "chart.bar.doc.horizontal.fill")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.blue.gradient)
-                    .symbolEffect(.pulse.wholeSymbol)
-                
-                Text("Analytics Overview")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.primary)
-                
-                Text("Track and analyze your project expenses with detailed insights")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, DesignSystem.Spacing.large)
-    }
-    
-    // MARK: - Quick Stats Section
-    private var quickStatsSection: some View {
-        HStack(spacing: DesignSystem.Spacing.medium) {
-            StatCard(
-                title: "Total Expenses",
-                value: "₹\(Int(viewModel.filteredExpenses.reduce(0) { $0 + $1.amount }).formatted())",
-                icon: "indianrupeesign.circle.fill",
-                color: .blue
-            )
-            
-            StatCard(
-                title: "Categories",
-                value: "\(viewModel.expenseCategories.count)",
-                icon: "folder.fill",
-                color: .green
-            )
-            
-            StatCard(
-                title: "Period",
-                value: viewModel.selectedDateRange.description,
-                icon: "calendar.circle.fill",
-                color: .orange
-            )
         }
     }
     
@@ -273,76 +224,33 @@ struct ReportView: View {
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
     }
     
-    // MARK: - Export Section
-    private var exportSection: some View {
-        VStack(spacing: DesignSystem.Spacing.medium) {
-            HStack {
-                Text("Export Options")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                
-                Spacer()
-                
-                Image(systemName: "square.and.arrow.up.fill")
-                    .font(.title3)
-                    .foregroundStyle(.green.gradient)
-            }
+    // MARK: - Floating Export Buttons
+    private var floatingExportButtons: some View {
+        HStack(spacing: DesignSystem.Spacing.medium) {
+            ExportButton(
+                title: "Export PDF",
+                icon: "doc.fill",
+                color: .red,
+                action: viewModel.exportToPDF
+            )
             
-            HStack(spacing: DesignSystem.Spacing.medium) {
-                ExportButton(
-                    title: "Export PDF",
-                    icon: "doc.fill",
-                    color: .red,
-                    action: viewModel.exportToPDF
-                )
-                
-                ExportButton(
-                    title: "Export Excel",
-                    icon: "tablecells.fill",
-                    color: .green,
-                    action: viewModel.exportToExcel
-                )
-            }
+            ExportButton(
+                title: "Export Excel",
+                icon: "tablecells.fill",
+                color: .green,
+                action: viewModel.exportToExcel
+            )
         }
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-        .padding(.bottom, DesignSystem.Spacing.large)
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        .padding(.horizontal)
+        .padding(.bottom, DesignSystem.Spacing.medium)
     }
 }
 
 // MARK: - Supporting Views
-
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: DesignSystem.Spacing.small) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(color.gradient)
-            
-            Text(value)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-    }
-}
 
 struct FilterCard<T: Hashable>: View where T: CustomStringConvertible {
     let title: String
