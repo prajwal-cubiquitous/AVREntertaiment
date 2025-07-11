@@ -8,13 +8,6 @@ import Foundation
 import FirebaseFirestore
 import SwiftUI
 
-// MARK: - Decodable DepartmentBudget for Firebase
-struct ReportDepartmentBudget: Codable {
-    let department: String
-    let totalBudget: Double
-    let approvedBudget: Double
-}
-
 @MainActor
 class ReportViewModel: ObservableObject {
     @Published var departmentBudgets: [DepartmentBudget] = []
@@ -100,7 +93,6 @@ class ReportViewModel: ObservableObject {
         }
     }
     
-    
     var filteredExpenses: [Expense] {
         let dateInterval = selectedDateRange.dateInterval
         var filtered = expenses.filter { expense in
@@ -113,14 +105,6 @@ class ReportViewModel: ObservableObject {
         }
         
         return filtered
-    }
-    
-    var filteredDepartmentBudgets: [DepartmentBudget] {
-        if selectedDepartment == "All" {
-            return departmentBudgets
-        } else {
-            return departmentBudgets.filter { $0.department == selectedDepartment }
-        }
     }
     
     // Bar chart data for expense categories
@@ -137,112 +121,121 @@ class ReportViewModel: ObservableObject {
         }.sorted { $0.amount > $1.amount }
     }
     
-    // MARK: - Data Loading
-    func loadReportData() {
-        isLoading = true
-        errorMessage = nil
-        
-        Task {
-            await loadDepartmentBudgets()
-            await loadExpenses()
-            isLoading = false
+    func loadApprovedExpenses(projectId: String) async {
+        let db = Firestore.firestore()
+        let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
+        do {
+            let snapshot: QuerySnapshot
+            if selectedDepartment != "All"{
+                snapshot = try await expenseCollectionRef
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .whereField("department", isEqualTo: selectedDepartment)
+                    .getDocuments()
+            }else{
+                snapshot = try await expenseCollectionRef
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+            }
+            
+            var loadedExpenses: [Expense] = []
+            for doc in snapshot.documents {
+                if let expense = try? doc.data(as: Expense.self) {
+                    loadedExpenses.append(expense)
+                }
+            }
+            
+            // Assign to your published expenses list on the main thread
+            await MainActor.run {
+                self.expenses = loadedExpenses
+            }
+        } catch {
+            print("Failed to load approved expenses: \(error)")
         }
     }
     
-    private func loadDepartmentBudgets() async {
+    func loadDepartmentBudgets(projectId: String) async {
+        let db = Firestore.firestore()
         do {
-            let snapshot = try await db.collection("departmentBudgets").getDocuments()
-            let budgets = snapshot.documents.compactMap { doc -> DepartmentBudget? in
-                do {
-                    let reportBudget = try doc.data(as: ReportDepartmentBudget.self)
-                    return DepartmentBudget(
-                        department: reportBudget.department,
-                        totalBudget: reportBudget.totalBudget,
-                        approvedBudget: reportBudget.approvedBudget,
-                        color: colorForDepartment(reportBudget.department)
-                    )
-                } catch {
-                    print("Error decoding department budget: \(error)")
-                    return nil
+            // Get the project document
+            let projectDoc = try await db.collection("projects_ios").document(projectId).getDocument()
+            
+            guard let projectData = projectDoc.data(),
+                  let departments = projectData["departments"] as? [String: Double] else {
+                print("No departments found in project")
+                return
+            }
+            
+            // Calculate approved expenses for each department
+            var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
+            
+            // Initialize with project department budgets
+            for (department, amount) in departments {
+                departmentBudgetDict[department] = (total: amount, approved: 0)
+            }
+            
+            // Get approved expenses for this project
+            let expensesSnapshot = try await db.collection("projects_ios").document(projectId)
+                .collection("expenses")
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            // Calculate approved amounts per department
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self) {
+                    let department = expense.department
+                    if var current = departmentBudgetDict[department] {
+                        current.approved += expense.amount
+                        departmentBudgetDict[department] = current
+                    }
                 }
             }
+            
+            // Convert to DepartmentBudget objects
+            let budgets = departmentBudgetDict.map { (department, values) in
+                DepartmentBudget(
+                    department: department,
+                    totalBudget: values.total,
+                    approvedBudget: values.approved,
+                    color: .blue // Simple color for now
+                )
+            }.sorted { $0.department < $1.department }
             
             await MainActor.run {
                 self.departmentBudgets = budgets
             }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to load department budgets: \(error.localizedDescription)"
-            }
-        }
-    }
-    
-    func loadApprovedExpenses(projectId: String) async {
-            let db = Firestore.firestore()
-            let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
-            do {
-                let snapshot: QuerySnapshot
-                if selectedDepartment != "All"{
-                    snapshot = try await expenseCollectionRef
-                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                        .whereField("department", isEqualTo: selectedDepartment)
-                        .getDocuments()
-                }else{
-                    snapshot = try await expenseCollectionRef
-                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                        .getDocuments()
-                }
-                
-                var loadedExpenses: [Expense] = []
-                for doc in snapshot.documents {
-                    if let expense = try? doc.data(as: Expense.self) {
-                        loadedExpenses.append(expense)
-                    }
-                }
-                
-                // Assign to your published expenses list on the main thread
-                await MainActor.run {
-                    self.expenses = loadedExpenses
-                }
-            } catch {
-                print("Failed to load approved expenses: \(error)")
-            }
-        }
-    
-    private func loadExpenses() async {
-        do {
-            let snapshot = try await db.collection("expenses").getDocuments()
-            let expenseList = snapshot.documents.compactMap { doc -> Expense? in
-                try? doc.data(as: Expense.self)
-            }
             
-            await MainActor.run {
-                self.expenses = expenseList
-            }
         } catch {
-            await MainActor.run {
-                self.errorMessage = "Failed to load expenses: \(error.localizedDescription)"
-            }
+            print("Failed to load department budgets: \(error)")
+            // Load sample data if Firebase fails
+            await loadSampleDepartmentBudgets()
         }
     }
     
-    // MARK: - Helper Methods
-    private func colorForDepartment(_ department: String) -> Color {
-        let colors: [String: Color] = [
-            "Cast": .blue,
-            "Location": .green,
-            "Equipment": .orange,
-            "Production": .purple,
-            "Marketing": .red,
-            "Design": .pink,
-            "Research": .cyan,
-            "Website": .indigo,
-            "Development": .teal,
-            "Other": .gray
+    private func loadSampleDepartmentBudgets() async {
+        let sampleBudgets = [
+            DepartmentBudget(
+                department: "Set Design",
+                totalBudget: 300000,
+                approvedBudget: 210000,
+                color: .blue
+            ),
+            DepartmentBudget(
+                department: "Costumes",
+                totalBudget: 100000,
+                approvedBudget: 55000,
+                color: .green
+            ),
+            DepartmentBudget(
+                department: "Miscellaneous",
+                totalBudget: 50000,
+                approvedBudget: 20000,
+                color: .purple
+            )
         ]
         
-        let key = colors.keys.first { department.lowercased().contains($0.lowercased()) }
-        return key.flatMap { colors[$0] } ?? .gray
+        await MainActor.run {
+            self.departmentBudgets = sampleBudgets
+        }
     }
     
     // MARK: - Export Functions
