@@ -231,14 +231,14 @@ struct ReportView: View {
                 title: "Export PDF",
                 icon: "doc.fill",
                 color: .red,
-                action: viewModel.exportToPDF
+                action: exportPDFWithDismiss
             )
             
             ExportButton(
                 title: "Export Excel",
                 icon: "tablecells.fill",
                 color: .green,
-                action: viewModel.exportToExcel
+                action: exportExcelWithDismiss
             )
         }
         .padding()
@@ -247,6 +247,23 @@ struct ReportView: View {
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
         .padding(.horizontal)
         .padding(.bottom, DesignSystem.Spacing.medium)
+    }
+    
+    func exportPDFWithDismiss() {
+        dismiss() // Dismiss SwiftUI sheet
+
+        // ✅ Wait for sheet animation to finish before presenting share sheet
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            viewModel.exportToPDF()        }
+    }
+    
+    func exportExcelWithDismiss() {
+        dismiss() // Dismiss SwiftUI sheet
+
+        // ✅ Wait for sheet animation to finish before presenting share sheet
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            viewModel.exportToExcel()
+        }
     }
 }
 
@@ -416,6 +433,7 @@ struct ExportButton: View {
         .buttonStyle(.plain)
     }
 }
+
 
 struct EmptyStateView: View {
     let icon: String

@@ -436,6 +436,51 @@ class ReportViewModel: ObservableObject {
             rootViewController.present(activityVC, animated: true)
         }
     }
+    
+//    // Trial
+//    
+//    func exportSimplePDF() -> URL? {
+//        let pageSize = CGSize(width: 595.2, height: 841.8)
+//        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize))
+//        
+//        let data = renderer.pdfData { context in
+//            context.beginPage()
+//            let text = "This is a simple PDF report line."
+//            text.draw(at: CGPoint(x: 50, y: 100), withAttributes: [
+//                .font: UIFont.systemFont(ofSize: 14)
+//            ])
+//        }
+//
+//        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SimpleReport.pdf")
+//        try? data.write(to: url)
+//        return url
+//    }
+//
+//    func exportSimpleCSV() -> URL? {
+//        let csvString = "This is a simple Excel-compatible CSV line.\n"
+//        let data = csvString.data(using: .utf8)
+//        
+//        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SimpleReport.csv")
+//        try? data?.write(to: url)
+//        return url
+//    }
+//
+//    func shareFile(_ url: URL) {
+//        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+//            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+//                  let rootVC = scene.windows.first?.rootViewController,
+//                  rootVC.presentedViewController == nil else {
+//                print("Share skipped: another view is already presented")
+//                return
+//            }
+//
+//            let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+//            rootVC.present(activityVC, animated: true)
+//        }
+//    }
+
+
+
 }
 
 // MARK: - Supporting Models
