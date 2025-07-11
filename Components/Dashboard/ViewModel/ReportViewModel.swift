@@ -613,22 +613,11 @@ class ReportViewModel: ObservableObject {
     private func generateExcelReport() async throws -> String {
         var csvContent = ""
         
-        // MARK: - Report Header with Metadata
+        // MARK: - Report Header
         csvContent += "AVR ENTERTAINMENT - PROJECT FINANCIAL REPORT\n"
-        csvContent += "===========================================\n\n"
-        
-        csvContent += "REPORT METADATA\n"
-        csvContent += "Report Generated,\(Date().formatted(.dateTime.day().month().year().hour().minute()))\n"
-        csvContent += "Application Version,AVR Entertainment Management System v1.0.2\n"
-        csvContent += "Report Type,Financial Analysis Report\n"
-        csvContent += "Data Classification,Confidential\n\n"
-        
-        // MARK: - Applied Filters Section
-        csvContent += "APPLIED FILTERS & PARAMETERS\n"
-        csvContent += "Filter Type,Selected Value,Description\n"
-        csvContent += "Date Range,\(selectedDateRange.description),Reporting period for expense analysis\n"
-        csvContent += "Department Filter,\(selectedDepartment),Selected department for focused analysis\n"
-        csvContent += "Total Records,\(filteredExpenses.count),Number of expense records in this report\n\n"
+        csvContent += "Report Generated: \(Date().formatted(.dateTime.day().month().year().hour().minute()))\n"
+        csvContent += "Filter Period: \(selectedDateRange.description)\n"
+        csvContent += "Department: \(selectedDepartment)\n\n"
         
         // MARK: - Executive Summary
         let totalExpenses = filteredExpenses.reduce(0) { $0 + $1.amount }
@@ -638,113 +627,83 @@ class ReportViewModel: ObservableObject {
         let utilizationPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0
         
         csvContent += "EXECUTIVE SUMMARY\n"
-        csvContent += "Metric,Amount (₹),Percentage,Status\n"
-        csvContent += "Total Budget Allocated,₹\(Int(totalBudget).formatted()),100%,Baseline\n"
-        csvContent += "Total Amount Spent,₹\(Int(totalSpent).formatted()),\(String(format: "%.1f", utilizationPercentage))%,\(utilizationPercentage > 80 ? "High Usage" : "Normal")\n"
-        csvContent += "Remaining Budget,₹\(Int(remainingBudget).formatted()),\(String(format: "%.1f", 100 - utilizationPercentage))%,\(remainingBudget < 0 ? "Over Budget" : "Available")\n"
-        csvContent += "Budget Utilization Rate,,\(String(format: "%.1f", utilizationPercentage))%,\(utilizationPercentage > 100 ? "Critical" : utilizationPercentage > 80 ? "Warning" : "Good")\n\n"
+        csvContent += "Metric,Amount,Percentage,Status\n"
+        csvContent += "Total Budget Allocated,\(String(format: "%.0f", totalBudget)),100%,Baseline\n"
+        csvContent += "Total Amount Spent,\(String(format: "%.0f", totalSpent)),\(String(format: "%.1f", utilizationPercentage))%,\(utilizationPercentage > 80 ? "High Usage" : "Normal")\n"
+        csvContent += "Remaining Budget,\(String(format: "%.0f", remainingBudget)),\(String(format: "%.1f", 100 - utilizationPercentage))%,\(remainingBudget < 0 ? "Over Budget" : "Available")\n\n"
         
-        // MARK: - Expense Categories Analysis (Chart Data)
-        csvContent += "EXPENSE CATEGORIES BREAKDOWN (Chart Data)\n"
-        csvContent += "Category,Amount (₹),Percentage of Total,Count of Transactions,Average per Transaction,Chart Series\n"
+        // MARK: - Expense Categories (Chart Ready)
+        csvContent += "EXPENSE CATEGORIES\n"
+        csvContent += "Category,Amount,Percentage,Transaction Count\n"
         
-        for (index, category) in expenseCategories.enumerated() {
+        for category in expenseCategories {
             let categoryExpenses = filteredExpenses.filter { expense in
                 expense.categories.first ?? "Other" == category.name
             }
             let percentage = totalExpenses > 0 ? (category.amount / totalExpenses) * 100 : 0
-            let averageTransaction = categoryExpenses.count > 0 ? category.amount / Double(categoryExpenses.count) : 0
             
-            csvContent += "\(category.name),₹\(Int(category.amount).formatted()),\(String(format: "%.1f", percentage))%,\(categoryExpenses.count),₹\(Int(averageTransaction).formatted()),Series\(index + 1)\n"
-        }
-        
-        // Add chart totals
-        csvContent += "TOTAL,₹\(Int(totalExpenses).formatted()),100.0%,\(filteredExpenses.count),₹\(filteredExpenses.count > 0 ? Int(totalExpenses / Double(filteredExpenses.count)).formatted() : "0"),Chart Total\n\n"
-        
-        // MARK: - Department Budget Analysis (Detailed Table)
-        csvContent += "DEPARTMENT BUDGET ANALYSIS (Detailed)\n"
-        csvContent += "Department,Allocated Budget (₹),Amount Spent (₹),Remaining Budget (₹),Utilization %,Status,Variance (₹),Performance Rating\n"
-        
-        for budget in departmentBudgets {
-            let remaining = budget.totalBudget - budget.approvedBudget
-            let utilization = budget.totalBudget > 0 ? (budget.approvedBudget / budget.totalBudget) * 100 : 0
-            let variance = budget.approvedBudget - budget.totalBudget
-            
-            let status: String
-            let performance: String
-            
-            if utilization >= 100 {
-                status = "Over Budget"
-                performance = utilization > 120 ? "Critical" : "Poor"
-            } else if utilization >= 80 {
-                status = "High Usage"
-                performance = "Warning"
-            } else if utilization >= 50 {
-                status = "Normal Usage"
-                performance = "Good"
-            } else {
-                status = "Low Usage"
-                performance = "Excellent"
-            }
-            
-            csvContent += "\(budget.department),₹\(Int(budget.totalBudget).formatted()),₹\(Int(budget.approvedBudget).formatted()),₹\(Int(remaining).formatted()),\(String(format: "%.1f", utilization))%,\(status),₹\(Int(variance).formatted()),\(performance)\n"
-        }
-        
-        // Add department totals
-        csvContent += "DEPARTMENT TOTALS,₹\(Int(totalBudget).formatted()),₹\(Int(totalSpent).formatted()),₹\(Int(remainingBudget).formatted()),\(String(format: "%.1f", utilizationPercentage))%,Overall Status,₹\(Int(totalSpent - totalBudget).formatted()),Overall Performance\n\n"
-        
-        // MARK: - Time Series Data (for trend analysis)
-        csvContent += "EXPENSE TREND ANALYSIS (Time Series)\n"
-        csvContent += "Date,Department,Category,Amount (₹),Running Total (₹),Transaction ID\n"
-        
-        let sortedExpenses = filteredExpenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
-        var runningTotal: Double = 0
-        
-        for expense in sortedExpenses {
-            runningTotal += expense.amount
-            let dateString = expense.createdAt.dateValue().formatted(.dateTime.day().month().year())
-            let category = expense.categories.first ?? "Other"
-            csvContent += "\(dateString),\(expense.department),\(category),₹\(Int(expense.amount).formatted()),₹\(Int(runningTotal).formatted()),\(expense.id ?? "N/A")\n"
+            csvContent += "\(category.name),\(String(format: "%.0f", category.amount)),\(String(format: "%.1f", percentage))%,\(categoryExpenses.count)\n"
         }
         
         csvContent += "\n"
         
-        // MARK: - Filter Instructions for Excel Users
-        csvContent += "EXCEL USAGE INSTRUCTIONS\n"
-        csvContent += "Section,Instructions,Excel Feature to Use\n"
-        csvContent += "Department Analysis,Create Pivot Table from Department Budget Analysis data,Insert > PivotTable\n"
-        csvContent += "Expense Categories,Create Pie Chart from Categories Breakdown data,Insert > Charts > Pie Chart\n"
-        csvContent += "Trend Analysis,Create Line Chart from Time Series data,Insert > Charts > Line Chart\n"
-        csvContent += "Budget vs Spent,Create Column Chart comparing Budget and Spent columns,Insert > Charts > Column Chart\n"
-        csvContent += "Apply Filters,Use AutoFilter on all data tables,Data > Filter\n"
-        csvContent += "Conditional Formatting,Highlight cells based on Status column values,Home > Conditional Formatting\n\n"
+        // MARK: - Department Analysis (Chart Ready)
+        csvContent += "DEPARTMENT BUDGET ANALYSIS\n"
+        csvContent += "Department,Allocated Budget,Amount Spent,Remaining Budget,Utilization %,Status\n"
         
-        // MARK: - Data Validation & Filters Setup
-        csvContent += "RECOMMENDED EXCEL FILTERS\n"
-        csvContent += "Column Name,Filter Type,Filter Options\n"
-        csvContent += "Department,Dropdown Filter,\"All, \(departmentNames.joined(separator: ", "))\"\n"
-        csvContent += "Status,Dropdown Filter,\"All, Over Budget, High Usage, Normal Usage, Low Usage\"\n"
-        csvContent += "Performance Rating,Dropdown Filter,\"All, Critical, Poor, Warning, Good, Excellent\"\n"
-        csvContent += "Utilization %,Number Range Filter,\"0-50%, 50-80%, 80-100%, >100%\"\n"
-        csvContent += "Amount Range,Number Range Filter,\"<10000, 10000-50000, 50000-100000, >100000\"\n\n"
+        for budget in departmentBudgets {
+            let remaining = budget.totalBudget - budget.approvedBudget
+            let utilization = budget.totalBudget > 0 ? (budget.approvedBudget / budget.totalBudget) * 100 : 0
+            
+            let status: String
+            if utilization >= 100 {
+                status = "Over Budget"
+            } else if utilization >= 80 {
+                status = "High Usage"
+            } else if utilization >= 50 {
+                status = "Normal Usage"
+            } else {
+                status = "Low Usage"
+            }
+            
+            csvContent += "\(budget.department),\(String(format: "%.0f", budget.totalBudget)),\(String(format: "%.0f", budget.approvedBudget)),\(String(format: "%.0f", remaining)),\(String(format: "%.1f", utilization))%,\(status)\n"
+        }
         
-        // MARK: - Chart Specifications for Excel
-        csvContent += "RECOMMENDED EXCEL CHARTS\n"
-        csvContent += "Chart Type,Data Source,Chart Title,X-Axis,Y-Axis\n"
-        csvContent += "Pie Chart,Expense Categories Breakdown,Expense Distribution by Category,Category,Amount\n"
-        csvContent += "Column Chart,Department Budget Analysis,Budget vs Spent Analysis,Department,Amount (₹)\n"
-        csvContent += "Line Chart,Expense Trend Analysis,Spending Trend Over Time,Date,Running Total\n"
-        csvContent += "Stacked Bar Chart,Department Analysis,Department Performance Overview,Department,Multiple Metrics\n"
-        csvContent += "Gauge Chart,Executive Summary,Budget Utilization Rate,Single Value,Percentage\n\n"
+        csvContent += "\n"
         
-        // MARK: - Report Footer
-        csvContent += "REPORT GENERATION INFO\n"
-        csvContent += "Generated By,AVR Entertainment Management System\n"
-        csvContent += "Report Template Version,v2.1\n"
-        csvContent += "Data Last Updated,\(Date().formatted(.dateTime.day().month().year()))\n"
-        csvContent += "Export Format,Enhanced CSV with Excel Support\n"
-        csvContent += "Contact Support,support@avrentertainment.com\n"
-        csvContent += "Confidentiality Notice,This report contains confidential financial information\n"
+        // MARK: - Expense Details (Filterable Data)
+        csvContent += "EXPENSE DETAILS\n"
+        csvContent += "Date,Department,Category,Amount,Description,Status\n"
+        
+        let sortedExpenses = filteredExpenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
+        
+        for expense in sortedExpenses {
+            let dateString = expense.createdAt.dateValue().formatted(.dateTime.day().month().year())
+            let category = expense.categories.first ?? "Other"
+            let description = expense.description.replacingOccurrences(of: ",", with: ";") // Handle commas in description
+            
+            csvContent += "\(dateString),\(expense.department),\(category),\(String(format: "%.0f", expense.amount)),\(description),\(expense.status.rawValue)\n"
+        }
+        
+        csvContent += "\n"
+        
+        // MARK: - Monthly Trend Data (Chart Ready)
+        csvContent += "MONTHLY EXPENSE TREND\n"
+        csvContent += "Month,Total Expenses,Transaction Count,Average Transaction\n"
+        
+        let calendar = Calendar.current
+        let monthlyData = Dictionary(grouping: sortedExpenses) { expense in
+            let date = expense.createdAt.dateValue()
+            return calendar.dateInterval(of: .month, for: date)?.start ?? date
+        }
+        
+        for (month, expenses) in monthlyData.sorted(by: { $0.key < $1.key }) {
+            let monthString = month.formatted(.dateTime.month(.wide).year())
+            let totalAmount = expenses.reduce(0) { $0 + $1.amount }
+            let averageAmount = expenses.count > 0 ? totalAmount / Double(expenses.count) : 0
+            
+            csvContent += "\(monthString),\(String(format: "%.0f", totalAmount)),\(expenses.count),\(String(format: "%.0f", averageAmount))\n"
+        }
         
         return csvContent
     }
