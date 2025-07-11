@@ -42,6 +42,11 @@ struct ReportView: View {
                     if let projectId = projectId{
                         viewModel.fetchDepartmentNames(from: projectId)
                     }
+                    Task{
+                        if let projectId = projectId{
+                            await viewModel.loadApprovedExpenses(projectId: projectId)
+                        }
+                    }
                 }
                 .onChange(of: viewModel.selectedDepartment) {
                     Task{

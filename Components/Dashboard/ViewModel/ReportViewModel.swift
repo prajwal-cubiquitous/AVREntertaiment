@@ -180,12 +180,18 @@ class ReportViewModel: ObservableObject {
     func loadApprovedExpenses(projectId: String) async {
             let db = Firestore.firestore()
             let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
-            print("DEBUG 1 : \(selectedDepartment)")
             do {
-                let snapshot = try await expenseCollectionRef
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .whereField("department", isEqualTo: selectedDepartment)
-                    .getDocuments()
+                let snapshot: QuerySnapshot
+                if selectedDepartment != "All"{
+                    snapshot = try await expenseCollectionRef
+                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                        .whereField("department", isEqualTo: selectedDepartment)
+                        .getDocuments()
+                }else{
+                    snapshot = try await expenseCollectionRef
+                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                        .getDocuments()
+                }
                 
                 var loadedExpenses: [Expense] = []
                 for doc in snapshot.documents {
@@ -197,7 +203,6 @@ class ReportViewModel: ObservableObject {
                 // Assign to your published expenses list on the main thread
                 await MainActor.run {
                     self.expenses = loadedExpenses
-                    print(loadedExpenses)
                 }
             } catch {
                 print("Failed to load approved expenses: \(error)")
