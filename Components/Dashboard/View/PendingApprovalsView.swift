@@ -10,27 +10,35 @@ import SwiftUI
 struct PendingApprovalsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = PendingApprovalsViewModel()
+    @State private var showingExpenseDetail = false
+    @State private var selectedExpense: Expense?
+    @State private var showingDateFilter = false
+    @State private var showingDepartmentFilter = false
     
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(UIColor.systemGroupedBackground)
+                Color(.systemGroupedBackground)
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Header
-                    headerView
+                    // Minimal Header
+                    minimalHeaderView
                     
-                    // Filters
-                    filtersView
+                    // Smart Filters
+                    smartFiltersView
                     
-                    // Approvals List
-                    approvalsListView
-                    
-                    // Action Buttons
-                    if viewModel.hasSelectedExpenses {
-                        actionButtonsView
+                    // Content
+                    if viewModel.filteredExpenses.isEmpty {
+                        emptyStateView
+                    } else {
+                        approvalsListView
                     }
+                }
+                
+                // Floating Action Buttons
+                if viewModel.hasSelectedExpenses {
+                    floatingActionButtons
                 }
             }
             .navigationBarHidden(true)
@@ -46,222 +54,342 @@ struct PendingApprovalsView: View {
         } message: {
             Text(viewModel.confirmationMessage)
         }
+        .sheet(isPresented: $showingExpenseDetail) {
+            if let expense = selectedExpense {
+                ExpenseDetailView(expense: expense)
+            }
+        }
     }
     
-    // MARK: - Header View
-    private var headerView: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
+    // MARK: - Minimal Header View
+    private var minimalHeaderView: some View {
+        HStack {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            
+            Spacer()
+            
+            // Selection indicator
+            if viewModel.hasSelectedExpenses {
+                Text("\(viewModel.selectedExpenses.count) selected")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.accentColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(12)
+            }
+            
+            Spacer()
+            
+            Button {
+                // Search action
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.title2)
+                    .foregroundColor(.primary)
+            }
+        }
+        .padding(.horizontal, DesignSystem.Spacing.medium)
+        .padding(.top, DesignSystem.Spacing.medium)
+        .padding(.bottom, DesignSystem.Spacing.small)
+    }
+    
+    // MARK: - Smart Filters View
+    private var smartFiltersView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignSystem.Spacing.small) {
+                // Date Filter
+                FilterChip(
+                    title: viewModel.selectedDateFilter ?? "All Dates",
+                    isSelected: viewModel.selectedDateFilter != nil,
+                    action: {
+                        showingDateFilter = true
+                    }
+                )
                 
-                Spacer()
+                // Department Filter
+                FilterChip(
+                    title: viewModel.selectedDepartmentFilter ?? "All Depts",
+                    isSelected: viewModel.selectedDepartmentFilter != nil,
+                    action: {
+                        showingDepartmentFilter = true
+                    }
+                )
                 
-                VStack(spacing: 2) {
-                    Text("AVR")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                    
-                    Text("ENTERTAINMENT")
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundColor(.white.opacity(0.9))
-                        .tracking(1)
-                }
-                
-                Spacer()
-                
-                Button {
-                    // Search action
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                        .font(.title2)
-                        .foregroundColor(.white)
-                }
+                // Amount Filter
+                FilterChip(
+                    title: "Amount",
+                    isSelected: false,
+                    action: {
+                        // Show amount filter
+                    }
+                )
             }
             .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.top, DesignSystem.Spacing.medium)
-            
-            Text("Pending Approvals")
-                .font(DesignSystem.Typography.title1)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-                .padding(.top, DesignSystem.Spacing.small)
-                .padding(.bottom, DesignSystem.Spacing.large)
         }
-        .background(
-            LinearGradient(
-                colors: [Color.blue, Color.blue.opacity(0.8)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
+        .padding(.vertical, DesignSystem.Spacing.small)
+        .actionSheet(isPresented: $showingDateFilter) {
+            ActionSheet(
+                title: Text("Filter by Date"),
+                buttons: [
+                    .default(Text("All Dates")) {
+                        viewModel.selectedDateFilter = nil
+                    },
+                    .default(Text("Today")) {
+                        viewModel.selectedDateFilter = "Today"
+                    },
+                    .default(Text("This Week")) {
+                        viewModel.selectedDateFilter = "This Week"
+                    },
+                    .default(Text("This Month")) {
+                        viewModel.selectedDateFilter = "This Month"
+                    },
+                    .cancel()
+                ]
             )
-        )
+        }
+        .actionSheet(isPresented: $showingDepartmentFilter) {
+            ActionSheet(
+                title: Text("Filter by Department"),
+                buttons: [
+                    .default(Text("All Departments")) {
+                        viewModel.selectedDepartmentFilter = nil
+                    }
+                ] + viewModel.availableDepartments.map { department in
+                    .default(Text(department)) {
+                        viewModel.selectedDepartmentFilter = department
+                    }
+                } + [.cancel()]
+            )
+        }
     }
     
-    // MARK: - Filters View
-    private var filtersView: some View {
-        HStack(spacing: DesignSystem.Spacing.medium) {
-            // Date Filter
-            Menu {
-                Button("All Dates") { viewModel.selectedDateFilter = nil }
-                Button("Today") { viewModel.selectedDateFilter = "Today" }
-                Button("This Week") { viewModel.selectedDateFilter = "This Week" }
-                Button("This Month") { viewModel.selectedDateFilter = "This Month" }
-            } label: {
-                HStack {
-                    Text(viewModel.selectedDateFilter ?? "Date")
-                        .font(DesignSystem.Typography.subheadline)
-                        .foregroundColor(.primary)
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, DesignSystem.Spacing.medium)
-                .padding(.vertical, DesignSystem.Spacing.small)
-                .background(Color(UIColor.systemBackground))
-                .cornerRadius(DesignSystem.CornerRadius.small)
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
-            }
+    // MARK: - Empty State View
+    private var emptyStateView: some View {
+        VStack(spacing: DesignSystem.Spacing.large) {
+            Spacer()
             
-            // Department Filter
-            Menu {
-                Button("All Departments") { viewModel.selectedDepartmentFilter = nil }
-                ForEach(viewModel.availableDepartments, id: \.self) { department in
-                    Button(department) { viewModel.selectedDepartmentFilter = department }
-                }
-            } label: {
-                HStack {
-                    Text(viewModel.selectedDepartmentFilter ?? "Dept")
-                        .font(DesignSystem.Typography.subheadline)
-                        .foregroundColor(.primary)
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, DesignSystem.Spacing.medium)
-                .padding(.vertical, DesignSystem.Spacing.small)
-                .background(Color(UIColor.systemBackground))
-                .cornerRadius(DesignSystem.CornerRadius.small)
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small)
-                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.green)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Text("All Caught Up!")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Text("No pending approvals at the moment")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
             
             Spacer()
         }
-        .padding(.horizontal, DesignSystem.Spacing.medium)
-        .padding(.vertical, DesignSystem.Spacing.small)
-        .background(Color(UIColor.systemGroupedBackground))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Approvals List View
     private var approvalsListView: some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
-                // Table Header
-                tableHeaderView
-                
-                // Expense Rows
+            LazyVStack(spacing: DesignSystem.Spacing.small) {
                 ForEach(viewModel.filteredExpenses) { expense in
-                    ExpenseApprovalRow(
+                    ModernExpenseApprovalRow(
                         expense: expense,
                         isSelected: viewModel.selectedExpenses.contains(expense.id ?? ""),
                         onSelectionChanged: { isSelected in
                             viewModel.toggleExpenseSelection(expense, isSelected: isSelected)
                         },
                         onDetailTapped: {
-                            // Show expense details
+                            selectedExpense = expense
+                            showingExpenseDetail = true
                         }
                     )
-                    .background(Color(UIColor.systemBackground))
                 }
             }
-            .background(Color(UIColor.systemBackground))
-            .cornerRadius(DesignSystem.CornerRadius.medium)
             .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.bottom, DesignSystem.Spacing.extraLarge)
+            .padding(.bottom, 100) // Space for floating buttons
         }
     }
     
-    // MARK: - Table Header View
-    private var tableHeaderView: some View {
-        HStack {
-            Text("Date")
-                .font(DesignSystem.Typography.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-                .frame(width: 60, alignment: .leading)
+    // MARK: - Floating Action Buttons
+    private var floatingActionButtons: some View {
+        VStack {
+            Spacer()
             
-            Text("Dept")
-                .font(DesignSystem.Typography.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-                .frame(width: 80, alignment: .leading)
-            
-            Text("Subcategory")
-                .font(DesignSystem.Typography.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            Text("Submitted By")
-                .font(DesignSystem.Typography.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-                .frame(width: 80, alignment: .leading)
-        }
-        .padding(.horizontal, DesignSystem.Spacing.medium)
-        .padding(.vertical, DesignSystem.Spacing.small)
-        .background(Color.secondary.opacity(0.1))
-    }
-    
-    // MARK: - Action Buttons View
-    private var actionButtonsView: some View {
-        HStack(spacing: DesignSystem.Spacing.medium) {
-            Button {
-                HapticManager.impact(.medium)
-                viewModel.showApprovalConfirmation()
-            } label: {
-                Text("Approve Selected")
-                    .font(DesignSystem.Typography.headline)
-                    .fontWeight(.semibold)
+            HStack(spacing: DesignSystem.Spacing.medium) {
+                // Approve Button
+                Button {
+                    HapticManager.impact(.medium)
+                    viewModel.showApprovalConfirmation()
+                } label: {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title3)
+                        Text("Approve")
+                            .fontWeight(.semibold)
+                    }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, DesignSystem.Spacing.medium)
-                    .background(Color.blue)
-                    .cornerRadius(DesignSystem.CornerRadius.medium)
-            }
-            
-            Button {
-                HapticManager.impact(.medium)
-                viewModel.showRejectionConfirmation()
-            } label: {
-                Text("Reject Selected")
-                    .font(DesignSystem.Typography.headline)
-                    .fontWeight(.semibold)
+                    .background(Color.green)
+                    .cornerRadius(DesignSystem.CornerRadius.large)
+                }
+                
+                // Reject Button
+                Button {
+                    HapticManager.impact(.medium)
+                    viewModel.showRejectionConfirmation()
+                } label: {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                        Text("Reject")
+                            .fontWeight(.semibold)
+                    }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, DesignSystem.Spacing.medium)
                     .background(Color.red)
-                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    .cornerRadius(DesignSystem.CornerRadius.large)
+                }
             }
+            .padding(.horizontal, DesignSystem.Spacing.medium)
+            .padding(.bottom, DesignSystem.Spacing.medium)
+            .background(
+                Rectangle()
+                    .fill(.regularMaterial)
+                    .ignoresSafeArea()
+            )
         }
-        .padding(.horizontal, DesignSystem.Spacing.medium)
-        .padding(.bottom, DesignSystem.Spacing.medium)
-        .background(Color(UIColor.systemBackground))
-        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: -5)
+    }
+}
+
+// MARK: - Filter Chip Component
+struct FilterChip: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(isSelected ? .white : .primary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.accentColor : Color(.systemBackground))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: isSelected ? 0 : 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Modern Expense Approval Row
+struct ModernExpenseApprovalRow: View {
+    let expense: Expense
+    let isSelected: Bool
+    let onSelectionChanged: (Bool) -> Void
+    let onDetailTapped: () -> Void
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.medium) {
+            // Selection Checkbox
+            Button {
+                HapticManager.selection()
+                onSelectionChanged(!isSelected)
+            } label: {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .green : .secondary)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            
+            // Main Content
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                // Top Row: Amount and Date
+                HStack {
+                    Text("₹\(expense.amount)")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text(expense.date)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                // Middle Row: Department and Categories
+                HStack {
+                    Text(expense.department)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text(expense.categories.joined(separator: ", "))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                // Bottom Row: Submitted By and Description
+                HStack {
+                    Text("By: \(expense.submittedBy)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    if !expense.description.isEmpty {
+                        Text(expense.description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            
+            // Detail Button
+            Button {
+                HapticManager.selection()
+                onDetailTapped()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
