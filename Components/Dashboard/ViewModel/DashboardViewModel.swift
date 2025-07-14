@@ -215,20 +215,55 @@ class DashboardViewModel: ObservableObject {
     
     private func colorForDepartment(_ department: String) -> Color {
         switch department.lowercased() {
-        case "set design", "set design & construction":
-            return .blue
-        case "costumes", "costume design":
-            return .green
-        case "miscellaneous", "misc":
-            return .purple
-        case "equipment", "equipment rental":
-            return .orange
-        case "travel", "transportation":
-            return .red
-        case "wages", "crew wages":
-            return .cyan
+        case "set design", "set design & construction", "production design":
+            return Color(red: 0.2, green: 0.6, blue: 1.0) // Apple Blue
+        case "costumes", "costume design", "wardrobe":
+            return Color(red: 0.3, green: 0.8, blue: 0.4) // Apple Green
+        case "miscellaneous", "misc", "general":
+            return Color(red: 0.8, green: 0.4, blue: 0.9) // Apple Purple
+        case "equipment", "equipment rental", "technical":
+            return Color(red: 1.0, green: 0.6, blue: 0.2) // Apple Orange
+        case "travel", "transportation", "logistics":
+            return Color(red: 1.0, green: 0.3, blue: 0.3) // Apple Red
+        case "wages", "crew wages", "personnel":
+            return Color(red: 0.2, green: 0.8, blue: 0.8) // Apple Teal
+        case "marketing", "promotion", "advertising":
+            return Color(red: 1.0, green: 0.4, blue: 0.6) // Apple Pink
+        case "location", "venue", "site":
+            return Color(red: 0.6, green: 0.4, blue: 0.8) // Apple Indigo
+        case "post production", "editing", "post":
+            return Color(red: 0.8, green: 0.8, blue: 0.2) // Apple Yellow
+        case "sound", "audio", "music":
+            return Color(red: 0.4, green: 0.8, blue: 0.6) // Apple Mint
+        case "lighting", "grip", "electrical":
+            return Color(red: 1.0, green: 0.7, blue: 0.3) // Apple Amber
+        case "catering", "food", "refreshments":
+            return Color(red: 0.9, green: 0.5, blue: 0.7) // Apple Rose
+        case "insurance", "legal", "compliance":
+            return Color(red: 0.5, green: 0.7, blue: 0.9) // Apple Sky Blue
+        case "permits", "licenses", "authorization":
+            return Color(red: 0.7, green: 0.6, blue: 0.9) // Apple Lavender
+        case "props", "properties", "accessories":
+            return Color(red: 0.8, green: 0.9, blue: 0.4) // Apple Lime
+        case "makeup", "hair", "beauty":
+            return Color(red: 1.0, green: 0.5, blue: 0.8) // Apple Magenta
+        case "stunts", "action", "special effects":
+            return Color(red: 0.9, green: 0.3, blue: 0.5) // Apple Crimson
+        case "research", "development", "pre-production":
+            return Color(red: 0.4, green: 0.6, blue: 0.8) // Apple Steel Blue
+        case "distribution", "delivery", "shipping":
+            return Color(red: 0.6, green: 0.8, blue: 0.4) // Apple Chartreuse
+        case "publicity", "media", "communications":
+            return Color(red: 0.8, green: 0.4, blue: 0.6) // Apple Orchid
+        case "security", "safety", "protection":
+            return Color(red: 0.7, green: 0.5, blue: 0.3) // Apple Brown
         default:
-            return .gray
+            // Generate a consistent color based on department name hash
+            let hash = abs(department.hashValue)
+            let hue = Double(hash % 360) / 360.0
+            let saturation = 0.7 + Double(hash % 30) / 100.0
+            let brightness = 0.8 + Double(hash % 20) / 100.0
+            return Color(hue: hue, saturation: saturation, brightness: brightness)
         }
     }
     

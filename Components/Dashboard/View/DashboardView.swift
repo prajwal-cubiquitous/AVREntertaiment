@@ -311,74 +311,187 @@ struct DashboardView: View {
     // MARK: - Department Distribution Chart
     private var departmentDistributionChart: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            Text("Department Distribution")
-                .font(DesignSystem.Typography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
+            // Header
+            HStack {
+                Text("Department Distribution")
+                    .font(DesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("Budget Allocation")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(.tertiarySystemFill))
+                    .cornerRadius(8)
+            }
             
-            VStack(spacing: DesignSystem.Spacing.medium) {
-                // Modern Donut Chart
+            // Chart Content
+            VStack(spacing: DesignSystem.Spacing.large) {
+                // Enhanced Donut Chart
                 ZStack {
-                    // Background circle
+                    // Background circle with subtle styling
                     Circle()
-                        .stroke(Color(.systemFill), lineWidth: 20)
-                        .frame(width: 200, height: 200)
+                        .stroke(Color(.systemGray5), lineWidth: 24)
+                        .frame(width: 220, height: 220)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(.systemGray6), lineWidth: 2)
+                                .frame(width: 220, height: 220)
+                        )
                     
-                    // Data circles
+                    // Data segments with enhanced styling
                     ForEach(Array(viewModel.departmentBudgets.enumerated()), id: \.element.department) { index, budget in
                         Circle()
                             .trim(from: viewModel.startAngle(for: index), to: viewModel.endAngle(for: index))
-                            .stroke(budget.color, lineWidth: 20)
-                            .frame(width: 200, height: 200)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        budget.color,
+                                        budget.color.opacity(0.8)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                style: StrokeStyle(lineWidth: 24, lineCap: .round)
+                            )
+                            .frame(width: 220, height: 220)
                             .rotationEffect(.degrees(-90))
-                            .animation(.easeInOut(duration: 1.0).delay(Double(index) * 0.1), value: viewModel.departmentBudgets)
+                            .animation(
+                                .easeInOut(duration: 1.2)
+                                .delay(Double(index) * 0.15),
+                                value: viewModel.departmentBudgets
+                            )
+                            .shadow(color: budget.color.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                     
-                    // Center content
-                    VStack(spacing: 4) {
-                        Text("Total")
+                    // Enhanced center content
+                    VStack(spacing: 6) {
+                        Text("Total Budget")
                             .font(DesignSystem.Typography.caption1)
                             .foregroundColor(.secondary)
+                            .fontWeight(.medium)
                         
                         Text(viewModel.totalProjectBudgetFormatted)
-                            .font(DesignSystem.Typography.headline)
-                            .fontWeight(.bold)
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
                             .foregroundColor(.primary)
+                            .contentTransition(.numericText())
+                        
+                        Text("₹")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+                    )
                 }
                 
-                // Legend
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: DesignSystem.Spacing.small) {
-                    ForEach(viewModel.departmentBudgets, id: \.department) { budget in
-                        HStack(spacing: DesignSystem.Spacing.small) {
-                            Circle()
-                                .fill(budget.color)
-                                .frame(width: 12, height: 12)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(budget.department)
-                                    .font(DesignSystem.Typography.caption1)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
-                                
-                                Text("₹\(budget.totalBudget.formattedCurrency)")
-                                    .font(DesignSystem.Typography.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                    }
+                // Enhanced Legend
+                departmentLegendView
+            }
+            .padding(DesignSystem.Spacing.large)
+            .background(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                            .stroke(Color(.systemGray5), lineWidth: 0.5)
+                    )
+            )
+            .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+        }
+    }
+    
+    // MARK: - Department Legend View
+    private var departmentLegendView: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            ForEach(Array(viewModel.departmentBudgets.enumerated()), id: \.element.department) { index, budget in
+                departmentLegendRow(budget: budget, index: index)
+            }
+        }
+    }
+    
+    // MARK: - Department Legend Row
+    private func departmentLegendRow(budget: DepartmentBudget, index: Int) -> some View {
+        let totalBudget = viewModel.departmentBudgets.reduce(0) { $0 + $1.totalBudget }
+        let percentage = Int((budget.totalBudget / totalBudget) * 100)
+        
+        return HStack(spacing: DesignSystem.Spacing.medium) {
+            // Color indicator with enhanced styling
+            RoundedRectangle(cornerRadius: 6)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            budget.color,
+                            budget.color.opacity(0.8)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 16, height: 16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(.systemBackground), lineWidth: 2)
+                )
+                .shadow(color: budget.color.opacity(0.3), radius: 2, x: 0, y: 1)
+            
+            // Department info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(budget.department)
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Text("₹\(budget.totalBudget.formattedCurrency)")
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text("•")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(percentage)%")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
                 }
             }
-            .padding(DesignSystem.Spacing.medium)
-            .background(Color(.secondarySystemGroupedBackground))
-            .cornerRadius(DesignSystem.CornerRadius.large)
-            .cardStyle(shadow: DesignSystem.Shadow.medium)
+            
+            Spacer()
+            
+            // Percentage indicator
+            Text("\(percentage)%")
+                .font(DesignSystem.Typography.caption1)
+                .fontWeight(.bold)
+                .foregroundColor(budget.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(budget.color.opacity(0.1))
+                .cornerRadius(8)
         }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, 6)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(budget.color.opacity(0.2), lineWidth: 1)
+        )
+        .animation(
+            .easeInOut(duration: 0.6)
+            .delay(Double(index) * 0.1),
+            value: viewModel.departmentBudgets
+        )
     }
     
     // MARK: - Budget Comparison Chart
