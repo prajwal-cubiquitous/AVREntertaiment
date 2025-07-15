@@ -14,7 +14,7 @@ class FirebaseAuthService: ObservableObject {
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
-    private let testingLoginVM = TestingLoginViewModel()
+    let testingLoginVM = TestingLoginViewModel()
     
     #if DEBUG
     var isTestingMode = true

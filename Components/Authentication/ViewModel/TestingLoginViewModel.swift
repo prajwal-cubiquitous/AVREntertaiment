@@ -124,4 +124,10 @@ class TestingLoginViewModel: ObservableObject {
             }
         }
     }
+    
+    func returnOTP(phoneNUmber: String)-> String {
+        let phoneNumber = phoneNUmber
+        let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return PhoneOtp[cleanPhoneNumber] ?? ""
+    }
 }

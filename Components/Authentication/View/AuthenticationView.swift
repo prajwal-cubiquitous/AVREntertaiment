@@ -372,6 +372,9 @@ struct AuthenticationView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.primary)
                 }
+                VStack{
+                    Text("\(authService.testingLoginVM.PhoneOtp[phoneNumber])")
+                }
             }
             
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
