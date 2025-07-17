@@ -129,9 +129,9 @@ struct ProjectListView: View {
                 }
             }
             .refreshable {
-                withAnimation(DesignSystem.Animation.standardSpring) {
+//                withAnimation(DesignSystem.Animation.standardSpring) {
                     viewModel.fetchProjects()
-                }
+//                }
             }
             .navigationBarHidden(true)
         }

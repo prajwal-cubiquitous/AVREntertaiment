@@ -13,7 +13,7 @@ class UserListViewModel: ObservableObject {
     func fetchUsers() async {
         isLoading = true
         do {
-            let snapshot = try await db.collection("users").getDocuments()
+            let snapshot = try await db.collection("users_ios").getDocuments()
             users = snapshot.documents.compactMap { document -> User? in
                 try? document.data(as: User.self)
             }.sorted { $0.name < $1.name } // Sort by name
