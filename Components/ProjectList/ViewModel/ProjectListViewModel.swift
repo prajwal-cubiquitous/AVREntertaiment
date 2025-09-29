@@ -29,12 +29,26 @@ class ProjectListViewModel: ObservableObject {
         Task {
             await setupProjectListener()
         }
+        setupNotificationObservers()
         print("Initialized with phone: \(self.phoneNumber), role: \(self.role)")
     }
     
     deinit {
         // Remove listener when view model is deallocated
         projectListener?.remove()
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    private func setupNotificationObservers() {
+        // Listen for project updates
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("ProjectUpdated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            print("🔄 Project updated notification received, refreshing project list...")
+            self?.fetchProjects()
+        }
     }
     
     func setupProjectListener() async {
@@ -116,6 +130,7 @@ class ProjectListViewModel: ObservableObject {
     // Keep the existing fetchProjects method for manual refresh
     func fetchProjects() {
             Task {
+                projects = []
                 await setupProjectListener()
             }
         }

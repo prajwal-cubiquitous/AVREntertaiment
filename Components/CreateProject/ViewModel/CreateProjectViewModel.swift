@@ -222,6 +222,9 @@ class CreateProjectViewModel: ObservableObject {
                 showSuccessMessage = true
                 resetForm()
                 
+                // Notify that a new project was created
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                
             } catch {
                 isLoading = false
                 errorMessage = "Failed to create project: \(error.localizedDescription)"

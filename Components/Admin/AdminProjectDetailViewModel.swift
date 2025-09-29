@@ -174,6 +174,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 projectName = newName
                 isEditingName = false
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project name: \(error.localizedDescription)"
                 showError = true
@@ -190,6 +193,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 projectDescription = newDescription
                 isEditingDescription = false
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project description: \(error.localizedDescription)"
                 showError = true
@@ -205,6 +211,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 projectStatus = newStatus.rawValue
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project status: \(error.localizedDescription)"
                 showError = true
@@ -228,6 +237,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 isEditingDates = false
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project dates: \(error.localizedDescription)"
                 showError = true
@@ -254,6 +266,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 managerName = selectedApprover?.name ?? managerName
                 isEditingTeam = false
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project team: \(error.localizedDescription)"
                 showError = true
@@ -269,6 +284,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 tempApproverID = newTempApproverID
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update temporary approver: \(error.localizedDescription)"
                 showError = true
@@ -295,6 +313,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 departments = tempDepartments
                 isEditingDepartments = false
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update departments: \(error.localizedDescription)"
                 showError = true
@@ -364,6 +385,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                 // For now, we'll just update the local state
                 updateTempApproverID(tempApprover?.approverId)
                 showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to save temporary approver: \(error.localizedDescription)"
                 showError = true
