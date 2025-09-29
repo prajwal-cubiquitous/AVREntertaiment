@@ -14,6 +14,10 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var managerName: String
     @Published var tempApproverID: String?
     
+    // Temporary Approver Properties
+    @Published var tempApprover: TempApprover?
+    @Published var showingTempApproverSheet = false
+    
     // Temporary departments for editing
     @Published var tempDepartments: [DepartmentItem] = []
     
@@ -50,7 +54,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var teamMemberSearchText = ""
     @Published var selectedTeamMembers: Set<User> = []
     @Published var selectedApprover: User?
-    @Published private var allApprovers: [User] = []
+    @Published var allApprovers: [User] = []
     @Published private var allUsers: [User] = []
     
     // UI State
@@ -234,6 +238,10 @@ class AdminProjectDetailViewModel: ObservableObject {
     func updateProjectTeam() {
         Task {
             do {
+                
+                if tempApprover != nil {
+                    saveTempApprover()
+                }
                 let data: [String: Any] = [
                     "managerId": selectedApprover?.phoneNumber ?? project.managerId,
                     "teamMembers": Array(selectedTeamMembers).map { $0.phoneNumber }
@@ -335,5 +343,31 @@ class AdminProjectDetailViewModel: ObservableObject {
     func cancelDepartmentEditing() {
         tempDepartments = departments
         isEditingDepartments = false
+    }
+    
+    // MARK: - Temporary Approver Methods
+    
+    func setTempApprover(_ tempApprover: TempApprover) {
+        self.tempApprover = tempApprover
+    }
+    
+    func removeTempApprover() {
+        tempApprover = nil
+    }
+    
+    func saveTempApprover() {
+        Task {
+            do {
+                let newApproverID = UUID().uuidString
+                // In a real implementation, this would save to Firestore
+                try await db.collection(FirebaseCollections.projects).document(project.id ?? "").collection("tempApprover").document(newApproverID).setData(from: tempApprover)
+                // For now, we'll just update the local state
+                updateTempApproverID(tempApprover?.approverId)
+                showSuccess = true
+            } catch {
+                errorMessage = "Failed to save temporary approver: \(error.localizedDescription)"
+                showError = true
+            }
+        }
     }
 } 

@@ -54,6 +54,9 @@ struct AdminMainView: View {
         .onAppear {
             projectListViewModel.fetchProjects()
         }
+        .refreshable {
+            projectListViewModel.fetchProjects()
+        }
     }
     
     private var projectsSection: some View {

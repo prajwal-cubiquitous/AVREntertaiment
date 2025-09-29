@@ -178,6 +178,49 @@ struct AdminProjectDetailView: View {
                         )
                     }
                     
+                    // Temporary Approvers Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        HStack {
+                            Image(systemName: "person.badge.clock.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.orange)
+                            
+                            Text("Temporary Approvers")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                HapticManager.selection()
+                                viewModel.showingTempApproverSheet = true
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.caption)
+                                    Text("Add")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .foregroundStyle(.blue)
+                            }
+                        }
+                        
+                   if let tempApprover = viewModel.tempApprover {
+                       TempApproverInlineCard(
+                           tempApprover: tempApprover,
+                           onRemove: { viewModel.removeTempApprover() }
+                       )
+                   } else {
+                       Text("No temporary approver assigned")
+                           .font(.caption)
+                           .foregroundStyle(.tertiary)
+                           .italic()
+                   }
+                    }
+                    .padding()
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                    
                     ModernActionButton(
                         title: "Save Team",
                         icon: "checkmark.circle.fill",
@@ -202,6 +245,28 @@ struct AdminProjectDetailView: View {
                             icon: "person.2.fill"
                         )
                     }
+                    
+               // Temporary Approver Display
+               if let tempApprover = viewModel.tempApprover {
+                   VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                       HStack {
+                           Image(systemName: "person.badge.clock.fill")
+                               .font(.subheadline)
+                               .foregroundStyle(.orange)
+
+                           Text("Temporary Approver")
+                               .font(.subheadline.weight(.medium))
+                               .foregroundStyle(.secondary)
+
+                           Spacer()
+                       }
+
+                       TempApproverDisplayInlineCard(tempApprover: tempApprover)
+                   }
+                   .padding()
+                   .background(Color(.quaternarySystemFill))
+                   .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+               }
                 }
             }
         }
@@ -295,7 +360,14 @@ struct AdminProjectDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         .padding(.bottom, DesignSystem.Spacing.large)
+       .sheet(isPresented: $viewModel.showingTempApproverSheet) {
+           TempApproverSheet(
+               allApprovers: viewModel.allApprovers,
+               onSet: viewModel.setTempApprover
+           )
+       }
     }
+    
 }
 
 // MARK: - Supporting Views
@@ -826,5 +898,369 @@ struct ModernActionButton: View {
             .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Temporary Approver Inline Views
+
+struct TempApproverInlineCard: View {
+    let tempApprover: TempApprover
+    let onRemove: () -> Void
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "person.badge.clock")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(tempApprover.approverId)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Text(tempApprover.dateRangeFormatted)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                
+                Text(tempApprover.approvedExpenseDisplay)
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+            }
+            
+            Spacer()
+            
+            HStack(spacing: 4) {
+                Text(tempApprover.statusDisplay)
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(statusColor(for: tempApprover.status))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(Color(.quaternarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+    }
+    
+    private func statusColor(for status: TempApproverStatus) -> Color {
+        switch status {
+        case .pending:
+            return .orange
+        case .accepted:
+            return .green
+        case .rejected:
+            return .red
+        }
+    }
+}
+
+struct TempApproverDisplayInlineCard: View {
+    let tempApprover: TempApprover
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "person.badge.clock")
+                .font(.caption)
+                .foregroundStyle(.orange)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(tempApprover.approverId)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Text(tempApprover.dateRangeFormatted)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                
+                Text(tempApprover.approvedExpenseDisplay)
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+            }
+            
+            Spacer()
+            
+            Text(tempApprover.statusDisplay)
+                .font(.caption2.weight(.bold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(statusColor(for: tempApprover.status))
+                .foregroundColor(.white)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(Color(.quaternarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+    }
+    
+    private func statusColor(for status: TempApproverStatus) -> Color {
+        switch status {
+        case .pending:
+            return .orange
+        case .accepted:
+            return .green
+        case .rejected:
+            return .red
+        }
+    }
+}
+
+// MARK: - Temporary Approver Views
+
+struct TempApproverCard: View {
+    let tempApprover: TempApprover
+    let onRemove: () -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: "person.badge.clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                
+                Text("Approver: \(tempApprover.approverId)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Text(tempApprover.statusDisplay)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor(for: tempApprover.status))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                }
+            }
+            
+            Text(tempApprover.dateRangeFormatted)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            Text(tempApprover.approvedExpenseDisplay)
+                .font(.caption)
+                .foregroundStyle(.blue)
+        }
+        .padding()
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+    }
+    
+    private func statusColor(for status: TempApproverStatus) -> Color {
+        switch status {
+        case .pending:
+            return .orange
+        case .accepted:
+            return .green
+        case .rejected:
+            return .red
+        }
+    }
+}
+
+struct TempApproverDisplayCard: View {
+    let tempApprover: TempApprover
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: "person.badge.clock")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                
+                Text("Approver: \(tempApprover.approverId)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Text(tempApprover.statusDisplay)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor(for: tempApprover.status))
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+            }
+            
+            Text(tempApprover.dateRangeFormatted)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            
+            Text(tempApprover.approvedExpenseDisplay)
+                .font(.caption)
+                .foregroundStyle(.blue)
+        }
+        .padding()
+        .background(Color(.quaternarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+    }
+    
+    private func statusColor(for status: TempApproverStatus) -> Color {
+        switch status {
+        case .pending:
+            return .orange
+        case .accepted:
+            return .green
+        case .rejected:
+            return .red
+        }
+    }
+}
+
+struct EmptyStateCard: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+            
+            VStack(spacing: DesignSystem.Spacing.extraSmall) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.quaternarySystemFill))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+    }
+}
+
+struct TempApproverSheet: View {
+    let allApprovers: [User]
+    let onSet: (TempApprover) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var selectedApprover: User?
+    @State private var startDate = Date()
+    @State private var endDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+    
+    var filteredApprovers: [User] {
+        if searchText.isEmpty {
+            return allApprovers
+        }
+        return allApprovers.filter { approver in
+            approver.name.localizedCaseInsensitiveContains(searchText) ||
+            approver.phoneNumber.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Search Field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Select Approver")
+                        .font(.headline)
+                    
+                    TextField("Search by name or phone number", text: $searchText)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                
+                // Approver List
+                if !filteredApprovers.isEmpty {
+                    List(filteredApprovers, id: \.phoneNumber) { approver in
+                        Button(action: {
+                            selectedApprover = approver
+                            searchText = ""
+                        }) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(approver.name)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                Text(approver.phoneNumber)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .frame(maxHeight: 200)
+                } else if !searchText.isEmpty {
+                    Text("No approvers found")
+                        .foregroundColor(.secondary)
+                        .frame(maxHeight: 200)
+                }
+                
+                // Date Selection
+                if selectedApprover != nil {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Selected: \(selectedApprover?.name ?? "")")
+                            .font(.headline)
+                            .foregroundColor(.blue)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Start Date & Time")
+                                .font(.subheadline)
+                            DatePicker("", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
+                                .datePickerStyle(CompactDatePickerStyle())
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("End Date & Time")
+                                .font(.subheadline)
+                            DatePicker("", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
+                                .datePickerStyle(CompactDatePickerStyle())
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Add Temporary Approver")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Set Temporary Approver") {
+                        if let approver = selectedApprover {
+                            let tempApprover = TempApprover(
+                                approverId: approver.phoneNumber,
+                                startDate: startDate,
+                                endDate: endDate
+                            )
+                            onSet(tempApprover)
+                            dismiss()
+                        }
+                    }
+                    .disabled(selectedApprover == nil || endDate <= startDate)
+                }
+            }
+        }
     }
 } 
