@@ -111,6 +111,38 @@ class PendingApprovalsViewModel: ObservableObject {
         }
     }
     
+    private func loadExpensesFromFirebaseAdmin() async {
+        do {
+            // Get all projects where current user is the manager
+            let projectsSnapshot = try await db.collection("projects_ios")
+                .getDocuments()
+            
+            var expenses: [Expense] = []
+            
+            for projectDoc in projectsSnapshot.documents {
+                // Get pending expenses from each project
+                let expensesSnapshot = try await projectDoc.reference
+                    .collection("expenses")
+                    .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
+                    .getDocuments()
+                
+                for expenseDoc in expensesSnapshot.documents {
+                    var expense = try expenseDoc.data(as: Expense.self)
+                    expense.id = expenseDoc.documentID
+                    print("Debug 1 : \(expense)")
+                    print("DEBUG 2: docuemntID for \(expenseDoc.documentID)")
+                    expenses.append(expense)
+                }
+            }
+            
+            pendingExpenses = expenses
+            
+        } catch {
+            print("Error loading pending expenses: \(error)")
+            errorMessage = "Failed to load pending expenses"
+        }
+    }
+    
     private func loadAvailableDepartments() async {
         do {
             let projectsSnapshot = try await db.collection("projects_ios")
@@ -130,6 +162,26 @@ class PendingApprovalsViewModel: ObservableObject {
             print("Error loading departments: \(error)")
         }
     }
+    
+    private func loadAvailableDepartmentsAdmin() async {
+        do {
+            let projectsSnapshot = try await db.collection("projects_ios")
+                .getDocuments()
+            
+            var departments: Set<String> = []
+            
+            for projectDoc in projectsSnapshot.documents {
+                let project = try projectDoc.data(as: Project.self)
+                departments.formUnion(project.departments.keys)
+            }
+            
+            availableDepartments = Array(departments).sorted()
+            
+        } catch {
+            print("Error loading departments: \(error)")
+        }
+    }
+
     
     func toggleExpenseSelection(_ expense: Expense, isSelected: Bool) {
         guard let expenseId = expense.id else { return }

@@ -15,14 +15,16 @@ struct DashboardView: View {
     @State private var selectedDepartment: String? = nil
     @State private var showingReportSheet = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
+    let role: UserRole?
     
     // Accept a single project as parameter
     let project: Project?
     
-    init(project: Project? = nil) {
+    init(project: Project? = nil, role: UserRole? = nil) {
         self.project = project
         self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project))
         self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0]))
+        self.role = role
     }
     
     var body: some View {
@@ -130,27 +132,41 @@ struct DashboardView: View {
             }
             
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    HapticManager.impact(.light)
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        showingNotifications.toggle()
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    // Edit Button
+                    if let project = project, role == .ADMIN{
+                        NavigationLink(destination: AdminProjectDetailView(project: project)) {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .buttonStyle(.plain)
                     }
-                } label: {
-                    ZStack {
-                        Image(systemName: "bell.fill")
-                            .foregroundColor(.primary)
-                        
-                        if viewModel.pendingNotifications > 0 {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 14, height: 14)
-                                .overlay(
-                                    Text("\(viewModel.pendingNotifications)")
-                                        .font(.system(size: 10))
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                )
-                                .offset(x: 10, y: -10)
+                    
+                    // Notification Button
+                    Button {
+                        HapticManager.impact(.light)
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showingNotifications.toggle()
+                        }
+                    } label: {
+                        ZStack {
+                            Image(systemName: "bell.fill")
+                                .foregroundColor(.primary)
+                            
+                            if viewModel.pendingNotifications > 0 {
+                                Circle()
+                                    .fill(.red)
+                                    .frame(width: 14, height: 14)
+                                    .overlay(
+                                        Text("\(viewModel.pendingNotifications)")
+                                            .font(.system(size: 10))
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                    )
+                                    .offset(x: 10, y: -10)
+                            }
                         }
                     }
                 }

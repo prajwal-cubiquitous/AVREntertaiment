@@ -10,6 +10,7 @@ import SwiftUI
 
 struct ProjectCell: View {
     let project: Project
+    let role: UserRole?
     @State private var isPressed = false
     
     private var daysRemainingText: String {
@@ -64,7 +65,20 @@ struct ProjectCell: View {
                 
                 Spacer(minLength: DesignSystem.Spacing.small)
                 
-                StatusView(status: project.statusType)
+                HStack(spacing: DesignSystem.Spacing.small) {
+                    StatusView(status: project.statusType)
+                    
+                    // Edit button for Admin role
+                    if role == .ADMIN {
+                        NavigationLink(destination: AdminProjectDetailView(project: project)) {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
             
             // Project details
@@ -234,5 +248,5 @@ extension Color {
 }
 
 #Preview{
-    ProjectCell(project: Project.sampleData[0])
+    ProjectCell(project: Project.sampleData[0], role: .ADMIN)
 }

@@ -16,6 +16,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     // Temporary Approver Properties
     @Published var tempApprover: TempApprover?
+    @Published var tempApproverName: String?
     @Published var showingTempApproverSheet = false
     
     // Temporary departments for editing
@@ -98,6 +99,7 @@ class AdminProjectDetailViewModel: ObservableObject {
         
         Task {
             await fetchUsers()
+            await fetchTempApprover()
         }
     }
     
@@ -160,6 +162,43 @@ class AdminProjectDetailViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to load users: \(error.localizedDescription)"
             showError = true
+        }
+    }
+    
+    func fetchTempApprover() async {
+        guard let tempApproverID = project.tempApproverID else {
+            self.tempApprover = nil
+            return
+        }
+        
+        do {
+            // Fetch the user from users collection using tempApproverID as document ID
+            let userDocument = try await db
+                .collection(FirebaseCollections.users)
+                .document(tempApproverID)
+                .getDocument()
+            
+            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
+                // Create a TempApprover object with the user's information
+                let tempApprover = TempApprover(
+                    approverId: user.phoneNumber,
+                    startDate: Date(), // Default dates since we don't have them in the project
+                    endDate: Date().addingTimeInterval(86400 * 30), // Default 30 days
+                    status: .pending
+                )
+                self.tempApprover = tempApprover
+                self.tempApproverName = user.name
+                print("✅ Fetched temp approver: \(user.name) (\(user.phoneNumber))")
+            } else {
+                // User not found, set to nil
+                self.tempApprover = nil
+                self.tempApproverName = nil
+                print("ℹ️ Temp approver user not found with ID: \(tempApproverID)")
+            }
+        } catch {
+            print("❌ Error fetching temp approver user: \(error)")
+            self.tempApprover = nil
+            self.tempApproverName = nil
         }
     }
     
@@ -369,11 +408,20 @@ class AdminProjectDetailViewModel: ObservableObject {
     // MARK: - Temporary Approver Methods
     
     func setTempApprover(_ tempApprover: TempApprover) {
+        self.tempApprover = nil
         self.tempApprover = tempApprover
     }
     
     func removeTempApprover() {
+        // Only update local state - keep documents in Firebase for audit/history
         tempApprover = nil
+        tempApproverName = nil
+        updateTempApproverID(nil)
+        
+        // Notify that project was updated
+        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+        
+        print("ℹ️ Temp approver removed from UI (kept in Firebase for audit)")
     }
     
     func saveTempApprover() {
@@ -382,8 +430,12 @@ class AdminProjectDetailViewModel: ObservableObject {
                 let newApproverID = UUID().uuidString
                 // In a real implementation, this would save to Firestore
                 try await db.collection(FirebaseCollections.projects).document(project.id ?? "").collection("tempApprover").document(newApproverID).setData(from: tempApprover)
-                // For now, we'll just update the local state
+                // Update the local state
                 updateTempApproverID(tempApprover?.approverId)
+                
+                // Fetch the updated temp approver from Firebase
+                await fetchTempApprover()
+                
                 showSuccess = true
                 
                 // Notify that project was updated

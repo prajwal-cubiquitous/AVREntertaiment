@@ -215,15 +215,15 @@ struct ProjectListView: View {
                 ForEach(viewModel.filteredProjects) { project in
                     if role == .APPROVER {
                         NavigationLink(value: project) {
-                            ProjectCell(project: project)
+                            ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
                             HapticManager.selection()
                         })
                     } else if role == .ADMIN {
-                        NavigationLink(destination: AdminProjectDetailView(project: project)) {
-                            ProjectCell(project: project)
+                        NavigationLink(destination: DashboardView(project: project, role: role)) {
+                            ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
@@ -231,7 +231,7 @@ struct ProjectListView: View {
                         })
                     } else {
                         NavigationLink(destination: ProjectDetailView(project: project)) {
-                            ProjectCell(project: project)
+                            ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {

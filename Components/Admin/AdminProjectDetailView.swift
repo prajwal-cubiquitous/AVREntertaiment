@@ -208,6 +208,7 @@ struct AdminProjectDetailView: View {
                    if let tempApprover = viewModel.tempApprover {
                        TempApproverInlineCard(
                            tempApprover: tempApprover,
+                           tempApproverName: viewModel.tempApproverName,
                            onRemove: { viewModel.removeTempApprover() }
                        )
                    } else {
@@ -261,7 +262,10 @@ struct AdminProjectDetailView: View {
                            Spacer()
                        }
 
-                       TempApproverDisplayInlineCard(tempApprover: tempApprover)
+                       TempApproverDisplayInlineCard(
+                           tempApprover: tempApprover,
+                           tempApproverName: viewModel.tempApproverName
+                       )
                    }
                    .padding()
                    .background(Color(.quaternarySystemFill))
@@ -905,6 +909,7 @@ struct ModernActionButton: View {
 
 struct TempApproverInlineCard: View {
     let tempApprover: TempApprover
+    let tempApproverName: String?
     let onRemove: () -> Void
     
     var body: some View {
@@ -914,7 +919,7 @@ struct TempApproverInlineCard: View {
                 .foregroundStyle(.orange)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(tempApprover.approverId)
+                Text(tempApproverName ?? tempApprover.approverId)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
                 
@@ -965,6 +970,7 @@ struct TempApproverInlineCard: View {
 
 struct TempApproverDisplayInlineCard: View {
     let tempApprover: TempApprover
+    let tempApproverName: String?
     
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.small) {
@@ -973,7 +979,7 @@ struct TempApproverDisplayInlineCard: View {
                 .foregroundStyle(.orange)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(tempApprover.approverId)
+                Text(tempApproverName ?? tempApprover.approverId)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
                 
@@ -1018,6 +1024,7 @@ struct TempApproverDisplayInlineCard: View {
 
 struct TempApproverCard: View {
     let tempApprover: TempApprover
+    let tempApproverName: String?
     let onRemove: () -> Void
     
     var body: some View {
@@ -1027,7 +1034,7 @@ struct TempApproverCard: View {
                     .font(.subheadline)
                     .foregroundStyle(.blue)
                 
-                Text("Approver: \(tempApprover.approverId)")
+                Text("Approver: \(tempApproverName ?? tempApprover.approverId)")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                 
@@ -1075,6 +1082,7 @@ struct TempApproverCard: View {
 
 struct TempApproverDisplayCard: View {
     let tempApprover: TempApprover
+    let tempApproverName: String?
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -1083,7 +1091,7 @@ struct TempApproverDisplayCard: View {
                     .font(.subheadline)
                     .foregroundStyle(.blue)
                 
-                Text("Approver: \(tempApprover.approverId)")
+                Text("Approver: \(tempApproverName ?? tempApprover.approverId)")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                 
