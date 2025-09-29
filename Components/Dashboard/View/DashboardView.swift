@@ -15,6 +15,10 @@ struct DashboardView: View {
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
     @State private var showingReportSheet = false
+    @State private var showingActionMenu = false
+    @State private var showingAddExpense = false
+    @State private var showingAnalytics = false
+    @State private var showingDelegate = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     
@@ -75,27 +79,104 @@ struct DashboardView: View {
                     .padding(.bottom, DesignSystem.Spacing.extraLarge)
                 }
                 
-                // Floating Report Button
+                // Floating Action Buttons - Using Overlay for True Independence
                 VStack {
                     Spacer()
+                    
+                    // Left side floating action menu
                     HStack {
-                        Spacer()
-                        Button(action: {
-                            showingReportSheet = true
-                        }) {
-                            HStack {
-                                Image(systemName: "doc.text.fill")
-                                Text("Report")
+                        ZStack(alignment: .bottomLeading) {
+                            // Action buttons (positioned absolutely)
+                            if showingActionMenu {
+                                VStack(spacing: 12) {
+                                    ActionMenuButton(icon: "person.2.badge.gearshape.fill", title: "Delegate", color: Color.purple) {
+                                        showingDelegate = true
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                    
+                                    ActionMenuButton(icon: "chart.bar.fill", title: "Dashboard", color: Color.blue) {
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                    
+                                    ActionMenuButton(icon: "clock.badge.checkmark.fill", title: "Pending Approvals", color: Color.orange) {
+                                        showingPendingApprovals = true
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                    
+                                    ActionMenuButton(icon: "plus.circle.fill", title: "Add Expense", color: Color.green) {
+                                        showingAddExpense = true
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                    
+                                    ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
+                                        showingAnalytics = true
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                    
+                                    ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.teal) {
+                                        // TODO: Add chat functionality
+                                        showingActionMenu = false
+                                        HapticManager.selection()
+                                    }
+                                }
+                                .padding(.bottom, 80) // Space for the main button
+                                .transition(.scale.combined(with: .opacity))
                             }
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .clipShape(Capsule())
-                            .shadow(radius: 5)
+                            
+                            // Main FAB (fixed position)
+                            Button(action: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    showingActionMenu.toggle()
+                                }
+                                HapticManager.impact(.medium)
+                            }) {
+                                Image(systemName: showingActionMenu ? "xmark" : "chevron.up")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(width: 56, height: 56)
+                                    .background(Color.accentColor)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 8)
+                                    .rotationEffect(.degrees(showingActionMenu ? 180 : 0))
+                            }
                         }
-                        .padding()
+                        .padding(.leading, 20)
+                        
+                        Spacer()
                     }
+                    .padding(.bottom, 20)
                 }
+                .overlay(
+                    // Right side Report button - Completely independent overlay
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showingReportSheet = true
+                                HapticManager.impact(.light)
+                            }) {
+                                Image(systemName: "doc.text.fill")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(width: 56, height: 56)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                                    .shadow(radius: 8)
+                            }
+                            .padding(.trailing, 20)
+                        }
+                        .padding(.bottom, 20)
+                    },
+                    alignment: .bottom
+                )
 
                 // Notification popup overlay
                 if showingNotifications {
@@ -195,6 +276,22 @@ struct DashboardView: View {
         .sheet(isPresented: $showingReportSheet) {
             // TODO: Add Report View here
             ReportView(projectId: project?.id)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingAddExpense) {
+            if let project = project {
+                AddExpenseView(project: project)
+                    .presentationDetents([.large])
+            }
+        }
+        .sheet(isPresented: $showingAnalytics) {
+            // TODO: Add Analytics View here
+            Text("Analytics View")
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingDelegate) {
+            // TODO: Add Delegate View here
+            Text("Delegate View")
                 .presentationDetents([.large])
         }
         .onAppear {
@@ -904,6 +1001,84 @@ struct TempApproverStatsCard: View {
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+    
+    // MARK: - Action Button Helper
+    private func actionButton(icon: String, title: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                action()
+            }
+            HapticManager.selection()
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 32, height: 32)
+                    .background(color.gradient)
+                    .clipShape(Circle())
+                
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(radius: 4)
+        }
+        .frame(width: 180)
+    }
+}
+
+// MARK: - Action Menu Button
+struct ActionMenuButton: View {
+    let icon: String
+    let title: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(color.gradient)
+                        .frame(width: 40, height: 40)
+                        .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                
+                // Title
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.systemGray5), lineWidth: 0.5)
+                    )
+            )
+            .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+        .frame(width: 200)
     }
 }
 

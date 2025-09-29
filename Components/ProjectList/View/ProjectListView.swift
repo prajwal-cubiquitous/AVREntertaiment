@@ -12,6 +12,8 @@ struct ProjectListView: View {
     
     @State private var isShowingCreateSheet = false
     @State private var isShowingMenuSheet = false
+    @State private var selectedProject: Project?
+    @State private var shouldNavigateToDashboard = false
     @StateObject var viewModel: ProjectListViewModel
     let role: UserRole
     
@@ -102,7 +104,7 @@ struct ProjectListView: View {
                     .padding(.top, DesignSystem.Spacing.medium)
                     
                     if !viewModel.projects.isEmpty {
-                        let filteredCount = viewModel.filteredProjects.count
+                        let filteredCount = viewModel.filteredProjectsForTempApprover.count
                         Text("\(filteredCount) project\(filteredCount == 1 ? "" : "s")")
                             .font(DesignSystem.Typography.callout)
                             .foregroundColor(.secondary)
@@ -148,6 +150,24 @@ struct ProjectListView: View {
                 .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(20)
                 .presentationBackground(.regularMaterial)
+        }
+        .confirmationDialog("Temporary Approver Role", isPresented: $viewModel.showingTempApproverAction) {
+            Button("Accept Role") {
+                Task {
+                    await viewModel.acceptTempApproverRole()
+                    // Navigate to dashboard after acceptance
+                    shouldNavigateToDashboard = true
+                }
+            }
+            Button("Reject Role", role: .destructive) {
+                viewModel.rejectTempApproverRole()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You have been assigned as a temporary approver for a project. Would you like to accept this role?")
+        }
+        .sheet(isPresented: $viewModel.showingRejectionSheet) {
+            tempApproverRejectionSheet
         }
     }
     
@@ -209,12 +229,21 @@ struct ProjectListView: View {
     
     // MARK: - Projects List
     private var projectsListView: some View {
-        ScrollView {
-            LazyVStack(spacing: DesignSystem.Spacing.small) {
-                // Project cards
-                ForEach(viewModel.filteredProjects) { project in
+        ZStack {
+            ScrollView {
+                LazyVStack(spacing: DesignSystem.Spacing.small) {
+                    // Project cards
+                    ForEach(viewModel.filteredProjectsForTempApprover) { project in
                     if role == .APPROVER {
-                        NavigationLink(value: project) {
+                        Button(action: {
+                            Task {
+                                selectedProject = project
+                                let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
+                                if !needsApproval {
+                                    shouldNavigateToDashboard = true
+                                }
+                            }
+                        }) {
                             ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)
@@ -240,13 +269,21 @@ struct ProjectListView: View {
                     }
                 }
             }
-            .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.top, DesignSystem.Spacing.small)
-            .padding(.bottom, 80) // Space for FAB
-        }
-        .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjects)
-        .navigationDestination(for: Project.self) { project in
-            DashboardView(project: project)
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.top, DesignSystem.Spacing.small)
+                .padding(.bottom, 80) // Space for FAB
+            }
+            .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjectsForTempApprover)
+            .navigationDestination(isPresented: $shouldNavigateToDashboard) {
+                if let project = selectedProject {
+                    DashboardView(project: project, role: role)
+                }
+            }
+            
+            // Temporary Approver Status Overlay
+            if viewModel.tempApproverStatus == .pending {
+                tempApproverPendingOverlay
+            }
         }
     }
     
@@ -278,6 +315,124 @@ struct ProjectListView: View {
         .animation(DesignSystem.Animation.interactiveSpring, value: isShowingCreateSheet)
         .padding(.trailing, DesignSystem.Spacing.extraLarge)
         .padding(.bottom, DesignSystem.Spacing.extraLarge)
+    }
+    
+    // MARK: - Temporary Approver Views
+    
+    private var tempApproverPendingOverlay: some View {
+        ZStack {
+            // Blurred background
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .blur(radius: 0.5)
+            
+            // Content
+            VStack(spacing: DesignSystem.Spacing.large) {
+                Image(systemName: "person.badge.clock.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.orange)
+                    .symbolRenderingMode(.hierarchical)
+                
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    Text("Temporary Approver Role")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("You have been assigned as a temporary approver for a project. Please accept or reject this role to continue.")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, DesignSystem.Spacing.large)
+                }
+                
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    Button("Accept") {
+                        Task {
+                            await viewModel.acceptTempApproverRole()
+                            // Navigate to dashboard after acceptance
+                            shouldNavigateToDashboard = true
+                        }
+                    }
+                    .primaryButton()
+                    
+                    Button("Reject") {
+                        viewModel.rejectTempApproverRole()
+                    }
+                    .secondaryButton()
+                }
+                .padding(.horizontal, DesignSystem.Spacing.large)
+            }
+            .padding(DesignSystem.Spacing.extraLarge)
+            .background(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                    .fill(.regularMaterial)
+                    .shadow(radius: 20)
+            )
+            .padding(.horizontal, DesignSystem.Spacing.large)
+        }
+    }
+    
+    private var tempApproverRejectionSheet: some View {
+        NavigationStack {
+            VStack(spacing: DesignSystem.Spacing.large) {
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    Image(systemName: "person.badge.clock.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.red)
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("Reject Temporary Approver Role")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Please provide a reason for rejecting this temporary approver role. This will help us understand your decision.")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Reason for Rejection")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter your reason...", text: $viewModel.rejectionReason, axis: .vertical)
+                        .textFieldStyle(.roundedBorder)
+                        .lineLimit(3...6)
+                }
+                
+                Spacer()
+                
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    Button("Cancel") {
+                        viewModel.showingRejectionSheet = false
+                        viewModel.rejectionReason = ""
+                    }
+                    .secondaryButton()
+                    
+                    Button("Confirm Rejection") {
+                        Task {
+                            await viewModel.confirmRejection()
+                        }
+                    }
+                    .primaryButton()
+                    .disabled(viewModel.rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(DesignSystem.Spacing.large)
+            .navigationTitle("Reject Role")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        viewModel.showingRejectionSheet = false
+                        viewModel.rejectionReason = ""
+                    }
+                }
+            }
+        }
     }
 }
 

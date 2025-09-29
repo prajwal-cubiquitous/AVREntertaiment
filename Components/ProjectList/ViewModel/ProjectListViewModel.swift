@@ -20,6 +20,12 @@ class ProjectListViewModel: ObservableObject {
     @Published var role: UserRole
     @Published var selectedStatusFilter: ProjectStatus? = nil
     
+    // Temporary Approver Status
+    @Published var tempApproverStatus: TempApproverStatus? = nil
+    @Published var showingTempApproverAction = false
+    @Published var rejectionReason = ""
+    @Published var showingRejectionSheet = false
+    
     private let db = Firestore.firestore()
     private var projectListener: ListenerRegistration?
     
@@ -224,6 +230,146 @@ class ProjectListViewModel: ObservableObject {
             print("❌ Error updating expense status: \(error)")
             HapticManager.notification(.error)
         }
+    }
+    
+    // MARK: - Temporary Approver Status Management
+    
+    func checkTempApproverStatusForProject(_ project: Project) async -> Bool {
+        // Only check for APPROVER role users
+        guard role == .APPROVER else { return false }
+        
+        let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+        
+        // Check if user is temp approver for this specific project
+        guard project.tempApproverID == cleanPhone else {
+            tempApproverStatus = nil
+            return false
+        }
+        
+        guard let projectId = project.id else { return false }
+        
+        do {
+            // Check tempApprover subcollection
+            let tempApproverSnapshot = try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("tempApprover")
+                .whereField("approverId", isEqualTo: cleanPhone)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let tempApproverDoc = tempApproverSnapshot.documents.first,
+               let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+                tempApproverStatus = tempApprover.status
+                
+                // Return true if status is pending (needs user action)
+                if tempApprover.status == .pending {
+                    showingTempApproverAction = true
+                    return true
+                }
+                return false
+            } else {
+                tempApproverStatus = nil
+                return false
+            }
+        } catch {
+            print("❌ Error checking temp approver status: \(error)")
+            tempApproverStatus = nil
+            return false
+        }
+    }
+    
+    func acceptTempApproverRole() async {
+        guard let project = projects.first(where: { $0.tempApproverID == phoneNumber }) else { return }
+        guard let projectId = project.id else { return }
+        
+        let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+        
+        do {
+            // Update tempApprover status to accepted
+            let tempApproverSnapshot = try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("tempApprover")
+                .whereField("approverId", isEqualTo: cleanPhone)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let tempApproverDoc = tempApproverSnapshot.documents.first {
+                try await tempApproverDoc.reference.updateData([
+                    "status": TempApproverStatus.accepted.rawValue,
+                    "updatedAt": Date()
+                ])
+                
+                tempApproverStatus = .accepted
+                showingTempApproverAction = false
+                
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("❌ Error accepting temp approver role: \(error)")
+            HapticManager.notification(.error)
+        }
+    }
+    
+    func rejectTempApproverRole() {
+        showingRejectionSheet = true
+    }
+    
+    func confirmRejection() async {
+        guard let project = projects.first(where: { $0.tempApproverID == phoneNumber }) else { return }
+        guard let projectId = project.id else { return }
+        
+        let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+        
+        do {
+            // Update tempApprover status to rejected with reason
+            let tempApproverSnapshot = try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("tempApprover")
+                .whereField("approverId", isEqualTo: cleanPhone)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let tempApproverDoc = tempApproverSnapshot.documents.first {
+                try await tempApproverDoc.reference.updateData([
+                    "status": TempApproverStatus.rejected.rawValue,
+                    "updatedAt": Date(),
+                    "rejectionReason": rejectionReason
+                ])
+            }
+            
+            // Remove tempApproverID from project
+            try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .updateData([
+                    "tempApproverID": FieldValue.delete()
+                ])
+            
+            tempApproverStatus = .rejected
+            showingTempApproverAction = false
+            showingRejectionSheet = false
+            rejectionReason = ""
+            
+            // Refresh projects to remove the rejected project
+            await fetchProjects()
+            
+            HapticManager.notification(.success)
+        } catch {
+            print("❌ Error rejecting temp approver role: \(error)")
+            HapticManager.notification(.error)
+        }
+    }
+    
+    // Computed property for filtered projects based on temp approver status
+    var filteredProjectsForTempApprover: [Project] {
+        if role == .APPROVER && tempApproverStatus == .rejected {
+            // Remove projects where user is temp approver if rejected
+            return projects.filter { $0.tempApproverID != phoneNumber }
+        }
+        return filteredProjects
     }
 }
 
