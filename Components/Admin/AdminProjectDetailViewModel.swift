@@ -12,6 +12,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var departments: [DepartmentItem]
     @Published var teamMembers: [String]
     @Published var managerName: String
+    @Published var tempApproverID: String?
     
     // Temporary departments for editing
     @Published var tempDepartments: [DepartmentItem] = []
@@ -89,6 +90,7 @@ class AdminProjectDetailViewModel: ObservableObject {
         self.departments = project.departments.map { DepartmentItem(name: $0.key, amount: String($0.value)) }
         self.teamMembers = project.teamMembers
         self.managerName = project.managerId
+        self.tempApproverID = project.tempApproverID
         
         Task {
             await fetchUsers()
@@ -246,6 +248,21 @@ class AdminProjectDetailViewModel: ObservableObject {
                 showSuccess = true
             } catch {
                 errorMessage = "Failed to update project team: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func updateTempApproverID(_ newTempApproverID: String?) {
+        Task {
+            do {
+                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                    .updateData(["tempApproverID": newTempApproverID as Any])
+                
+                tempApproverID = newTempApproverID
+                showSuccess = true
+            } catch {
+                errorMessage = "Failed to update temporary approver: \(error.localizedDescription)"
                 showError = true
             }
         }

@@ -10,6 +10,7 @@ class EditProjectViewModel: ObservableObject {
     @Published var endDate: String
     @Published var status: String
     @Published var teamMembers: [String]
+    @Published var tempApproverID: String?
     @Published var departments: [String: Double]
     
     private let projectId: String
@@ -24,6 +25,7 @@ class EditProjectViewModel: ObservableObject {
         self.endDate = project.endDate ?? ""
         self.status = project.status
         self.teamMembers = project.teamMembers
+        self.tempApproverID = project.tempApproverID
         self.departments = project.departments
     }
     
@@ -64,6 +66,7 @@ class EditProjectViewModel: ObservableObject {
             "endDate": endDate,
             "status": status,
             "teamMembers": teamMembers,
+            "tempApproverID": tempApproverID as Any,
             "departments": departments
         ])
     }

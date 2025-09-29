@@ -99,7 +99,6 @@ class ProjectListViewModel: ObservableObject {
                 if var project = try? document.data(as: Project.self) {
                     project.id = document.documentID
                     loadedProjects.append(project)
-                    print("📋 Loaded project: \(project.name) with ID: \(project.id ?? "N/A")")
                 }
             }
             
@@ -112,13 +111,15 @@ class ProjectListViewModel: ObservableObject {
             }
         }
     }
+
     
     // Keep the existing fetchProjects method for manual refresh
     func fetchProjects() {
-        Task {
-            await setupProjectListener()
+            Task {
+                await setupProjectListener()
+            }
         }
-    }
+    
     
     // Function to update status filter
     func updateStatusFilter(_ status: ProjectStatus?) {
@@ -130,7 +131,6 @@ class ProjectListViewModel: ObservableObject {
         guard phoneNumber == "admin@avr.com" else {
             return projects
         }
-        
         if let filter = selectedStatusFilter {
             return projects.filter { $0.statusType == filter }
         }

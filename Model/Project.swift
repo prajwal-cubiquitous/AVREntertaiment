@@ -20,6 +20,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let endDate: String?
     let teamMembers: [String]
     let managerId: String
+    let tempApproverID: String?
     
     // MARK: - New Property for Department Breakdown
     // This dictionary holds the user-defined departments and their amounts.
@@ -92,6 +93,7 @@ extension Project {
                 endDate: "",
                 teamMembers: ["user1", "user2", "user3"],
                 managerId: "manager1",
+                tempApproverID: nil,
                 // The new dictionary for department breakdown
                 departments: [:
 
@@ -108,6 +110,7 @@ extension Project {
                 endDate: "31/12/2024",
                 teamMembers: ["user1", "user2", "user3"],
                 managerId: "manager1",
+                tempApproverID: nil,
                 // The new dictionary for department breakdown
                 departments: [
                     "Casting": 15000,
@@ -128,6 +131,7 @@ extension Project {
                 endDate: "31/05/2024",
                 teamMembers: ["user1", "user4"],
                 managerId: "manager2",
+                tempApproverID: nil,
                 departments: [
                     "Design Agency Fees": 75000,
                     "Market Research": 25000,

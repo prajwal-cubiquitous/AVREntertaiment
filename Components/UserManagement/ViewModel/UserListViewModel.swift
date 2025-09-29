@@ -35,7 +35,7 @@ class UserListViewModel: ObservableObject {
         }
         
         do {
-            try await db.collection("users").document(userId).updateData([
+            try await db.collection("users_ios").document(userId).updateData([
                 "isActive": !user.isActive
             ])
             // No need to refresh the entire list since we already updated the UI
@@ -49,5 +49,7 @@ class UserListViewModel: ObservableObject {
             showError = true
             errorMessage = "Failed to update user status: \(error.localizedDescription)"
         }
+        
     }
 } 
+                             

@@ -209,6 +209,7 @@ class CreateProjectViewModel: ObservableObject {
                     endDate: endDateStr,
                     teamMembers: teamMemberPhones,
                     managerId: selectedManager?.phoneNumber ?? "",
+                    tempApproverID: nil,
                     departments: Dictionary(uniqueKeysWithValues: departments.map { ($0.name, Double($0.amount) ?? 0) }),
                     createdAt: Timestamp(),
                     updatedAt: Timestamp()
