@@ -124,9 +124,14 @@ class DashboardViewModel: ObservableObject {
     
     private func loadProjectForApprover() async {
         do {
-            // Query project where current user is the manager (approver)
+            // Query project where current user is the manager or temp approver
             let snapshot = try await db.collection("projects_ios")
-                .whereField("managerId", isEqualTo: currentUserPhone)
+                .whereFilter(
+                    Filter.orFilter([
+                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                    ])
+                )
                 .limit(to: 1) // Only get one project
                 .getDocuments()
             
@@ -179,7 +184,12 @@ class DashboardViewModel: ObservableObject {
         do {
             // Load pending expenses for approval
             let projectsSnapshot = try await db.collection("projects_ios")
-                .whereField("managerId", isEqualTo: currentUserPhone)
+                .whereFilter(
+                    Filter.orFilter([
+                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                    ])
+                )
                 .getDocuments()
             
             var notificationItems: [NotificationItem] = []

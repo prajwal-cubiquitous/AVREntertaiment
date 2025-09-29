@@ -29,6 +29,7 @@ class PendingApprovalsViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private let currentUserPhone: String
+    let currentUserRole: UserRole
     
     var hasSelectedExpenses: Bool {
         !selectedExpenses.isEmpty
@@ -64,25 +65,36 @@ class PendingApprovalsViewModel: ObservableObject {
         return filtered.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
     }
     
-    init() {
+    init(role: UserRole? = nil) {
         self.currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
+        self.currentUserRole = role ?? .USER
     }
     
     func loadPendingExpenses() {
         isLoading = true
         
         Task {
-            await loadExpensesFromFirebase()
-            await loadAvailableDepartments()
+            if currentUserRole == .ADMIN {
+                await loadExpensesFromFirebaseAdmin()
+                await loadAvailableDepartmentsAdmin()
+            } else {
+                await loadExpensesFromFirebase()
+                await loadAvailableDepartments()
+            }
             isLoading = false
         }
     }
     
     private func loadExpensesFromFirebase() async {
         do {
-            // Get all projects where current user is the manager
+            // Get all projects where current user is the manager or temp approver
             let projectsSnapshot = try await db.collection("projects_ios")
-                .whereField("managerId", isEqualTo: currentUserPhone)
+                .whereFilter(
+                    Filter.orFilter([
+                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                    ])
+                )
                 .getDocuments()
             
             var expenses: [Expense] = []
@@ -146,7 +158,12 @@ class PendingApprovalsViewModel: ObservableObject {
     private func loadAvailableDepartments() async {
         do {
             let projectsSnapshot = try await db.collection("projects_ios")
-                .whereField("managerId", isEqualTo: currentUserPhone)
+                .whereFilter(
+                    Filter.orFilter([
+                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                    ])
+                )
                 .getDocuments()
             
             var departments: Set<String> = []
@@ -220,9 +237,22 @@ class PendingApprovalsViewModel: ObservableObject {
             // Update each selected expense
             for expenseId in selectedExpenses {
                 // Find the project and update the expense
-                let projectsSnapshot = try await db.collection("projects_ios")
-                    .whereField("managerId", isEqualTo: currentUserPhone)
-                    .getDocuments()
+                let projectsSnapshot: QuerySnapshot
+                
+                if currentUserRole == .ADMIN {
+                    // Admin can approve expenses from all projects
+                    projectsSnapshot = try await db.collection("projects_ios").getDocuments()
+                } else {
+                    // Regular users can approve expenses from their managed projects or where they are temp approver
+                    projectsSnapshot = try await db.collection("projects_ios")
+                        .whereFilter(
+                            Filter.orFilter([
+                                Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                                Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                            ])
+                        )
+                        .getDocuments()
+                }
                 
                 for projectDoc in projectsSnapshot.documents {
                     let expenseRef = projectDoc.reference.collection("expenses").document(expenseId)
@@ -230,18 +260,30 @@ class PendingApprovalsViewModel: ObservableObject {
                     // Check if expense exists in this project
                     let expenseDoc = try await expenseRef.getDocument()
                     if expenseDoc.exists {
-                        try await expenseRef.updateData([
+                        var updateData: [String: Any] = [
                             "status": newStatus.rawValue,
                             "approvedAt": Date(),
                             "approvedBy": currentUserPhone
-                        ])
+                        ]
+                        
+                        // Add admin approval note if current user is admin
+                        if currentUserRole == .ADMIN {
+                            let adminNote = "Admin approved"
+                            updateData["remark"] = adminNote
+                        }
+                        
+                        try await expenseRef.updateData(updateData)
                         break
                     }
                 }
             }
             
             // Refresh the list
-            await loadExpensesFromFirebase()
+            if currentUserRole == .ADMIN {
+                await loadExpensesFromFirebaseAdmin()
+            } else {
+                await loadExpensesFromFirebase()
+            }
             
             // Clear selections
             selectedExpenses.removeAll()

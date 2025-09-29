@@ -1169,6 +1169,7 @@ struct TempApproverSheet: View {
     @State private var selectedApprover: User?
     @State private var startDate = Date()
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+    @State private var showingDateSelection = false
     
     var filteredApprovers: [User] {
         if searchText.isEmpty {
@@ -1182,93 +1183,299 @@ struct TempApproverSheet: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Search Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Select Approver")
-                        .font(.headline)
+            GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    // Header Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        Text("Select Approver")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        // Search Bar
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                            
+                            TextField("Search by name or phone number", text: $searchText)
+                                .textFieldStyle(PlainTextFieldStyle())
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.vertical, DesignSystem.Spacing.small)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.top, DesignSystem.Spacing.medium)
+                    .padding(.bottom, DesignSystem.Spacing.small)
                     
-                    TextField("Search by name or phone number", text: $searchText)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                }
-                
-                // Approver List
-                if !filteredApprovers.isEmpty {
-                    List(filteredApprovers, id: \.phoneNumber) { approver in
-                        Button(action: {
-                            selectedApprover = approver
-                            searchText = ""
-                        }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(approver.name)
+                    // Content Section
+                    if selectedApprover == nil {
+                        // Approver Selection List
+                        if !filteredApprovers.isEmpty {
+                            List(filteredApprovers, id: \.phoneNumber) { approver in
+                                ApproverRow(
+                                    approver: approver,
+                                    isSelected: selectedApprover?.phoneNumber == approver.phoneNumber,
+                                    onTap: {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            selectedApprover = approver
+                                            showingDateSelection = true
+                                        }
+                                        HapticManager.selection()
+                                    }
+                                )
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                .listRowSeparator(.hidden)
+                            }
+                            .listStyle(PlainListStyle())
+                        } else if !searchText.isEmpty {
+                            // Empty State
+                            VStack(spacing: DesignSystem.Spacing.medium) {
+                                Image(systemName: "person.crop.circle.badge.exclamationmark")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.secondary)
+                                
+                                Text("No Approvers Found")
                                     .font(.headline)
                                     .foregroundColor(.primary)
-                                Text(approver.phoneNumber)
-                                    .font(.caption)
+                                
+                                Text("Try adjusting your search terms")
+                                    .font(.subheadline)
                                     .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
                             }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(.systemGroupedBackground))
+                        } else {
+                            // Initial State
+                            VStack(spacing: DesignSystem.Spacing.medium) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.accentColor)
+                                
+                                Text("Select an Approver")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                Text("Choose from the list below to assign temporary approval")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(.systemGroupedBackground))
                         }
-                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        // Date Selection Section
+                        ScrollView {
+                            VStack(spacing: DesignSystem.Spacing.large) {
+                                // Selected Approver Card
+                                SelectedApproverCard(
+                                    approver: selectedApprover!,
+                                    onDeselect: {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            selectedApprover = nil
+                                            showingDateSelection = false
+                                        }
+                                    }
+                                )
+                                
+                                // Date Selection Cards
+                                VStack(spacing: DesignSystem.Spacing.medium) {
+                                    DateSelectionCard(
+                                        title: "Start Date & Time",
+                                        date: $startDate,
+                                        icon: "calendar.badge.plus"
+                                    )
+                                    
+                                    DateSelectionCard(
+                                        title: "End Date & Time",
+                                        date: $endDate,
+                                        icon: "calendar.badge.minus"
+                                    )
+                                }
+                                
+                                // Validation Message
+                                if endDate <= startDate {
+                                    HStack {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(.orange)
+                                        Text("End date must be after start date")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                    }
+                                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                                }
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.bottom, DesignSystem.Spacing.large)
+                        }
+                        .background(Color(.systemGroupedBackground))
                     }
-                    .frame(maxHeight: 200)
-                } else if !searchText.isEmpty {
-                    Text("No approvers found")
-                        .foregroundColor(.secondary)
-                        .frame(maxHeight: 200)
                 }
-                
-                // Date Selection
-                if selectedApprover != nil {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Selected: \(selectedApprover?.name ?? "")")
-                            .font(.headline)
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Start Date & Time")
-                                .font(.subheadline)
-                            DatePicker("", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(CompactDatePickerStyle())
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("End Date & Time")
-                                .font(.subheadline)
-                            DatePicker("", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
-                                .datePickerStyle(CompactDatePickerStyle())
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                }
-                
-                Spacer()
             }
-            .padding()
-            .navigationTitle("Add Temporary Approver")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(.blue)
                 }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Set Temporary Approver") {
-                        if let approver = selectedApprover {
+                    if selectedApprover != nil {
+                        Button("Set") {
                             let tempApprover = TempApprover(
-                                approverId: approver.phoneNumber,
+                                approverId: selectedApprover!.phoneNumber,
                                 startDate: startDate,
                                 endDate: endDate
                             )
                             onSet(tempApprover)
                             dismiss()
                         }
+                        .foregroundColor(.blue)
+                        .fontWeight(.semibold)
+                        .disabled(endDate <= startDate)
                     }
-                    .disabled(selectedApprover == nil || endDate <= startDate)
                 }
             }
         }
+    }
+}
+
+// MARK: - Supporting Views
+
+struct ApproverRow: View {
+    let approver: User
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: DesignSystem.Spacing.medium) {
+                // Avatar
+                Circle()
+                    .fill(Color.accentColor.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Text(String(approver.name.prefix(1)).uppercased())
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                    )
+                
+                // User Info
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(approver.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    Text(approver.phoneNumber.formatPhoneNumber)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                // Selection Indicator
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.accentColor)
+                        .font(.title3)
+                } else {
+                    Image(systemName: "circle")
+                        .foregroundColor(.secondary)
+                        .font(.title3)
+                }
+            }
+            .padding(.vertical, DesignSystem.Spacing.small)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct SelectedApproverCard: View {
+    let approver: User
+    let onDeselect: () -> Void
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            HStack {
+                Text("Selected Approver")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button("Change") {
+                    onDeselect()
+                }
+                .font(.subheadline)
+                .foregroundColor(.blue)
+            }
+            
+            HStack(spacing: DesignSystem.Spacing.medium) {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.1))
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Text(String(approver.name.prefix(1)).uppercased())
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.accentColor)
+                    )
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(approver.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text(approver.phoneNumber.formatPhoneNumber)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
+struct DateSelectionCard: View {
+    let title: String
+    @Binding var date: Date
+    let icon: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(.accentColor)
+                    .font(.subheadline)
+                
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            
+            DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                .datePickerStyle(CompactDatePickerStyle())
+                .labelsHidden()
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 } 

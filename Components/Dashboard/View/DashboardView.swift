@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
 
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +20,22 @@ struct DashboardView: View {
     
     // Accept a single project as parameter
     let project: Project?
+    
+    // Permanent approver
+    
+    @State private var permanentApproverName: String?
+    
+    // Temporary Approver Properties
+    @State private var tempApproverName: String?
+    @State private var tempApproverEndDate: Date?
+    
+    // Date formatter for temp approver end date
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter
+    }
     
     init(project: Project? = nil, role: UserRole? = nil) {
         self.project = project
@@ -173,7 +190,7 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingPendingApprovals) {
-            PendingApprovalsView()
+            PendingApprovalsView(role: role)
         }
         .sheet(isPresented: $showingReportSheet) {
             // TODO: Add Report View here
@@ -184,9 +201,15 @@ struct DashboardView: View {
             if let projectId = project?.id{
                 viewModel.loadDashboardData()
             }
+            Task {
+                await fetchTempApproverData()
+            }
         }
         .onChange(of: project) { _ in
             viewModel.updateProject(project)
+            Task {
+                await fetchTempApproverData()
+            }
         }
     }
     
@@ -214,12 +237,19 @@ struct DashboardView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: DesignSystem.Spacing.medium) {
-                ProjectStatsCard(
-                    title: "Project Status",
-                    value: project?.statusType.rawValue ?? "N/A",
-                    icon: "circle.fill",
-                    color: project?.statusType == .ACTIVE ? .green : .orange
-                )
+                if let tempApproverName = tempApproverName, let tempApproverEndDate = tempApproverEndDate {
+                    TempApproverStatsCard(
+                        approverName: tempApproverName,
+                        endDate: tempApproverEndDate
+                    )
+                } else {
+                    ProjectStatsCard(
+                        title: "Project Status",
+                        value: project?.statusType.rawValue ?? "N/A",
+                        icon: "circle.fill",
+                        color: project?.statusType == .ACTIVE ? .green : .orange
+                    )
+                }
                 
                 ProjectStatsCard(
                     title: "Total Budget",
@@ -510,6 +540,95 @@ struct DashboardView: View {
         )
     }
     
+    // MARK: - Fetch Temporary Approver Data
+    private func fetchTempApproverData() async {
+        guard let project = project, let tempApproverID = project.tempApproverID else {
+            tempApproverName = nil
+            tempApproverEndDate = nil
+            return
+        }
+        
+        do {
+            let db = Firestore.firestore()
+            
+            // Fetch user name from users collection
+            let userDocument = try await db
+                .collection(FirebaseCollections.users)
+                .document(tempApproverID)
+                .getDocument()
+            
+            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
+                tempApproverName = user.name
+                
+                // Fetch temp approver end date from subcollection
+                let tempApproverSnapshot = try await db
+                    .collection("projects_ios")
+                    .document(project.id ?? "")
+                    .collection("tempApprover")
+                    .whereField("approverId", isEqualTo: user.phoneNumber)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let tempApproverDoc = tempApproverSnapshot.documents.first,
+                   let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+                    tempApproverEndDate = tempApprover.endDate
+                } else {
+                    tempApproverEndDate = nil
+                }
+            } else {
+                tempApproverName = nil
+                tempApproverEndDate = nil
+            }
+        } catch {
+            print("Error fetching temp approver data: \(error)")
+            tempApproverName = nil
+            tempApproverEndDate = nil
+        }
+    }
+    
+//    private func fetchApproverData() async {
+//        guard let project = project else {
+//            return
+//        }
+//        
+//        do {
+//            let db = Firestore.firestore()
+//            
+//            // Fetch user name from users collection
+//            let userDocument = try await db
+//                .collection(FirebaseCollections.users)
+//                .document(project.managerId)
+//                .getDocument()
+//            
+//            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
+//                tempApproverName = user.name
+//                
+//                // Fetch temp approver end date from subcollection
+//                let tempApproverSnapshot = try await db
+//                    .collection("projects_ios")
+//                    .document(project.id ?? "")
+//                    .collection("tempApprover")
+//                    .whereField("approverId", isEqualTo: user.phoneNumber)
+//                    .limit(to: 1)
+//                    .getDocuments()
+//                
+//                if let tempApproverDoc = tempApproverSnapshot.documents.first,
+//                   let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+//                    tempApproverEndDate = tempApprover.endDate
+//                } else {
+//                    tempApproverEndDate = nil
+//                }
+//            } else {
+//                tempApproverName = nil
+//                tempApproverEndDate = nil
+//            }
+//        } catch {
+//            print("Error fetching temp approver data: \(error)")
+//            tempApproverName = nil
+//            tempApproverEndDate = nil
+//        }
+//    }
+    
     // MARK: - Budget Comparison Chart
     private var budgetComparisonChart: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
@@ -727,6 +846,55 @@ struct ProjectStatsCard: View {
                 
                 Text(title)
                     .font(DesignSystem.Typography.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 100)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+}
+
+// MARK: - Temp Approver Stats Card
+struct TempApproverStatsCard: View {
+    let approverName: String
+    let endDate: Date
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .none
+        return formatter
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: "person.badge.clock.fill")
+                    .font(DesignSystem.Typography.title3)
+                    .foregroundColor(.orange)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Temp Approver")
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .contentTransition(.numericText())
+                
+                Text(approverName)
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                Text("Until: \(endDate, formatter: dateFormatter)")
+                    .font(DesignSystem.Typography.caption2)
                     .foregroundColor(.secondary)
             }
         }

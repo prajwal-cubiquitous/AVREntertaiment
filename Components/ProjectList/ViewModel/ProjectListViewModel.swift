@@ -80,8 +80,14 @@ class ProjectListViewModel: ObservableObject {
                 
             case .APPROVER:
                 print("🔍 Querying as APPROVER - Looking for managerId: \(cleanPhone)")
+                
                 query = projectsRef
-                    .whereField("managerId", isEqualTo: cleanPhone)
+                    .whereFilter(
+                        Filter.orFilter([
+                            Filter.whereField("managerId", isEqualTo: cleanPhone),
+                            Filter.whereField("tempApproverID", isEqualTo: cleanPhone)
+                        ])
+                    )
                     .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
                 
             default:

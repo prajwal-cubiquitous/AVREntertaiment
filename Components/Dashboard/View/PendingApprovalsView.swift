@@ -9,11 +9,15 @@ import SwiftUI
 
 struct PendingApprovalsView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = PendingApprovalsViewModel()
+    @StateObject private var viewModel: PendingApprovalsViewModel
     @State private var showingExpenseDetail = false
     @State private var selectedExpense: Expense?
     @State private var showingDateFilter = false
     @State private var showingDepartmentFilter = false
+    
+    init(role: UserRole? = nil) {
+        self._viewModel = StateObject(wrappedValue: PendingApprovalsViewModel(role: role))
+    }
     
     var body: some View {
         NavigationStack {
@@ -56,7 +60,7 @@ struct PendingApprovalsView: View {
         }
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpense {
-                ExpenseDetailView(expense: expense)
+                ExpenseDetailView(expense: expense, role: viewModel.currentUserRole)
             }
         }
     }
@@ -394,5 +398,5 @@ struct ModernExpenseApprovalRow: View {
 }
 
 #Preview {
-    PendingApprovalsView()
+    PendingApprovalsView(role: .ADMIN)
 } 

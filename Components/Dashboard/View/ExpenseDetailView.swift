@@ -19,10 +19,12 @@ struct ExpenseDetailView: View {
     
     private let db = Firestore.firestore()
     private let currentUserPhone: String
+    private let currentUserRole: UserRole
     
-    init(expense: Expense) {
+    init(expense: Expense, role: UserRole? = nil) {
         self.expense = expense
         self.currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
+        self.currentUserRole = role ?? .USER
     }
     
     var body: some View {
@@ -343,9 +345,22 @@ struct ExpenseDetailView: View {
         Task {
             do {
                 // Find the project and update the expense
-                let projectsSnapshot = try await db.collection("projects_ios")
-                    .whereField("managerId", isEqualTo: currentUserPhone)
-                    .getDocuments()
+                let projectsSnapshot: QuerySnapshot
+                
+                if currentUserRole == .ADMIN {
+                    // Admin can approve expenses from all projects
+                    projectsSnapshot = try await db.collection("projects_ios").getDocuments()
+                } else {
+                    // Regular users can approve expenses from their managed projects or where they are temp approver
+                    projectsSnapshot = try await db.collection("projects_ios")
+                        .whereFilter(
+                            Filter.orFilter([
+                                Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                                Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
+                            ])
+                        )
+                        .getDocuments()
+                }
                 
                 for projectDoc in projectsSnapshot.documents {
                     guard let expenseId = expense.id else { continue }
@@ -361,8 +376,11 @@ struct ExpenseDetailView: View {
                             "approvedBy": currentUserPhone
                         ]
                         
-                        // Add remark if provided
-                        if !remark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        // Add remark if provided or if admin
+                        if currentUserRole == .ADMIN {
+                            let adminNote = "Admin approved"
+                            updateData["remark"] = adminNote
+                        } else if !remark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             updateData["remark"] = remark.trimmingCharacters(in: .whitespacesAndNewlines)
                         }
                         
