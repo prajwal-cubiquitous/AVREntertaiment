@@ -22,6 +22,7 @@ struct DashboardView: View {
     @State private var showingChats = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
+    let phoneNumber: String
     
     // Accept a single project as parameter
     let project: Project?
@@ -42,11 +43,12 @@ struct DashboardView: View {
         return formatter
     }
     
-    init(project: Project? = nil, role: UserRole? = nil) {
+    init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "") {
         self.project = project
-        self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project))
-        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0]))
         self.role = role
+        self.phoneNumber = phoneNumber
+        self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber))
+        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0]))
     }
     
     var body: some View {
@@ -296,12 +298,23 @@ struct DashboardView: View {
                 .presentationDetents([.large])
         }
         .sheet(isPresented: $showingChats) {
-            if let project = project {
-                ChatsView(
-                    project: project,
-                    currentUserRole: role ?? .USER
-                )
-                .presentationDetents([.large])
+            if role == .ADMIN{
+                if let project = project {
+                    ChatsView(
+                        project: project,
+                        currentUserRole: .ADMIN
+                    )
+                    .presentationDetents([.large])
+                }
+            }else{
+                if let project = project {
+                    ChatsView(
+                        project: project,
+                        currentUserPhone: phoneNumber,
+                        currentUserRole: role ?? .USER
+                    )
+                    .presentationDetents([.large])
+                }
             }
         }
         .onAppear {
@@ -667,12 +680,15 @@ struct DashboardView: View {
             if userDocument.exists, let user = try? userDocument.data(as: User.self) {
                 tempApproverName = user.name
                 
+                // Use the passed phone number instead of user.phoneNumber
+                let approverPhone = phoneNumber.isEmpty ? user.phoneNumber : phoneNumber
+                
                 // Fetch temp approver end date from subcollection
                 let tempApproverSnapshot = try await db
                     .collection("projects_ios")
                     .document(project.id ?? "")
                     .collection("tempApprover")
-                    .whereField("approverId", isEqualTo: user.phoneNumber)
+                    .whereField("approverId", isEqualTo: approverPhone)
                     .limit(to: 1)
                     .getDocuments()
                 
@@ -1093,5 +1109,5 @@ struct ActionMenuButton: View {
 }
 
 #Preview {
-    DashboardView(project: Project.sampleData.first)
+    DashboardView(project: Project.sampleData.first, phoneNumber: "1234567890")
 } 

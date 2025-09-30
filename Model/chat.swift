@@ -18,6 +18,8 @@ struct Message: Identifiable, Codable {
     var isRead: Bool
     var type: MessageType
     var replyTo: String?                      // optional messageId
+    var mentions: [String]?                   // array of mentioned user IDs
+    var isGroupMessage: Bool                  // true if sent to group chat
 
     enum MessageType: String, Codable {
         case text

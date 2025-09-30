@@ -43,10 +43,10 @@ class DashboardViewModel: ObservableObject {
     private let currentUserPhone: String
     private var project: Project?
     
-    init(project: Project? = nil) {
+    init(project: Project? = nil, phoneNumber: String = "") {
         self.project = project
-        // Get current user phone from UserDefaults or UserServices
-        self.currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
+        // Use passed phone number or fallback to UserDefaults
+        self.currentUserPhone = phoneNumber.isEmpty ? (UserDefaults.standard.string(forKey: "currentUserPhone") ?? "") : phoneNumber
         
         if let project = project {
             // Load data from provided project

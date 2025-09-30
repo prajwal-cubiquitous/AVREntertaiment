@@ -251,7 +251,7 @@ struct ProjectListView: View {
                             HapticManager.selection()
                         })
                     } else if role == .ADMIN {
-                        NavigationLink(destination: DashboardView(project: project, role: role)) {
+                        NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)) {
                             ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)
@@ -276,7 +276,7 @@ struct ProjectListView: View {
             .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjectsForTempApprover)
             .navigationDestination(isPresented: $shouldNavigateToDashboard) {
                 if let project = selectedProject {
-                    DashboardView(project: project, role: role)
+                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
                 }
             }
             

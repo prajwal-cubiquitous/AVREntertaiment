@@ -15,6 +15,7 @@ struct ChatsView: View {
     @StateObject private var viewModel: ChatsViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedParticipant: ChatParticipant?
+    @State private var showingGroupChat = false
     
     init(project: Project, currentUserPhone: String? = nil, currentUserRole: UserRole) {
         self.project = project
@@ -41,6 +42,20 @@ struct ChatsView: View {
             .navigationTitle("Chats")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showingGroupChat = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.3.fill")
+                                .font(.system(size: 16))
+                            Text("Group")
+                                .font(.subheadline)
+                        }
+                        .foregroundColor(.blue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
@@ -50,6 +65,14 @@ struct ChatsView: View {
             }
             .task {
                 await viewModel.loadChatParticipants()
+            }
+            .sheet(isPresented: $showingGroupChat) {
+                GroupChatView(
+                    project: project,
+                    currentUserPhone: currentUserPhone,
+                    role: currentUserRole
+                )
+                .presentationDetents([.large])
             }
         }
     }
@@ -123,7 +146,13 @@ struct ChatsView: View {
         ScrollView {
             LazyVStack(spacing: 8) {
                 ForEach(viewModel.participants) { participant in
-                    NavigationLink(destination: IndividualChatView(participant: participant, project: project)) {
+                    NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: (currentUserRole != .ADMIN) ? currentUserPhone : nil)
+                        .onAppear {
+                            Task {
+                                await viewModel.markMessagesAsRead(for: participant.phoneNumber)
+                            }
+                        }
+                    ) {
                         ChatParticipantRow(participant: participant)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -182,10 +211,37 @@ struct ChatParticipantRow: View {
                     
                     Spacer()
                     
-                    if let lastSeen = participant.lastSeen {
+                    if let lastMessageTime = participant.lastMessageTime {
+                        Text(timeAgoString(from: lastMessageTime))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if let lastSeen = participant.lastSeen {
                         Text(timeAgoString(from: lastSeen))
                             .font(.caption)
                             .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Last message preview
+                if let lastMessage = participant.lastMessage {
+                    HStack {
+                        Text(lastMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        if participant.unreadCount > 0 {
+                            Text("\(participant.unreadCount)")
+                                .font(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .clipShape(Circle())
+                        }
                     }
                 }
             }
