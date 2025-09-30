@@ -6,6 +6,8 @@ enum TempApproverStatus: String, Codable, CaseIterable {
     case pending = "pending"
     case accepted = "accepted"
     case rejected = "rejected"
+    case active = "active"
+    case expired = "expired"
 }
 
 struct TempApprover: Identifiable, Codable, Equatable, Hashable {
@@ -45,6 +47,10 @@ struct TempApprover: Identifiable, Codable, Equatable, Hashable {
             return "Accepted"
         case .rejected:
             return "Rejected"
+        case .active:
+            return "Active"
+        case .expired:
+            return "Expired"
         }
     }
     
@@ -62,6 +68,52 @@ struct TempApprover: Identifiable, Codable, Equatable, Hashable {
         } else {
             return "\(approvedExpense.count) expenses approved"
         }
+    }
+    
+    // Computed property to determine current status based on dates
+    var currentStatus: TempApproverStatus {
+        let now = Date()
+        
+        // If already rejected, keep it rejected
+        if status == .rejected {
+            return .rejected
+        }
+        
+        // If not yet accepted, keep pending
+        if status == .pending {
+            return .pending
+        }
+        
+        // If accepted, check if it's within the active period
+        if status == .accepted {
+            if now >= startDate && now <= endDate {
+                return .active
+            } else if now > endDate {
+                return .expired
+            } else {
+                return .accepted // Not yet started
+            }
+        }
+        
+        // If already active or expired, check current state
+        if status == .active {
+            if now > endDate {
+                return .expired
+            } else {
+                return .active
+            }
+        }
+        
+        if status == .expired {
+            return .expired
+        }
+        
+        return status
+    }
+    
+    // Helper method to check if status needs to be updated
+    var needsStatusUpdate: Bool {
+        return currentStatus != status
     }
     
     // Implement Hashable

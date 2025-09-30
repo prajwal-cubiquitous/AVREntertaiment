@@ -964,6 +964,10 @@ struct TempApproverInlineCard: View {
             return .green
         case .rejected:
             return .red
+        case .active:
+            return .blue
+        case .expired:
+            return .gray
         }
     }
 }
@@ -1016,6 +1020,10 @@ struct TempApproverDisplayInlineCard: View {
             return .green
         case .rejected:
             return .red
+        case .active:
+            return .blue
+        case .expired:
+            return .gray
         }
     }
 }
@@ -1076,6 +1084,10 @@ struct TempApproverCard: View {
             return .green
         case .rejected:
             return .red
+        case .active:
+            return .blue
+        case .expired:
+            return .gray
         }
     }
 }
@@ -1127,6 +1139,10 @@ struct TempApproverDisplayCard: View {
             return .green
         case .rejected:
             return .red
+        case .active:
+            return .blue
+        case .expired:
+            return .gray
         }
     }
 }

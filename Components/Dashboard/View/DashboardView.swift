@@ -19,6 +19,7 @@ struct DashboardView: View {
     @State private var showingAddExpense = false
     @State private var showingAnalytics = false
     @State private var showingDelegate = false
+    @State private var showingChats = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     
@@ -119,7 +120,7 @@ struct DashboardView: View {
                                     }
                                     
                                     ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.teal) {
-                                        // TODO: Add chat functionality
+                                        showingChats = true
                                         showingActionMenu = false
                                         HapticManager.selection()
                                     }
@@ -293,6 +294,15 @@ struct DashboardView: View {
             // TODO: Add Delegate View here
             Text("Delegate View")
                 .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingChats) {
+            if let project = project {
+                ChatsView(
+                    project: project,
+                    currentUserRole: role ?? .USER
+                )
+                .presentationDetents([.large])
+            }
         }
         .onAppear {
             if let projectId = project?.id{

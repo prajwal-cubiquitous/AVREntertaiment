@@ -131,6 +131,11 @@ class ProjectListViewModel: ObservableObject {
             self.projects = loadedProjects.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
             self.isLoading = false
             
+            // Update TempApprover statuses for all projects
+            Task {
+                await self.updateTempApproverStatusesForAllProjects()
+            }
+            
             // Fetch pending expenses for notifications
             Task {
                 await self.fetchPendingExpenses()
@@ -259,7 +264,29 @@ class ProjectListViewModel: ObservableObject {
                 .getDocuments()
             
             if let tempApproverDoc = tempApproverSnapshot.documents.first,
-               let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+               var tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+                
+                // Check if status needs to be updated based on dates
+                if tempApprover.needsStatusUpdate {
+                    let newStatus = tempApprover.currentStatus
+                    print("🔄 TempApprover status needs update from \(tempApprover.status.rawValue) to \(newStatus.rawValue)")
+                    
+                    // Update the status in Firebase
+                    try await tempApproverDoc.reference.updateData([
+                        "status": newStatus.rawValue,
+                        "updatedAt": Date()
+                    ])
+                    
+                    // Update local tempApprover object
+                    tempApprover = TempApprover(
+                        approverId: tempApprover.approverId,
+                        startDate: tempApprover.startDate,
+                        endDate: tempApprover.endDate,
+                        status: newStatus,
+                        approvedExpense: tempApprover.approvedExpense
+                    )
+                }
+                
                 tempApproverStatus = tempApprover.status
                 
                 // Return true if status is pending (needs user action)
@@ -286,7 +313,7 @@ class ProjectListViewModel: ObservableObject {
         let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
         
         do {
-            // Update tempApprover status to accepted
+            // Get current tempApprover data to determine the correct status
             let tempApproverSnapshot = try await db
                 .collection(FirebaseCollections.projects)
                 .document(projectId)
@@ -295,15 +322,30 @@ class ProjectListViewModel: ObservableObject {
                 .limit(to: 1)
                 .getDocuments()
             
-            if let tempApproverDoc = tempApproverSnapshot.documents.first {
+            if let tempApproverDoc = tempApproverSnapshot.documents.first,
+               let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+                
+                // Create updated tempApprover with accepted status
+                let updatedTempApprover = TempApprover(
+                    approverId: tempApprover.approverId,
+                    startDate: tempApprover.startDate,
+                    endDate: tempApprover.endDate,
+                    status: .accepted,
+                    approvedExpense: tempApprover.approvedExpense
+                )
+                
+                // Determine the actual status based on dates
+                let actualStatus = updatedTempApprover.currentStatus
+                
                 try await tempApproverDoc.reference.updateData([
-                    "status": TempApproverStatus.accepted.rawValue,
+                    "status": actualStatus.rawValue,
                     "updatedAt": Date()
                 ])
                 
-                tempApproverStatus = .accepted
+                tempApproverStatus = actualStatus
                 showingTempApproverAction = false
                 
+                print("✅ TempApprover role accepted with status: \(actualStatus.rawValue)")
                 HapticManager.notification(.success)
             }
         } catch {
@@ -314,6 +356,51 @@ class ProjectListViewModel: ObservableObject {
     
     func rejectTempApproverRole() {
         showingRejectionSheet = true
+    }
+    
+    // MARK: - TempApprover Status Update Methods
+    
+    func updateTempApproverStatusesForAllProjects() async {
+        for project in projects {
+            if let tempApproverID = project.tempApproverID {
+                await updateTempApproverStatusForProject(projectId: project.id ?? "", tempApproverID: tempApproverID)
+            }
+        }
+    }
+    
+    func updateTempApproverStatusForProject(projectId: String, tempApproverID: String) async {
+        do {
+            // Get the tempApprover document
+            let tempApproverSnapshot = try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("tempApprover")
+                .whereField("approverId", isEqualTo: tempApproverID)
+                .limit(to: 1)
+                .getDocuments()
+            
+            guard let tempApproverDoc = tempApproverSnapshot.documents.first,
+                  var tempApprover = try? tempApproverDoc.data(as: TempApprover.self) else {
+                print("ℹ️ No tempApprover found for project: \(projectId)")
+                return
+            }
+            
+            // Check if status needs to be updated
+            if tempApprover.needsStatusUpdate {
+                let newStatus = tempApprover.currentStatus
+                print("🔄 Updating tempApprover status from \(tempApprover.status.rawValue) to \(newStatus.rawValue) for project: \(projectId)")
+                
+                // Update the status in Firebase
+                try await tempApproverDoc.reference.updateData([
+                    "status": newStatus.rawValue,
+                    "updatedAt": Date()
+                ])
+                
+                print("✅ Successfully updated tempApprover status to \(newStatus.rawValue)")
+            }
+        } catch {
+            print("❌ Error updating tempApprover status for project \(projectId): \(error)")
+        }
     }
     
     func confirmRejection() async {
