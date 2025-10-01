@@ -259,7 +259,7 @@ struct ProjectListView: View {
                             HapticManager.selection()
                         })
                     } else {
-                        NavigationLink(destination: ProjectDetailView(project: project)) {
+                        NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber)) {
                             ProjectCell(project: project, role: role)
                         }
                         .buttonStyle(.plain)

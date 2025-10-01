@@ -1,24 +1,64 @@
 import Foundation
 import FirebaseFirestore
+import SwiftUI
+import Charts
 
+// MARK: - Analysis Data Models
 struct ForecastData {
-    let month: String   // "Jan", "Feb", ...
-    let budget: Double
-    let actual: Double
-    let forecast: Double
+    let months: [String]
+    let budgetData: [Double]
+    let actualData: [Double]
+    let forecastData: [Double]
+    let forecastTotal: Double
+}
+
+struct VarianceData {
+    let months: [String]
+    let budgetData: [Double]
+    let actualData: [Double]
+    let forecastData: [Double]
+    let forecastTotal: Double
+}
+
+struct PieChartItem: Identifiable {
+    let id = UUID()
+    let label: String
+    let percentage: Double
+    let color: Color
+}
+
+// MARK: - Analysis Results
+struct AnalysisResults {
+    let forecastData: ForecastData
+    let varianceData: VarianceData
+    let trendsData: [PieChartItem]
+    let totalSpent: Double
+    let totalBudget: Double
+    let budgetUsagePercentage: Double
+}
+
+// MARK: - Report Data (for analysis input)
+struct ReportData {
+    let totalSpent: Double
+    let totalBudget: Double
+    let budgetUsagePercentage: Double
+    let expensesByCategory: [String: Double]
+    let expensesByDepartment: [String: Double]
 }
 
 func fetchForecastData(for projectId: String, completion: @escaping ([ForecastData]) -> Void) {
     let db = Firestore.firestore()
     let projectRef = db.collection("projects_ios").document(projectId)
     
-    projectRef.getDocument { projectDoc, error in
-        guard let projectData = projectDoc?.data(),
-              let budget = projectData["budget"] as? Double else { return }
-        
-        // Fetch expenses
-        projectRef.collection("expenses").getDocuments { snapshot, error in
-            guard let docs = snapshot?.documents else { return }
+    Task {
+        do {
+            let projectDoc = try await projectRef.getDocument()
+            guard let projectData = projectDoc.data(),
+                  let budget = projectData["budget"] as? Double else { return }
+            
+            // Fetch expenses
+            let snapshot = try await projectRef.collection("expenses").getDocuments()
+            let docs = snapshot.documents
             
             var monthlyActuals: [String: Double] = [:]
             let dateFormatter = DateFormatter()
@@ -38,17 +78,24 @@ func fetchForecastData(for projectId: String, completion: @escaping ([ForecastDa
             }
             
             // Example: Forecast = Actual + random adjustment
-            var forecastData: [ForecastData] = []
-            for month in ["Jan","Feb","Mar","Apr","May"] {
-                let actual = monthlyActuals[month] ?? 0
-                let forecast = actual * 1.05  // placeholder: +5%
-                forecastData.append(ForecastData(month: month,
-                                                 budget: budget,
-                                                 actual: actual,
-                                                 forecast: forecast))
-            }
+            let months = ["Jan","Feb","Mar","Apr","May"]
+            let budgetData = months.map { _ in budget }
+            let actualData = months.map { month in monthlyActuals[month] ?? 0 }
+            let forecastData = actualData.map { $0 * 1.05 } // placeholder: +5%
             
-            completion(forecastData)
+            let forecastResult = ForecastData(
+                months: months,
+                budgetData: budgetData,
+                actualData: actualData,
+                forecastData: forecastData,
+                forecastTotal: forecastData.last ?? 0
+            )
+            
+            await MainActor.run {
+                completion([forecastResult])
+            }
+        } catch {
+            print("Error fetching forecast data: \(error)")
         }
     }
 }

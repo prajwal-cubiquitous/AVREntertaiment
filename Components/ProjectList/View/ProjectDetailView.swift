@@ -60,6 +60,9 @@ struct ProjectDetailView: View {
                     .frame(height: 80)
             }
             .padding(.top, DesignSystem.Spacing.small)
+            .onAppear {
+                print("DEBUG 10: \(phoneNumber)")
+            }
         }
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Project Details")

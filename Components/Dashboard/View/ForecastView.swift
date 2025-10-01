@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 struct ForecastView: View {
-    var data: [ForecastData]
+    var data: ForecastData
     
     var body: some View {
         VStack {
@@ -11,24 +11,24 @@ struct ForecastView: View {
                 .foregroundColor(.purple)
             
             Chart {
-                ForEach(data, id: \.month) { item in
+                ForEach(Array(data.months.enumerated()), id: \.offset) { index, month in
                     LineMark(
-                        x: .value("Month", item.month),
-                        y: .value("Budget", item.budget)
+                        x: .value("Month", month),
+                        y: .value("Budget", data.budgetData[index])
                     )
                     .foregroundStyle(.blue)
                     .symbol(.circle)
                     
                     LineMark(
-                        x: .value("Month", item.month),
-                        y: .value("Actual", item.actual)
+                        x: .value("Month", month),
+                        y: .value("Actual", data.actualData[index])
                     )
                     .foregroundStyle(.purple)
                     .symbol(.circle)
                     
                     LineMark(
-                        x: .value("Month", item.month),
-                        y: .value("Forecast", item.forecast)
+                        x: .value("Month", month),
+                        y: .value("Forecast", data.forecastData[index])
                     )
                     .foregroundStyle(.green)
                     .symbol(.circle)
