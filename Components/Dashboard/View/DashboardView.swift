@@ -20,6 +20,8 @@ struct DashboardView: View {
     @State private var showingAnalytics = false
     @State private var showingDelegate = false
     @State private var showingChats = false
+    @State private var showingDepartmentDetail = false
+    @State private var selectedDepartmentForDetail: String? = nil
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -322,6 +324,15 @@ struct DashboardView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingDepartmentDetail) {
+            if let department = selectedDepartmentForDetail, let project = project {
+                DepartmentBudgetDetailView(
+                    department: department,
+                    projectId: project.id ?? ""
+                )
+                .presentationDetents([.large])
+            }
+        }
         .onAppear {
             if let projectId = project?.id{
                 viewModel.loadDashboardData()
@@ -457,6 +468,11 @@ struct DashboardView: View {
                                 selectedDepartment = selectedDepartment == budget.department ? nil : budget.department
                             }
                             HapticManager.selection()
+                        }
+                        .onLongPressGesture {
+                            selectedDepartmentForDetail = budget.department
+                            showingDepartmentDetail = true
+                            HapticManager.impact(.medium)
                         }
                     }
                 }
@@ -852,12 +868,21 @@ struct EnhancedDepartmentBudgetCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            // Department name
-            Text(budget.department)
-                .font(DesignSystem.Typography.headline)
-                .foregroundColor(.primary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+            // Department name with detail indicator
+            HStack {
+                Text(budget.department)
+                    .font(DesignSystem.Typography.headline)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                
+                Spacer()
+                
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .opacity(0.7)
+            }
             
             // Budget information
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {

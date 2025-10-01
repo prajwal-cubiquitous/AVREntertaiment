@@ -376,6 +376,7 @@ class ProjectListViewModel: ObservableObject {
                 .document(projectId)
                 .collection("tempApprover")
                 .whereField("approverId", isEqualTo: tempApproverID)
+                .whereField("status", isEqualTo: "active")
                 .limit(to: 1)
                 .getDocuments()
             
