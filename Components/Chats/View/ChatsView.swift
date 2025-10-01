@@ -146,7 +146,7 @@ struct ChatsView: View {
         ScrollView {
             LazyVStack(spacing: 8) {
                 ForEach(viewModel.participants) { participant in
-                    NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: (currentUserRole != .ADMIN) ? currentUserPhone : nil)
+                    NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: currentUserPhone)
                         .onAppear {
                             Task {
                                 await viewModel.markMessagesAsRead(for: participant.phoneNumber)

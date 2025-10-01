@@ -14,10 +14,15 @@ struct ProjectDetailView: View {
     // The view takes a single project object as input.
     var project: Project
     @State private var showingAddExpense = false
+    @State private var showingChats = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
+    let role: UserRole?
+    let phoneNumber: String
 
-    init(project: Project){
+    init(project: Project, role: UserRole? = nil, phoneNumber: String = ""){
         self.project = project
+        self.role = role
+        self.phoneNumber = phoneNumber
         self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project))
     }
 
@@ -59,6 +64,19 @@ struct ProjectDetailView: View {
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    HapticManager.impact(.light)
+                    showingChats = true
+                } label: {
+                    Image(systemName: "message.fill")
+                        .font(.title3)
+                        .foregroundColor(.primary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             addExpenseButton
         }
@@ -87,6 +105,22 @@ struct ProjectDetailView: View {
         )
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(project: project)
+        }
+        .sheet(isPresented: $showingChats) {
+            if role == .ADMIN {
+                ChatsView(
+                    project: project,
+                    currentUserRole: .ADMIN
+                )
+                .presentationDetents([.large])
+            } else {
+                ChatsView(
+                    project: project,
+                    currentUserPhone: phoneNumber,
+                    currentUserRole: role ?? .USER
+                )
+                .presentationDetents([.large])
+            }
         }
     }
 }
@@ -522,7 +556,7 @@ struct ProjectDetailView_Previews: PreviewProvider {
         // Wrap in a NavigationView to see the title and layout correctly
         NavigationView {
             // Use the first item from our sample data for the preview
-            ProjectDetailView(project: Project.sampleData[0])
+            ProjectDetailView(project: Project.sampleData[0], role: .ADMIN, phoneNumber: "1234567890")
         }
     }
 }

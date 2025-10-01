@@ -91,21 +91,13 @@ class IndividualChatViewModel: ObservableObject {
         if phoneNumber == "Admin" || phoneNumber == "123" {
             otherUserId = "Admin"
         } else {
-            // Lookup other user's UID by phone number
-            let userQuery = try await db.collection("users_ios")
-                .whereField("phoneNumber", isEqualTo: phoneNumber)
-                .getDocuments()
-            
-            guard let userDoc = userQuery.documents.first,
-                  let foundUserId = userDoc.data()["phoneNumber"] as? String else {
-                print("User not found for phone: \(phoneNumber)")
-                return nil
-            }
-            otherUserId = foundUserId
+            // Lookup other user's phone number by phone number (it's already the phone number)
+            // The phoneNumber parameter is already the phone number we need
+            otherUserId = phoneNumber
         }
         
         // 2️⃣ Build participants deterministically using phone numbers
-        // Use "Admin" string when role is ADMIN and no phone is provided
+        // Use "Admin" string when role is ADMIN, otherwise use the actual phone number
         let myPhoneIdentifier: String = {
             if role == .ADMIN { return "Admin" }
             return currentUserPhone?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
