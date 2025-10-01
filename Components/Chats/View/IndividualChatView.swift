@@ -8,6 +8,8 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import AVFoundation
+import AVKit
 
 // MARK: - Global Helper Functions
 func loadDataAsync(from url: URL) async throws -> Data {
@@ -476,47 +478,73 @@ struct MediaView: View {
     let type: Message.MessageType
     @State private var showingImageViewer = false
     @State private var showingDocumentViewer = false
+    @State private var showingVideoPlayer = false
+    @State private var selectedImageUrl: URL?
+    @State private var selectedVideoUrl: URL?
     
     var body: some View {
-        switch type {
-        case .image:
-            if let imageUrl = media.first, let url = URL(string: imageUrl) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(maxWidth: 200, maxHeight: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .onTapGesture {
-                            showingImageViewer = true
+        VStack(alignment: .leading, spacing: 8) {
+            switch type {
+            case .image:
+                if let imageUrl = media.first, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(maxWidth: 250, maxHeight: 250)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .onTapGesture {
+                                selectedImageUrl = url
+                                showingImageViewer = true
+                            }
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color(.systemGray5))
+                            .frame(width: 250, height: 200)
+                            .overlay(
+                                VStack {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                                    Text("Loading image...")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(.top, 4)
+                                }
+                            )
+                    }
+                    .sheet(isPresented: $showingImageViewer) {
+                        if let imageUrl = selectedImageUrl {
+                            ImageViewer(url: imageUrl)
                         }
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemGray5))
-                        .frame(width: 200, height: 200)
-                        .overlay(
-                            ProgressView()
-                        )
+                    }
                 }
-                .sheet(isPresented: $showingImageViewer) {
-                    ImageViewer(url: url)
+                
+            case .video:
+                if let videoUrl = media.first, let url = URL(string: videoUrl) {
+                    VideoThumbnailView(url: url) {
+                        selectedVideoUrl = url
+                        showingVideoPlayer = true
+                    }
+                    .sheet(isPresented: $showingVideoPlayer) {
+                        if let videoUrl = selectedVideoUrl {
+                            VideoPlayerView(url: videoUrl)
+                        }
+                    }
                 }
+                
+            case .file:
+                if let fileUrl = media.first, let url = URL(string: fileUrl) {
+                    DocumentView(url: url) {
+                        showingDocumentViewer = true
+                    }
+                    .sheet(isPresented: $showingDocumentViewer) {
+                        DocumentViewer(url: url)
+                    }
+                }
+                
+            case .text:
+                EmptyView()
             }
-        case .video:
-            if let videoUrl = media.first {
-                VideoThumbnailView(url: URL(string: videoUrl))
-            }
-        case .file:
-            if let fileUrl = media.first, let url = URL(string: fileUrl) {
-                DocumentView(url: url) {
-                    showingDocumentViewer = true
-                }
-                .sheet(isPresented: $showingDocumentViewer) {
-                    DocumentViewer(url: url)
-                }
-            }
-        case .text:
-            EmptyView()
         }
     }
 }
@@ -584,6 +612,8 @@ struct ImageViewer: View {
 struct DocumentViewer: View {
     let url: URL
     @Environment(\.dismiss) private var dismiss
+    @State private var showingShareSheet = false
+    @State private var documentData: Data?
     
     var body: some View {
         NavigationView {
@@ -591,33 +621,32 @@ struct DocumentViewer: View {
                 if url.pathExtension.lowercased() == "pdf" {
                     PDFViewer(url: url)
                 } else {
-                    // For other document types, show a web view or download option
+                    // For other document types, show download and share options
                     VStack(spacing: 20) {
-                        Image(systemName: "doc.fill")
+                        Image(systemName: fileIcon)
                             .font(.system(size: 64))
-                            .foregroundColor(.blue)
+                            .foregroundColor(fileColor)
                         
                         Text(url.lastPathComponent)
                             .font(.headline)
                             .multilineTextAlignment(.center)
                         
-                        Text("Tap to download and view")
+                        Text(fileDescription)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         
-                        Button("Download") {
-                            // Handle download asynchronously
-                            Task {
-                                do {
-                                    let data = try await loadDataAsync(from: url)
-                                    // Save to documents or share
-                                    print("Downloading document: \(url.lastPathComponent)")
-                                } catch {
-                                    print("Error downloading document: \(error)")
-                                }
+                        HStack(spacing: 16) {
+                            Button("Open in App") {
+                                UIApplication.shared.open(url)
                             }
+                            .buttonStyle(.borderedProminent)
+                            
+                            Button("Share") {
+                                showingShareSheet = true
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
                     .padding()
                 }
@@ -630,6 +659,114 @@ struct DocumentViewer: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingShareSheet) {
+                if let data = documentData {
+                    ShareSheet(items: [data])
+                } else {
+                    ShareSheet(items: [url])
+                }
+            }
+        }
+        .task {
+            do {
+                documentData = try await loadDataAsync(from: url)
+            } catch {
+                print("Error loading document: \(error)")
+            }
+        }
+    }
+    
+    private var fileIcon: String {
+        let `extension` = url.pathExtension.lowercased()
+        switch `extension` {
+        case "doc", "docx":
+            return "doc.text.fill"
+        case "xls", "xlsx":
+            return "tablecells.fill"
+        case "ppt", "pptx":
+            return "rectangle.stack.fill"
+        case "txt":
+            return "doc.plaintext.fill"
+        case "zip", "rar":
+            return "archivebox.fill"
+        default:
+            return "doc.fill"
+        }
+    }
+    
+    private var fileColor: Color {
+        let `extension` = url.pathExtension.lowercased()
+        switch `extension` {
+        case "doc", "docx":
+            return .blue
+        case "xls", "xlsx":
+            return .green
+        case "ppt", "pptx":
+            return .orange
+        case "txt":
+            return .gray
+        case "zip", "rar":
+            return .purple
+        default:
+            return .blue
+        }
+    }
+    
+    private var fileDescription: String {
+        let `extension` = url.pathExtension.lowercased()
+        switch `extension` {
+        case "doc", "docx":
+            return "Microsoft Word Document"
+        case "xls", "xlsx":
+            return "Microsoft Excel Spreadsheet"
+        case "ppt", "pptx":
+            return "Microsoft PowerPoint Presentation"
+        case "txt":
+            return "Text Document"
+        case "zip", "rar":
+            return "Compressed Archive"
+        default:
+            return "Document File"
+        }
+    }
+}
+
+// MARK: - Video Player View
+struct VideoPlayerView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var player: AVPlayer?
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                if let player = player {
+                    VideoPlayer(player: player)
+                        .onAppear {
+                            player.play()
+                        }
+                        .onDisappear {
+                            player.pause()
+                        }
+                } else {
+                    ProgressView("Loading video...")
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .onAppear {
+            player = AVPlayer(url: url)
         }
     }
 }
@@ -638,32 +775,50 @@ struct DocumentViewer: View {
 struct PDFViewer: View {
     let url: URL
     @State private var pdfData: Data?
+    @State private var showingShareSheet = false
     
     var body: some View {
         VStack {
             if let data = pdfData {
-                // For now, show a placeholder. In a real app, you'd use a PDF rendering library
                 VStack(spacing: 20) {
                     Image(systemName: "doc.fill")
                         .font(.system(size: 64))
                         .foregroundColor(.red)
                     
-                    Text("PDF Document")
+                    Text(url.lastPathComponent)
                         .font(.headline)
-                    
-                    Text("PDF viewing requires additional implementation")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                     
-                    Button("Open in Safari") {
-                        UIApplication.shared.open(url)
+                    Text("PDF Document")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 16) {
+                        Button("Open in Safari") {
+                            UIApplication.shared.open(url)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        
+                        Button("Share") {
+                            showingShareSheet = true
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.borderedProminent)
                 }
                 .padding()
             } else {
-                ProgressView("Loading PDF...")
+                VStack(spacing: 16) {
+                    ProgressView("Loading PDF...")
+                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    Text("Please wait while the PDF loads")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            if let data = pdfData {
+                ShareSheet(items: [data])
             }
         }
         .task {
@@ -674,6 +829,17 @@ struct PDFViewer: View {
             }
         }
     }
+}
+
+// MARK: - Share Sheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Document Preview
@@ -752,18 +918,72 @@ struct VideoPreview: View {
 
 // MARK: - Video Thumbnail View
 struct VideoThumbnailView: View {
-    let url: URL?
+    let url: URL
+    let onTap: () -> Void
+    @State private var thumbnailImage: UIImage?
     
     var body: some View {
-        VStack {
-            Image(systemName: "play.circle.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.white)
-                .background(Circle().fill(.black.opacity(0.6)))
+        ZStack {
+            // Video thumbnail or placeholder
+            if let thumbnail = thumbnailImage {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: 250, maxHeight: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemGray4))
+                    .frame(maxWidth: 250, maxHeight: 200)
+                    .overlay(
+                        VStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            Text("Loading video...")
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.top, 4)
+                        }
+                    )
+            }
+            
+            // Play button overlay
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.white)
+                        .background(Circle().fill(.black.opacity(0.6)))
+                    Spacer()
+                }
+                Spacer()
+            }
         }
-        .frame(maxWidth: 200, maxHeight: 200)
-        .background(Color(.systemGray4))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onTapGesture {
+            onTap()
+        }
+        .task {
+            await generateThumbnail()
+        }
+    }
+    
+    private func generateThumbnail() async {
+        // Generate video thumbnail
+        let asset = AVURLAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        
+        do {
+            let time = CMTime(seconds: 1, preferredTimescale: 60)
+            let cgImage = try await imageGenerator.image(at: time).image
+            await MainActor.run {
+                self.thumbnailImage = UIImage(cgImage: cgImage)
+            }
+        } catch {
+            print("Error generating video thumbnail: \(error)")
+        }
     }
 }
 
