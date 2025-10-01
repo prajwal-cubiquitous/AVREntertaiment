@@ -16,6 +16,7 @@ struct ChatsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedParticipant: ChatParticipant?
     @State private var showingGroupChat = false
+    @State private var isRefreshing = false
     
     init(project: Project, currentUserPhone: String? = nil, currentUserRole: UserRole) {
         self.project = project
@@ -31,7 +32,7 @@ struct ChatsView: View {
                 headerView
                 
                 // Content
-                if viewModel.isLoading {
+                if viewModel.isLoading && viewModel.participants.isEmpty {
                     loadingView
                 } else if viewModel.participants.isEmpty {
                     emptyStateView
@@ -57,14 +58,32 @@ struct ChatsView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            Task {
+                                await refreshData()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16))
+                                .foregroundColor(.blue)
+                                .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                                .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isRefreshing)
+                        }
+                        .disabled(isRefreshing)
+                        
+                        Button("Done") {
+                            dismiss()
+                        }
+                        .foregroundColor(.blue)
                     }
-                    .foregroundColor(.blue)
                 }
             }
             .task {
-                await viewModel.loadChatParticipants()
+                await loadDataIfNeeded()
+            }
+            .refreshable {
+                await refreshData()
             }
             .sheet(isPresented: $showingGroupChat) {
                 GroupChatView(
@@ -148,7 +167,8 @@ struct ChatsView: View {
                 ForEach(viewModel.participants) { participant in
                     NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: currentUserPhone)
                         .onAppear {
-                            Task {
+                            // Mark as read in background without blocking UI
+                            Task.detached(priority: .background) {
                                 await viewModel.markMessagesAsRead(for: participant.phoneNumber)
                             }
                         }
@@ -163,6 +183,20 @@ struct ChatsView: View {
         }
         .background(Color(.systemGroupedBackground))
     }
+    
+    // MARK: - Data Loading Methods
+    private func loadDataIfNeeded() async {
+        // Only load if we don't have cached data
+        if viewModel.participants.isEmpty {
+            await viewModel.loadChatParticipants()
+        }
+    }
+    
+    private func refreshData() async {
+        isRefreshing = true
+        await viewModel.refreshData()
+        isRefreshing = false
+    }
 }
 
 // MARK: - Chat Participant Row
@@ -171,80 +205,11 @@ struct ChatParticipantRow: View {
     
     var body: some View {
         HStack(spacing: 12) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(participant.roleColor.opacity(0.15))
-                    .frame(width: 44, height: 44)
-                
-                Image(systemName: participant.roleIcon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(participant.roleColor)
-            }
+            // Avatar - Cached and optimized
+            avatarView
             
-            // Info
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(participant.displayName)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    if participant.isOnline {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: 8, height: 8)
-                    }
-                }
-                
-                HStack {
-                    Text(participant.role.displayName)
-                        .font(.caption)
-                        .foregroundColor(participant.roleColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(participant.roleColor.opacity(0.12))
-                        .clipShape(Capsule())
-                    
-                    Spacer()
-                    
-                    if let lastMessageTime = participant.lastMessageTime {
-                        Text(timeAgoString(from: lastMessageTime))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else if let lastSeen = participant.lastSeen {
-                        Text(timeAgoString(from: lastSeen))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // Last message preview
-                if let lastMessage = participant.lastMessage {
-                    HStack {
-                        Text(lastMessage)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        if participant.unreadCount > 0 {
-                            Text("\(participant.unreadCount)")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.red)
-                                .clipShape(Circle())
-                        }
-                    }
-                }
-            }
+            // Info - Optimized layout
+            infoView
             
             // Chevron
             Image(systemName: "chevron.right")
@@ -258,6 +223,100 @@ struct ChatParticipantRow: View {
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
     
+    // MARK: - Avatar View
+    private var avatarView: some View {
+        ZStack {
+            Circle()
+                .fill(participant.roleColor.opacity(0.15))
+                .frame(width: 44, height: 44)
+            
+            Image(systemName: participant.roleIcon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(participant.roleColor)
+        }
+    }
+    
+    // MARK: - Info View
+    private var infoView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Name and online status
+            HStack {
+                Text(participant.displayName)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if participant.isOnline {
+                    Circle()
+                        .fill(.green)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            
+            // Role and time
+            HStack {
+                Text(participant.role.displayName)
+                    .font(.caption)
+                    .foregroundColor(participant.roleColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(participant.roleColor.opacity(0.12))
+                    .clipShape(Capsule())
+                
+                Spacer()
+                
+                timeAgoView
+            }
+            
+            // Last message preview
+            if let lastMessage = participant.lastMessage {
+                HStack {
+                    Text(lastMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    if participant.unreadCount > 0 {
+                        unreadBadge
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Time Ago View
+    private var timeAgoView: some View {
+        Group {
+            if let lastMessageTime = participant.lastMessageTime {
+                Text(timeAgoString(from: lastMessageTime))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if let lastSeen = participant.lastSeen {
+                Text(timeAgoString(from: lastSeen))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    // MARK: - Unread Badge
+    private var unreadBadge: some View {
+        Text("\(participant.unreadCount)")
+            .font(.caption2)
+            .fontWeight(.bold)
+            .foregroundColor(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.red)
+            .clipShape(Circle())
+    }
+    
+    // MARK: - Time Helper
     private func timeAgoString(from date: Date) -> String {
         let now = Date()
         let timeInterval = now.timeIntervalSince(date)
