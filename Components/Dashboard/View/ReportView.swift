@@ -134,11 +134,21 @@ struct ReportView: View {
             }
             
             if viewModel.expenseCategories.isEmpty {
-                EmptyStateView(
-                    icon: "chart.bar.xaxis",
-                    title: "No Expenses Found",
-                    subtitle: "No expenses found for the selected period and filters"
-                )
+                VStack(spacing: 16) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    
+                    Text("No Expenses Found")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text("No expenses found for the selected period and filters")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 40)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .bottom, spacing: DesignSystem.Spacing.medium) {
@@ -173,11 +183,21 @@ struct ReportView: View {
             }
             
             if viewModel.departmentBudgets.isEmpty {
-                EmptyStateView(
-                    icon: "building.2",
-                    title: "No Department Data",
-                    subtitle: "Department budgets will appear here once data is loaded"
-                )
+                VStack(spacing: 16) {
+                    Image(systemName: "building.2")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    
+                    Text("No Department Data")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text("Department budgets will appear here once data is loaded")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.vertical, 40)
             } else {
                 VStack(spacing: 0) {
                     // Table Header
@@ -435,33 +455,6 @@ struct ExportButton: View {
 }
 
 
-struct EmptyStateView: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    
-    var body: some View {
-        VStack(spacing: DesignSystem.Spacing.medium) {
-            Image(systemName: icon)
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary.opacity(0.6))
-                .symbolRenderingMode(.hierarchical)
-            
-            VStack(spacing: DesignSystem.Spacing.small) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                
-                Text(subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(DesignSystem.Spacing.extraLarge)
-    }
-}
 
 #Preview {
     ReportView(projectId: "I1kHn5UTOs6FCBA33Ke5")

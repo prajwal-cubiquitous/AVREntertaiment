@@ -12,7 +12,7 @@ import FirebaseFirestore
 
 struct ProjectDetailView: View {
     // The view takes a single project object as input.
-    let project: Project
+    var project: Project
     @State private var showingAddExpense = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
 

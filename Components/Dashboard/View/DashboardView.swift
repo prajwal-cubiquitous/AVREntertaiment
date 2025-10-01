@@ -25,7 +25,7 @@ struct DashboardView: View {
     let phoneNumber: String
     
     // Accept a single project as parameter
-    let project: Project?
+    var project: Project?
     
     // Permanent approver
     
@@ -77,6 +77,7 @@ struct DashboardView: View {
                         
                         // Enhanced Charts Section
                         chartsSection
+                        
                     }
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                     .padding(.bottom, DesignSystem.Spacing.extraLarge)
@@ -92,10 +93,12 @@ struct DashboardView: View {
                             // Action buttons (positioned absolutely)
                             if showingActionMenu {
                                 VStack(spacing: 12) {
-                                    ActionMenuButton(icon: "person.2.badge.gearshape.fill", title: "Delegate", color: Color.purple) {
-                                        showingDelegate = true
-                                        showingActionMenu = false
-                                        HapticManager.selection()
+                                    if role == .ADMIN {
+                                        ActionMenuButton(icon: "person.2.badge.gearshape.fill", title: "Delegate", color: Color.purple) {
+                                            showingDelegate = true
+                                            showingActionMenu = false
+                                            HapticManager.selection()
+                                        }
                                     }
                                     
                                     ActionMenuButton(icon: "chart.bar.fill", title: "Dashboard", color: Color.blue) {
@@ -288,14 +291,16 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingAnalytics) {
-            // TODO: Add Analytics View here
-            Text("Analytics View")
-                .presentationDetents([.large])
+            if let project = project {
+                AnalyticsView(project: project)
+                    .presentationDetents([.large])
+            }
         }
         .sheet(isPresented: $showingDelegate) {
-            // TODO: Add Delegate View here
-            Text("Delegate View")
-                .presentationDetents([.large])
+            if let project = project, let role = role {
+                DelegateView(project: project, currentUserRole: role, showingDelegate: $showingDelegate)
+                    .presentationDetents([.large])
+            }
         }
         .sheet(isPresented: $showingChats) {
             if role == .ADMIN{
@@ -680,8 +685,9 @@ struct DashboardView: View {
             if userDocument.exists, let user = try? userDocument.data(as: User.self) {
                 tempApproverName = user.name
                 
-                // Use the passed phone number instead of user.phoneNumber
-                let approverPhone = phoneNumber.isEmpty ? user.phoneNumber : phoneNumber
+                // Always use the temp approver's phone number for the query
+                // This ensures temp approver details show for all users (admin, approver, etc.)
+                let approverPhone = user.phoneNumber
                 
                 // Fetch temp approver end date from subcollection
                 let tempApproverSnapshot = try await db
@@ -689,6 +695,9 @@ struct DashboardView: View {
                     .document(project.id ?? "")
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: approverPhone)
+                    .whereField("status", isEqualTo: "active")
+                    .whereField("endDate", isGreaterThanOrEqualTo: Timestamp(date: Date()))
+                    .whereField("startDate", isLessThanOrEqualTo: Timestamp(date: Date()))
                     .limit(to: 1)
                     .getDocuments()
                 
@@ -860,7 +869,7 @@ struct EnhancedDepartmentBudgetCard: View {
                     
                     Spacer()
                     
-                    Text("₹\(budget.totalBudget.formattedCurrency)")
+                    Text("\(budget.totalBudget.formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)

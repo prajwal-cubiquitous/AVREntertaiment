@@ -20,7 +20,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let endDate: String?
     let teamMembers: [String]
     let managerId: String
-    let tempApproverID: String?
+    var tempApproverID: String?
     
     // MARK: - New Property for Department Breakdown
     // This dictionary holds the user-defined departments and their amounts.

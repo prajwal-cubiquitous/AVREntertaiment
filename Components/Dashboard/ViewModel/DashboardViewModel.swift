@@ -344,9 +344,9 @@ class DashboardViewModel: ObservableObject {
 extension Double {
     var formattedCurrency: String {
         let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
         formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: self)) ?? "0"
+        return formatter.string(from: NSNumber(value: self)) ?? "₹0"
     }
 } 
