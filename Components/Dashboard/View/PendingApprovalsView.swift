@@ -14,9 +14,14 @@ struct PendingApprovalsView: View {
     @State private var selectedExpense: Expense?
     @State private var showingDateFilter = false
     @State private var showingDepartmentFilter = false
-    
-    init(role: UserRole? = nil) {
-        self._viewModel = StateObject(wrappedValue: PendingApprovalsViewModel(role: role))
+    @State private var showingExpenseChat = false
+    @State private var selectedExpenseForChat: Expense?
+    var project: Project
+    let role: UserRole?
+    init(role: UserRole? = nil, project: Project, phoneNumber: String) {
+        self._viewModel = StateObject(wrappedValue: PendingApprovalsViewModel(role: role, project: project,phoneNumber: phoneNumber))
+        self.project = project
+        self.role = role
     }
     
     var body: some View {
@@ -61,6 +66,14 @@ struct PendingApprovalsView: View {
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpense {
                 ExpenseDetailView(expense: expense, role: viewModel.currentUserRole)
+            }
+        }
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = selectedExpenseForChat , let projectId = project.id{
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: viewModel.getCurrentUserPhoneNumber(), projectId: projectId, role: role ?? .USER
+                )
             }
         }
     }
@@ -217,7 +230,12 @@ struct PendingApprovalsView: View {
                         onDetailTapped: {
                             selectedExpense = expense
                             showingExpenseDetail = true
-                        }
+                        },
+                        onChatTapped: {
+                            selectedExpenseForChat = expense
+                            showingExpenseChat = true
+                        },
+                        viewModel: viewModel
                     )
                 }
             }
@@ -312,6 +330,10 @@ struct ModernExpenseApprovalRow: View {
     let isSelected: Bool
     let onSelectionChanged: (Bool) -> Void
     let onDetailTapped: () -> Void
+    let onChatTapped: () -> Void
+    @ObservedObject var viewModel: PendingApprovalsViewModel
+    @State var UserName: String = ""
+    
     
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.medium) {
@@ -329,9 +351,10 @@ struct ModernExpenseApprovalRow: View {
             
             // Main Content
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                
                 // Top Row: Amount and Date
                 HStack {
-                    Text("₹\(expense.amount)")
+                    Text("₹\(String(format: "%.2f", expense.amount))")
                         .font(.headline)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
@@ -350,28 +373,44 @@ struct ModernExpenseApprovalRow: View {
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                     
+//                    Spacer()
+//                    
+//                    Text(expense.categories.joined(separator: ", "))
+//                        .font(.caption)
+//                        .foregroundColor(.secondary)
+//                        .lineLimit(1)
+                    
                     Spacer()
                     
-                    Text(expense.categories.joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    // Message Button
+                    Button {
+                        HapticManager.selection()
+                        onChatTapped()
+                    } label: {
+                        Image(systemName: "message")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(.primary)
+                    }
+                    .buttonStyle(.plain)
+
                 }
                 
                 // Bottom Row: Submitted By and Description
                 HStack {
-                    Text("By: \(expense.submittedBy)")
+                    Text("By: \(UserName != "" ? UserName : expense.submittedBy)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
-                    Spacer()
+//                    Spacer()
+//                    
+//                    if !expense.description.isEmpty {
+//                        Text(expense.description)
+//                            .font(.caption)
+//                            .foregroundColor(.secondary)
+//                            .lineLimit(1)
+//                    }
                     
-                    if !expense.description.isEmpty {
-                        Text(expense.description)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
-                    }
+            
                 }
             }
             
@@ -386,6 +425,29 @@ struct ModernExpenseApprovalRow: View {
             }
             .buttonStyle(.plain)
         }
+        .task {
+            do {
+                UserName = try await viewModel.loadUserData(userId: expense.submittedBy)
+            } catch {
+                // Now you can handle specific failures
+                print("Failed to load user data: \(error)") // More descriptive now
+                
+                // Optional: Update the UI based on the specific error
+                if let userDataError = error as? UserDataError {
+                    switch userDataError {
+                    case .userNotFound:
+                        print("User Not Found Error")
+                    case .missingNameField:
+                        print("Name not available")
+                    case .invalidUserId:
+                        print("Invalid user")
+                    }
+                } else {
+                    // Handle other errors like network issues
+                   print("Error loading")
+                }
+            }
+        }
         .padding(DesignSystem.Spacing.medium)
         .background(Color(.systemBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
@@ -397,6 +459,6 @@ struct ModernExpenseApprovalRow: View {
     }
 }
 
-#Preview {
-    PendingApprovalsView(role: .ADMIN)
-} 
+//#Preview {
+//    PendingApprovalsView(role: .ADMIN, project: .constant(Project(id: "123", name: "Test"))
+//} 

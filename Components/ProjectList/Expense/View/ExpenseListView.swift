@@ -4,10 +4,14 @@ import FirebaseFirestore
 struct ExpenseListView: View {
     let project: Project
     @StateObject private var viewModel: ExpenseListViewModel
+    let currentUserPhone: String
+    @State private var showingExpenseChat = false
+    @State private var selectedExpenseForChat: Expense?
     
-    init(project: Project) {
+    init(project: Project, currentUserPhone: String) {
         self.project = project
-        self._viewModel = StateObject(wrappedValue: ExpenseListViewModel(project: project))
+        self._viewModel = StateObject(wrappedValue: ExpenseListViewModel(project: project, currentUserPhone : currentUserPhone))
+        self.currentUserPhone = currentUserPhone
     }
     
     var body: some View {
@@ -29,7 +33,21 @@ struct ExpenseListView: View {
             viewModel.fetchExpenses()
         }
         .sheet(isPresented: $viewModel.showingFullList) {
-            FullExpenseListView(viewModel: viewModel)
+            FullExpenseListView(
+                viewModel: viewModel,
+                currentUserPhone: currentUserPhone,
+                projectId: project.id ?? ""
+            )
+        }
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = selectedExpenseForChat {
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: currentUserPhone,
+                    projectId: project.id ?? "",
+                    role: .USER // You might want to get this from user context
+                )
+            }
         }
     }
     
@@ -73,7 +91,13 @@ struct ExpenseListView: View {
     private var expensesList: some View {
         LazyVStack(spacing: 12) {
             ForEach(viewModel.expenses.prefix(5)) { expense in
-                ExpenseRowView(expense: expense)
+                ExpenseRowView(
+                    expense: expense,
+                    onChatTapped: {
+                        selectedExpenseForChat = expense
+                        showingExpenseChat = true
+                    }
+                )
             }
             
             Button("View All Expenses (\(viewModel.expenses.count))") {
@@ -89,6 +113,7 @@ struct ExpenseListView: View {
 // MARK: - Expense Row View
 struct ExpenseRowView: View {
     let expense: Expense
+    let onChatTapped: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
@@ -130,6 +155,18 @@ struct ExpenseRowView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
+            if expense.status == .pending{
+                // Message Button
+                Button {
+                    onChatTapped()
+                } label: {
+                    Image(systemName: "message")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
@@ -152,7 +189,7 @@ private struct SectionHeader: View {
 
 // MARK: - Preview
 #Preview {
-    ExpenseListView(project: Project.sampleData[0])
+    ExpenseListView(project: Project.sampleData[0], currentUserPhone: "9876543211")
         .padding()
         .background(Color(UIColor.systemGroupedBackground))
 } 

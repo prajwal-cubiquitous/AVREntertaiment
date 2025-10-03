@@ -22,6 +22,7 @@ struct DashboardView: View {
     @State private var showingChats = false
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartmentForDetail: String? = nil
+    @State private var showingTeamMembersDetail = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -50,7 +51,7 @@ struct DashboardView: View {
         self.role = role
         self.phoneNumber = phoneNumber
         self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber))
-        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0]))
+        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0], CurrentUserPhone: phoneNumber))
     }
     
     var body: some View {
@@ -201,20 +202,22 @@ struct DashboardView: View {
                         HStack {
                             Spacer()
                             
-                            NotificationsView(showingPendingApprovals: $showingPendingApprovals)
-                                .frame(
-                                    width: min(320, geometry.size.width - 32),
-                                    height: min(450, geometry.size.height * 0.6)
-                                )
-                                .background(Color(.systemBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 10)
-                                .padding(.trailing, 16)
-                                .transition(.asymmetric(
-                                    insertion: .scale(scale: 0.8).combined(with: .opacity),
-                                    removal: .scale(scale: 0.95).combined(with: .opacity)
-                                ))
-                                .onTapGesture { }  // Prevent tap from dismissing
+                            if let project = project{
+                                NotificationsView(showingPendingApprovals: $showingPendingApprovals, project: project, role: role, phoneNumber: phoneNumber)
+                                    .frame(
+                                        width: min(320, geometry.size.width - 32),
+                                        height: min(450, geometry.size.height * 0.6)
+                                    )
+                                    .background(Color(.systemBackground))
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 10)
+                                    .padding(.trailing, 16)
+                                    .transition(.asymmetric(
+                                        insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                        removal: .scale(scale: 0.95).combined(with: .opacity)
+                                    ))
+                                    .onTapGesture { }  // Prevent tap from dismissing
+                            }
                         }
                         
                         Spacer()
@@ -279,7 +282,9 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingPendingApprovals) {
-            PendingApprovalsView(role: role)
+            if let project = project{
+                PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
+            }
         }
         .sheet(isPresented: $showingReportSheet) {
             // TODO: Add Report View here
@@ -331,6 +336,12 @@ struct DashboardView: View {
                     projectId: project.id ?? ""
                 )
                 .presentationDetents([.large])
+            }
+        }
+        .sheet(isPresented: $showingTeamMembersDetail) {
+            if let project = project {
+                TeamMembersDetailView(project: project)
+                    .presentationDetents([.large])
             }
         }
         .onAppear {
@@ -394,12 +405,44 @@ struct DashboardView: View {
                     color: .orange
                 )
                 
-                ProjectStatsCard(
-                    title: "Team Members",
-                    value: "\(project?.teamMembers.count ?? 0)",
-                    icon: "person.2.fill",
-                    color: .blue
-                )
+                Button(action: {
+                    showingTeamMembersDetail = true
+                    HapticManager.selection()
+                }) {
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        HStack {
+                            Image(systemName: "person.2.fill")
+                                .font(DesignSystem.Typography.title3)
+                                .foregroundColor(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(project?.teamMembers.count ?? 0)")
+                                .font(DesignSystem.Typography.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                                .contentTransition(.numericText())
+                            
+                            Text("Team Members")
+                                .font(DesignSystem.Typography.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(DesignSystem.Spacing.medium)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 100)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.large)
+                    .cardStyle(shadow: DesignSystem.Shadow.small)
+                }
+                .buttonStyle(.plain)
                 
                 ProjectStatsCard(
                     title: "Departments",

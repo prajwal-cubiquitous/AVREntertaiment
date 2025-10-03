@@ -4,6 +4,10 @@ struct FullExpenseListView: View {
     @ObservedObject var viewModel: ExpenseListViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var selectedExpense: Expense?
+    @State private var showingExpenseChat = false
+    @State private var selectedExpenseForChat: Expense?
+    let currentUserPhone: String
+    let projectId: String
     
     var body: some View {
         NavigationView {
@@ -18,13 +22,10 @@ struct FullExpenseListView: View {
             }
             .navigationTitle("All Expenses")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                }
-            }
+            .navigationBarBackButtonHidden(true)
+            .navigationBarItems(leading: Button("Close") {
+                dismiss()
+            })
         }
         .presentationDetents([.large, .fraction(0.90)])
         .onAppear {
@@ -39,6 +40,16 @@ struct FullExpenseListView: View {
                         set: { if !$0 { selectedExpense = nil } }
                     ),
                     isPendingApproval: false
+                )
+            }
+        }
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = selectedExpenseForChat {
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: currentUserPhone,
+                    projectId: projectId,
+                    role: .USER // You might want to get this from user context
                 )
             }
         }
@@ -81,12 +92,18 @@ struct FullExpenseListView: View {
     private var expensesList: some View {
         List {
             ForEach(viewModel.expenses) { expense in
-                ExpenseRowView(expense: expense)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
-                    .onTapGesture {
-                        selectedExpense = expense
+                ExpenseRowView(
+                    expense: expense,
+                    onChatTapped: {
+                        selectedExpenseForChat = expense
+                        showingExpenseChat = true
                     }
+                )
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowBackground(Color(UIColor.secondarySystemGroupedBackground))
+                .onTapGesture {
+                    selectedExpense = expense
+                }
             }
         }
         .listStyle(.insetGrouped)

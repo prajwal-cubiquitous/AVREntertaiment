@@ -26,7 +26,7 @@ class PendingApprovalsViewModel: ObservableObject {
     @Published var showingConfirmation = false
     @Published var pendingAction: ApprovalAction = .approve
     @Published var confirmationMessage = ""
-    
+    @Published var project: Project
     private let db = Firestore.firestore()
     private let currentUserPhone: String
     let currentUserRole: UserRole
@@ -65,9 +65,10 @@ class PendingApprovalsViewModel: ObservableObject {
         return filtered.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
     }
     
-    init(role: UserRole? = nil) {
-        self.currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
+    init(role: UserRole? = nil, project: Project, phoneNumber: String) {
+        self.currentUserPhone = phoneNumber
         self.currentUserRole = role ?? .USER
+        self.project = project
     }
     
     func loadPendingExpenses() {
@@ -87,21 +88,15 @@ class PendingApprovalsViewModel: ObservableObject {
     
     private func loadExpensesFromFirebase() async {
         do {
+            guard let projectId = project.id else{ return }
             // Get all projects where current user is the manager or temp approver
-            let projectsSnapshot = try await db.collection("projects_ios")
-                .whereFilter(
-                    Filter.orFilter([
-                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
-                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
-                    ])
-                )
-                .getDocuments()
+            let projectsSnapshot = try await db.collection("projects_ios").document(projectId)
+                .getDocument()
             
             var expenses: [Expense] = []
             
-            for projectDoc in projectsSnapshot.documents {
                 // Get pending expenses from each project
-                let expensesSnapshot = try await projectDoc.reference
+                let expensesSnapshot = try await projectsSnapshot.reference
                     .collection("expenses")
                     .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
                     .getDocuments()
@@ -113,7 +108,6 @@ class PendingApprovalsViewModel: ObservableObject {
                     print("DEBUG 2: docuemntID for \(expenseDoc.documentID)")
                     expenses.append(expense)
                 }
-            }
             
             pendingExpenses = expenses
             
@@ -125,15 +119,17 @@ class PendingApprovalsViewModel: ObservableObject {
     
     private func loadExpensesFromFirebaseAdmin() async {
         do {
+            
+            guard let projectId = project.id else{ return }
+            
             // Get all projects where current user is the manager
-            let projectsSnapshot = try await db.collection("projects_ios")
-                .getDocuments()
+            let projectsSnapshot = try await db.collection("projects_ios").document(projectId)
+                .getDocument()
             
             var expenses: [Expense] = []
             
-            for projectDoc in projectsSnapshot.documents {
                 // Get pending expenses from each project
-                let expensesSnapshot = try await projectDoc.reference
+                let expensesSnapshot = try await projectsSnapshot.reference
                     .collection("expenses")
                     .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
                     .getDocuments()
@@ -145,7 +141,6 @@ class PendingApprovalsViewModel: ObservableObject {
                     print("DEBUG 2: docuemntID for \(expenseDoc.documentID)")
                     expenses.append(expense)
                 }
-            }
             
             pendingExpenses = expenses
             
@@ -157,21 +152,17 @@ class PendingApprovalsViewModel: ObservableObject {
     
     private func loadAvailableDepartments() async {
         do {
+            
+            guard let projectId = project.id else{ return }
+            
             let projectsSnapshot = try await db.collection("projects_ios")
-                .whereFilter(
-                    Filter.orFilter([
-                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
-                        Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
-                    ])
-                )
-                .getDocuments()
+                .document(projectId)
+                .getDocument()
             
             var departments: Set<String> = []
             
-            for projectDoc in projectsSnapshot.documents {
-                let project = try projectDoc.data(as: Project.self)
+                let project = try projectsSnapshot.data(as: Project.self)
                 departments.formUnion(project.departments.keys)
-            }
             
             availableDepartments = Array(departments).sorted()
             
@@ -182,15 +173,16 @@ class PendingApprovalsViewModel: ObservableObject {
     
     private func loadAvailableDepartmentsAdmin() async {
         do {
+            guard let projectId = project.id else{ return }
+            
             let projectsSnapshot = try await db.collection("projects_ios")
-                .getDocuments()
+                .document(projectId)
+                .getDocument()
             
             var departments: Set<String> = []
             
-            for projectDoc in projectsSnapshot.documents {
-                let project = try projectDoc.data(as: Project.self)
+                let project = try projectsSnapshot.data(as: Project.self)
                 departments.formUnion(project.departments.keys)
-            }
             
             availableDepartments = Array(departments).sorted()
             
@@ -232,30 +224,21 @@ class PendingApprovalsViewModel: ObservableObject {
         isLoading = true
         
         do {
+            
+            guard let projectId = project.id else{ return }
+            
+            
             let newStatus: ExpenseStatus = pendingAction == .approve ? .approved : .rejected
             
             // Update each selected expense
             for expenseId in selectedExpenses {
                 // Find the project and update the expense
-                let projectsSnapshot: QuerySnapshot
                 
-                if currentUserRole == .ADMIN {
-                    // Admin can approve expenses from all projects
-                    projectsSnapshot = try await db.collection("projects_ios").getDocuments()
-                } else {
-                    // Regular users can approve expenses from their managed projects or where they are temp approver
-                    projectsSnapshot = try await db.collection("projects_ios")
-                        .whereFilter(
-                            Filter.orFilter([
-                                Filter.whereField("managerId", isEqualTo: currentUserPhone),
-                                Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
-                            ])
-                        )
-                        .getDocuments()
-                }
+                let projectsSnapshot = try await db.collection("projects_ios")
+                    .document(projectId)
+                    .getDocument()
                 
-                for projectDoc in projectsSnapshot.documents {
-                    let expenseRef = projectDoc.reference.collection("expenses").document(expenseId)
+                    let expenseRef = projectsSnapshot.reference.collection("expenses").document(expenseId)
                     
                     // Check if expense exists in this project
                     let expenseDoc = try await expenseRef.getDocument()
@@ -275,7 +258,6 @@ class PendingApprovalsViewModel: ObservableObject {
                         try await expenseRef.updateData(updateData)
                         break
                     }
-                }
             }
             
             // Refresh the list
@@ -298,6 +280,45 @@ class PendingApprovalsViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    func loadUserData(userId: String) async throws -> String {
+        // 1. Throw an error for an invalid user ID
+        guard !userId.isEmpty else {
+            throw UserDataError.invalidUserId
+        }
+        
+        let updatedUserId = userId.replacingOccurrences(of: "+91", with: "")
+        
+        // 2. Fetch the document
+        let userSnapshot = try await db.collection("users_ios").document(updatedUserId).getDocument()
+        
+        print("Debug 20 : userid \(userId)")
+        
+        // 3. Safely unwrap the document data
+        guard let data = userSnapshot.data() else {
+            throw UserDataError.userNotFound
+        }
+        
+        // 4. Safely get the "name" as a String
+        guard let name = data["name"] as? String else {
+            throw UserDataError.missingNameField
+        }
+        
+        // 5. Success! Return the name.
+        return name
+    }
+    
+    // MARK: - Chat Related Methods
+    
+    func getTempApproverId(for expense: Expense) -> String {
+        // This should return the temp approver ID for the expense's project
+        // For now, returning a placeholder - you'll need to implement this based on your data structure
+        return "temp_approver_\(expense.projectId)"
+    }
+    
+    func getCurrentUserPhoneNumber() -> String {
+        return currentUserPhone
     }
     
     // Mock data for preview
@@ -351,7 +372,7 @@ class PendingApprovalsViewModel: ObservableObject {
                 submittedBy: "Vrew",
                 status: .pending,
                 remark: nil,
-                createdAt: Timestamp(),
+                createdAt: Timestamp(), 
                 updatedAt: Timestamp()
             ),
             Expense(
@@ -376,3 +397,5 @@ class PendingApprovalsViewModel: ObservableObject {
         availableDepartments = ["Set Design", "Costumes", "Miscellaneous", "Equipment", "Travel"]
     }
 } 
+
+

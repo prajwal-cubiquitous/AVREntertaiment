@@ -22,6 +22,12 @@ enum UserRole: String, CaseIterable, Codable {
     }
 }
 
+enum UserDataError: Error {
+    case userNotFound
+    case missingNameField
+    case invalidUserId
+}
+
 struct User: Identifiable, Codable, Hashable {
     @DocumentID var id: String?
     var phoneNumber: String

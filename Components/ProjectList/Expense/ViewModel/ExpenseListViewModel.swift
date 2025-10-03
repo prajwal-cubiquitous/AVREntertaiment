@@ -16,10 +16,10 @@ class ExpenseListViewModel: ObservableObject {
     
     private let project: Project
     private let db = Firestore.firestore()
-    private let currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
-    
-    init(project: Project) {
+    private let currentUserPhone: String
+    init(project: Project, currentUserPhone: String) {
         self.project = project
+        self.currentUserPhone = currentUserPhone
     }
     
     func fetchExpenses() {
@@ -30,6 +30,7 @@ class ExpenseListViewModel: ObservableObject {
                 let snapshot = try await db.collection("projects_ios")
                     .document(project.id ?? "")
                     .collection("expenses")
+                    .whereField("submittedBy", isEqualTo: currentUserPhone)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()
                 

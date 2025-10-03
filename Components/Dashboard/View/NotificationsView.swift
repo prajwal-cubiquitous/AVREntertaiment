@@ -10,6 +10,9 @@ import SwiftUI
 struct NotificationsView: View {
     @Binding var showingPendingApprovals: Bool
     @State var OpenPendingApprovals: Bool = false
+    let project: Project
+    let role: UserRole?
+    let phoneNumber:String
     // Static notifications for demo
     private let notifications: [NotificationItem] = [
         NotificationItem(
@@ -91,7 +94,7 @@ struct NotificationsView: View {
         .background(Color(.systemBackground))
         .fullScreenCover(isPresented: $OpenPendingApprovals) {
             NavigationStack {
-                PendingApprovalsView()
+                PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
             }
         }
 
@@ -174,8 +177,8 @@ struct NotificationRow: View {
     }
 }
 
-#Preview {
-    NotificationsView(showingPendingApprovals: .constant(false))
-        .frame(width: 300, height: 400)
-        .background(Color(.systemBackground))
-} 
+//#Preview {
+//    NotificationsView(showingPendingApprovals: .constant(false))
+//        .frame(width: 300, height: 400)
+//        .background(Color(.systemBackground))
+//} 

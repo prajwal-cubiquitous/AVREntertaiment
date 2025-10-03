@@ -16,9 +16,11 @@ class ProjectDetailViewModel: ObservableObject {
     
     private let project: Project
     private let db = Firestore.firestore()
+    private let CurrentUserPhone : String
     
-    init(project: Project) {
+    init(project: Project, CurrentUserPhone : String) {
         self.project = project
+        self.CurrentUserPhone = CurrentUserPhone
         self.fetchApprovedExpenses()
     }
     

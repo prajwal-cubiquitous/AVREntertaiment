@@ -23,7 +23,7 @@ struct ProjectDetailView: View {
         self.project = project
         self.role = role
         self.phoneNumber = phoneNumber
-        self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project))
+        self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project,CurrentUserPhone :phoneNumber))
     }
 
     var body: some View {
@@ -52,7 +52,7 @@ struct ProjectDetailView: View {
                 }
                 
                 // MARK: - Expense Section
-                ExpenseListView(project: project)
+                ExpenseListView(project: project, currentUserPhone : phoneNumber)
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                 
                 // Bottom padding for floating button

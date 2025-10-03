@@ -429,7 +429,7 @@ struct GroupMessageBubble: View {
                         .padding(.vertical, 10)
                         .background(
                             RoundedRectangle(cornerRadius: 18)
-                                .fill(isFromCurrentUser ? Color.blue : Color(.systemGray5))
+                                .fill(isFromCurrentUser ? Color.secondary : Color(.systemGray5))
                         )
                 }
                 

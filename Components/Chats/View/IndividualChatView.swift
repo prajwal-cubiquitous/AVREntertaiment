@@ -482,35 +482,39 @@ struct MediaView: View {
     @State private var selectedImageUrl: URL?
     @State private var selectedVideoUrl: URL?
     
+    // Determine the actual media type based on file extension
+    private var actualMediaType: MediaType {
+        guard let mediaUrl = media.first, let url = URL(string: mediaUrl) else {
+            return .unknown
+        }
+        
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp":
+            return .image
+        case "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm":
+            return .video
+        case "pdf", "doc", "docx", "txt", "rtf", "pages":
+            return .document
+        default:
+            return .unknown
+        }
+    }
+    
+    enum MediaType {
+        case image, video, document, unknown
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            switch type {
+            // Use actual media type instead of message type for better detection
+            switch actualMediaType {
             case .image:
                 if let imageUrl = media.first, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(maxWidth: 250, maxHeight: 250)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .onTapGesture {
-                                selectedImageUrl = url
-                                showingImageViewer = true
-                            }
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemGray5))
-                            .frame(width: 250, height: 200)
-                            .overlay(
-                                VStack {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                                    Text("Loading image...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .padding(.top, 4)
-                                }
-                            )
+                    ImageMessageView(url: url) {
+                        selectedImageUrl = url
+                        showingImageViewer = true
                     }
                     .sheet(isPresented: $showingImageViewer) {
                         if let imageUrl = selectedImageUrl {
@@ -532,7 +536,7 @@ struct MediaView: View {
                     }
                 }
                 
-            case .file:
+            case .document, .unknown:
                 if let fileUrl = media.first, let url = URL(string: fileUrl) {
                     DocumentView(url: url) {
                         showingDocumentViewer = true
@@ -541,9 +545,80 @@ struct MediaView: View {
                         DocumentViewer(url: url)
                     }
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Image Message View (WhatsApp-style)
+struct ImageMessageView: View {
+    let url: URL
+    let onTap: () -> Void
+    @State private var image: UIImage?
+    @State private var isLoading = true
+    @State private var loadError = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemGray6))
+                    .frame(maxWidth: 250, maxHeight: 250)
                 
-            case .text:
-                EmptyView()
+                if isLoading {
+                    VStack(spacing: 8) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                        Text("Loading...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else if loadError {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 30))
+                            .foregroundColor(.secondary)
+                        Text("Failed to load")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else if let image = image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(maxWidth: 250, maxHeight: 250)
+                        .clipped()
+                }
+            }
+            .onTapGesture {
+                onTap()
+            }
+            .onAppear {
+                loadImage()
+            }
+        }
+    }
+    
+    private func loadImage() {
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let loadedImage = UIImage(data: data) {
+                    await MainActor.run {
+                        self.image = loadedImage
+                        self.isLoading = false
+                    }
+                } else {
+                    await MainActor.run {
+                        self.loadError = true
+                        self.isLoading = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.loadError = true
+                    self.isLoading = false
+                }
             }
         }
     }
@@ -997,11 +1072,89 @@ struct DocumentView: View {
         self.onTap = onTap
     }
     
+    private var fileIcon: String {
+        guard let url = url else { return "doc.fill" }
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp":
+            return "photo.fill"
+        case "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm":
+            return "video.fill"
+        case "pdf":
+            return "doc.fill"
+        case "doc", "docx":
+            return "doc.text.fill"
+        case "xls", "xlsx":
+            return "tablecells.fill"
+        case "ppt", "pptx":
+            return "rectangle.stack.fill"
+        case "txt", "rtf":
+            return "doc.plaintext.fill"
+        case "zip", "rar", "7z":
+            return "archivebox.fill"
+        default:
+            return "doc.fill"
+        }
+    }
+    
+    private var fileColor: Color {
+        guard let url = url else { return .blue }
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp":
+            return .green
+        case "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm":
+            return .purple
+        case "pdf":
+            return .red
+        case "doc", "docx":
+            return .blue
+        case "xls", "xlsx":
+            return .green
+        case "ppt", "pptx":
+            return .orange
+        case "txt", "rtf":
+            return .gray
+        case "zip", "rar", "7z":
+            return .brown
+        default:
+            return .blue
+        }
+    }
+    
+    private var fileDescription: String {
+        guard let url = url else { return "Document" }
+        let pathExtension = url.pathExtension.lowercased()
+        
+        switch pathExtension {
+        case "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp":
+            return "Image"
+        case "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm":
+            return "Video"
+        case "pdf":
+            return "PDF Document"
+        case "doc", "docx":
+            return "Word Document"
+        case "xls", "xlsx":
+            return "Excel Spreadsheet"
+        case "ppt", "pptx":
+            return "PowerPoint Presentation"
+        case "txt", "rtf":
+            return "Text Document"
+        case "zip", "rar", "7z":
+            return "Compressed Archive"
+        default:
+            return "Document File"
+        }
+    }
+    
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "doc.fill")
+            Image(systemName: fileIcon)
                 .font(.system(size: 20))
-                .foregroundColor(.blue)
+                .foregroundColor(fileColor)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(url?.lastPathComponent ?? "Document")
@@ -1009,7 +1162,7 @@ struct DocumentView: View {
                     .fontWeight(.medium)
                     .lineLimit(1)
                 
-                Text("Tap to open")
+                Text(fileDescription)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

@@ -186,7 +186,7 @@ class AddExpenseViewModel: ObservableObject {
             "modeOfPayment": selectedPaymentMode.rawValue,
             "attachmentURL": attachmentURL as Any,
             "attachmentName": attachmentName as Any,
-            "submittedBy": "+91\(currentUserPhone)",
+            "submittedBy": "\(currentUserPhone)",
             "status": ExpenseStatus.pending.rawValue,
             "createdAt": Timestamp(),
             "updatedAt": Timestamp()
