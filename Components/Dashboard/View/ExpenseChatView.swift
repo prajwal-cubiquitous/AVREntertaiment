@@ -193,7 +193,7 @@ struct ChatMessageBubble: View {
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                 // Sender Name (only show for other users)
                 if !isFromCurrentUser {
-                    Text(message.senderRole.rawValue)
+                    Text(message.senderRole.rawValue == "APPROVER" ? "\(message.senderRole.rawValue) - \(message.senderId)" : message.senderRole.rawValue)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, DesignSystem.Spacing.medium)

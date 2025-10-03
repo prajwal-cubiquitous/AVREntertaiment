@@ -14,7 +14,7 @@ class ExpenseChatViewModel: ObservableObject {
     @Published var messages: [ExpenseChat] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    
+    @Published var approveName: String?
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
     
@@ -87,7 +87,7 @@ class ExpenseChatViewModel: ObservableObject {
         }
     }
     
-    func loadUserData(userId: String) async throws -> String {
+    func loadUserData(_ userId: String) async throws -> String {
         let userDoc = try await db.collection("users_ios").document(userId).getDocument()
         
         guard userDoc.exists else {
