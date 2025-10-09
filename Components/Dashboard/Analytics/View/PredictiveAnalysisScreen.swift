@@ -281,16 +281,18 @@ struct PredictiveAnalysisScreen: View {
                         }
                     }
                 }
-                .onTapGesture {
-                    // Simple tap to cycle through months
-                    if let currentItem = selectedForecastItem,
-                       let currentIndex = vm.customMonthlyData.firstIndex(where: { $0.month == currentItem.month }) {
-                        let nextIndex = (currentIndex + 1) % vm.customMonthlyData.count
-                        selectedForecastItem = vm.customMonthlyData[nextIndex]
-                    } else {
-                        selectedForecastItem = vm.customMonthlyData.first
+                .onTapGesture { location in
+                    // Calculate which month was clicked based on tap location
+                    let chartWidth = UIScreen.main.bounds.width - 32 // Account for padding
+                    let dataCount = vm.customMonthlyData.count
+                    
+                    // Calculate the index based on tap position
+                    let index = Int((location.x / chartWidth) * Double(dataCount))
+                    
+                    if index >= 0 && index < vm.customMonthlyData.count {
+                        selectedForecastItem = vm.customMonthlyData[index]
+                        showingChartDetail = true
                     }
-                    showingChartDetail = true
                 }
                 .frame(height: 280)
                 .chartYAxisLabel("Amount (₹)", position: .leading)
@@ -372,28 +374,24 @@ struct PredictiveAnalysisScreen: View {
                         }
                     }
                 }
-                .onTapGesture {
-                    // Simple tap to cycle through months
-                    if let currentItem = selectedVarianceItem,
-                       let currentIndex = vm.customMonthlyData.firstIndex(where: { $0.month == currentItem.month }) {
-                        let nextIndex = (currentIndex + 1) % vm.customMonthlyData.count
-                        let item = vm.customMonthlyData[nextIndex]
+                .onTapGesture { location in
+                    // Calculate which month was clicked based on tap location
+                    let chartWidth = UIScreen.main.bounds.width - 32 // Account for padding
+                    let dataCount = vm.customMonthlyData.count
+                    
+                    // Calculate the index based on tap position
+                    let index = Int((location.x / chartWidth) * Double(dataCount))
+                    
+                    if index >= 0 && index < vm.customMonthlyData.count {
+                        let item = vm.customMonthlyData[index]
                         selectedVarianceItem = (
                             month: item.month,
                             budget: item.budget,
                             actual: item.actual,
                             forecast: item.forecast
                         )
-                    } else {
-                        let item = vm.customMonthlyData.first!
-                        selectedVarianceItem = (
-                            month: item.month,
-                            budget: item.budget,
-                            actual: item.actual,
-                            forecast: item.forecast
-                        )
+                        showingChartDetail = true
                     }
-                    showingChartDetail = true
                 }
                 .frame(height: 200)
                 .chartYAxis {
