@@ -21,6 +21,12 @@ struct PredictiveAnalysisScreen: View {
     @State private var selectedTab = 0
     @State private var showingDetailView = false
     
+    // Chart interaction states
+    @State private var selectedForecastItem: MonthlyData?
+    @State private var selectedVarianceItem: (month: String, budget: Double, actual: Double?, forecast: Double?)?
+    @State private var selectedTrendItem: (category: String, percent: Double)?
+    @State private var showingChartDetail = false
+    
     private let tabTitles = ["Forecast", "Variance", "Trends"]
     private let tabIcons = ["chart.line.uptrend.xyaxis", "chart.bar.fill", "chart.pie.fill"]
 
@@ -240,6 +246,7 @@ struct PredictiveAnalysisScreen: View {
                         .lineStyle(StrokeStyle(lineWidth: 3))
                         .symbol(.circle)
                         .symbolSize(40)
+                        .opacity(selectedForecastItem?.month == item.month ? 1.0 : 0.7)
                     }
                     
                     // Actual Line (Purple)
@@ -254,6 +261,7 @@ struct PredictiveAnalysisScreen: View {
                             .lineStyle(StrokeStyle(lineWidth: 3))
                             .symbol(.circle)
                             .symbolSize(40)
+                            .opacity(selectedForecastItem?.month == item.month ? 1.0 : 0.7)
                         }
                     }
                     
@@ -269,8 +277,20 @@ struct PredictiveAnalysisScreen: View {
                             .lineStyle(StrokeStyle(lineWidth: 3, dash: [8, 4]))
                             .symbol(.diamond)
                             .symbolSize(40)
+                            .opacity(selectedForecastItem?.month == item.month ? 1.0 : 0.7)
                         }
                     }
+                }
+                .onTapGesture {
+                    // Simple tap to cycle through months
+                    if let currentItem = selectedForecastItem,
+                       let currentIndex = vm.customMonthlyData.firstIndex(where: { $0.month == currentItem.month }) {
+                        let nextIndex = (currentIndex + 1) % vm.customMonthlyData.count
+                        selectedForecastItem = vm.customMonthlyData[nextIndex]
+                    } else {
+                        selectedForecastItem = vm.customMonthlyData.first
+                    }
+                    showingChartDetail = true
                 }
                 .frame(height: 280)
                 .chartYAxisLabel("Amount (₹)", position: .leading)
@@ -287,6 +307,11 @@ struct PredictiveAnalysisScreen: View {
                         .fill(Color(.systemBackground))
                         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
                 )
+                
+                // Selected item details
+                if let selectedItem = selectedForecastItem {
+                    forecastDetailCard(item: selectedItem)
+                }
             }
         }
     }
@@ -314,7 +339,7 @@ struct PredictiveAnalysisScreen: View {
                 
                 // Variance Chart
                 Chart {
-                    ForEach(Array(vm.customMonthlyData.enumerated()), id: \.offset) { index, item in
+                    ForEach(vm.customMonthlyData) { item in
                         // Budget Bar
                         BarMark(
                             x: .value("Month", item.month),
@@ -322,6 +347,7 @@ struct PredictiveAnalysisScreen: View {
                         )
                         .foregroundStyle(.blue)
                         .position(by: .value("Type", "Budget"))
+                        .opacity(selectedVarianceItem?.month == item.month ? 1.0 : 0.7)
                         
                         // Actual Bar
                         if let actual = item.actual {
@@ -331,6 +357,7 @@ struct PredictiveAnalysisScreen: View {
                             )
                             .foregroundStyle(.purple)
                             .position(by: .value("Type", "Actual"))
+                            .opacity(selectedVarianceItem?.month == item.month ? 1.0 : 0.7)
                         }
                         
                         // Forecast Bar
@@ -341,8 +368,32 @@ struct PredictiveAnalysisScreen: View {
                             )
                             .foregroundStyle(.green)
                             .position(by: .value("Type", "Forecast"))
+                            .opacity(selectedVarianceItem?.month == item.month ? 1.0 : 0.7)
                         }
                     }
+                }
+                .onTapGesture {
+                    // Simple tap to cycle through months
+                    if let currentItem = selectedVarianceItem,
+                       let currentIndex = vm.customMonthlyData.firstIndex(where: { $0.month == currentItem.month }) {
+                        let nextIndex = (currentIndex + 1) % vm.customMonthlyData.count
+                        let item = vm.customMonthlyData[nextIndex]
+                        selectedVarianceItem = (
+                            month: item.month,
+                            budget: item.budget,
+                            actual: item.actual,
+                            forecast: item.forecast
+                        )
+                    } else {
+                        let item = vm.customMonthlyData.first!
+                        selectedVarianceItem = (
+                            month: item.month,
+                            budget: item.budget,
+                            actual: item.actual,
+                            forecast: item.forecast
+                        )
+                    }
+                    showingChartDetail = true
                 }
                 .frame(height: 200)
                 .chartYAxis {
@@ -377,6 +428,11 @@ struct PredictiveAnalysisScreen: View {
                         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
                 )
                 
+                // Selected item details
+                if let selectedItem = selectedVarianceItem {
+                    varianceDetailCard(item: selectedItem)
+                }
+                
                 // Legend
                 legendView
             }
@@ -392,40 +448,57 @@ struct PredictiveAnalysisScreen: View {
                 GeometryReader { geometry in
                     HStack {
                         Spacer()
-                        PieChartView(data: vm.trends)
-                            .frame(width: min(geometry.size.width * 0.8, 200), height: 200)
+                        InteractivePieChartView(
+                            data: vm.trends,
+                            selectedItem: $selectedTrendItem,
+                            showingDetail: $showingChartDetail
+                        )
+                        .frame(width: min(geometry.size.width * 0.8, 200), height: 200)
                         Spacer()
                     }
                 }
                 .frame(height: 200)
                 
-                // Category Legend
+                // Category Legend with tap gestures
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 8) {
                     ForEach(vm.trends, id: \.category) { trend in
-                        HStack(spacing: 8) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(colorForCategory(trend.category))
-                                .frame(width: 16, height: 16)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(trend.category)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
+                        Button(action: {
+                            selectedTrendItem = trend
+                            showingChartDetail = true
+                        }) {
+                            HStack(spacing: 8) {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(colorForCategory(trend.category))
+                                    .frame(width: 16, height: 16)
                                 
-                                Text("\(String(format: "%.1f", trend.percent))%")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(trend.category)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("\(String(format: "%.1f", trend.percent))%")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                if selectedTrendItem?.category == trend.category {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.blue)
+                                        .font(.caption)
+                                }
                             }
-                            
-                            Spacer()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(selectedTrendItem?.category == trend.category ? 
+                                          Color.blue.opacity(0.1) : Color(.systemGray6))
+                            )
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.systemGray6))
-                        )
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
                 .padding()
@@ -434,6 +507,11 @@ struct PredictiveAnalysisScreen: View {
                         .fill(Color(.systemBackground))
                         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
                 )
+                
+                // Selected item details
+                if let selectedItem = selectedTrendItem {
+                    trendDetailCard(item: selectedItem)
+                }
             }
         }
     }
@@ -498,6 +576,217 @@ struct PredictiveAnalysisScreen: View {
             }
         }
         .padding(.horizontal, 16)
+    }
+    
+    // MARK: - Detail Cards
+    private func forecastDetailCard(item: MonthlyData) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(item.month) Details")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button(action: { selectedForecastItem = nil }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Budget:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("₹\(String(format: "%.0f", item.budget))")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                if let actual = item.actual {
+                    HStack {
+                        Text("Actual:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("₹\(String(format: "%.0f", actual))")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.purple)
+                    }
+                    
+                    let variance = actual - item.budget
+                    let variancePercent = item.budget > 0 ? (variance / item.budget) * 100 : 0
+                    
+                    HStack {
+                        Text("Variance:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(variance >= 0 ? "+" : "")₹\(String(format: "%.0f", variance)) (\(String(format: "%.1f", variancePercent))%)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(variance >= 0 ? .red : .green)
+                    }
+                }
+                
+                if let forecast = item.forecast {
+                    HStack {
+                        Text("Forecast:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("₹\(String(format: "%.0f", forecast))")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemGray6))
+        )
+    }
+    
+    private func varianceDetailCard(item: (month: String, budget: Double, actual: Double?, forecast: Double?)) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(item.month) Analysis")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button(action: { selectedVarianceItem = nil }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Budget:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("₹\(String(format: "%.0f", item.budget))")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                if let actual = item.actual {
+                    HStack {
+                        Text("Actual:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("₹\(String(format: "%.0f", actual))")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.purple)
+                    }
+                    
+                    let variance = actual - item.budget
+                    let variancePercent = item.budget > 0 ? (variance / item.budget) * 100 : 0
+                    
+                    HStack {
+                        Text("Variance:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(variance >= 0 ? "+" : "")₹\(String(format: "%.0f", variance)) (\(String(format: "%.1f", variancePercent))%)")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(variance >= 0 ? .red : .green)
+                    }
+                }
+                
+                if let forecast = item.forecast {
+                    HStack {
+                        Text("Forecast:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("₹\(String(format: "%.0f", forecast))")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemGray6))
+        )
+    }
+    
+    private func trendDetailCard(item: (category: String, percent: Double)) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("\(item.category) Analysis")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Button(action: { selectedTrendItem = nil }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Category:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(item.category)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("Percentage:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(String(format: "%.1f", item.percent))%")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                let totalSpent = vm.customMonthlyData.compactMap { $0.actual }.reduce(0, +)
+                let categoryAmount = (item.percent / 100) * totalSpent
+                
+                HStack {
+                    Text("Amount:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("₹\(String(format: "%.0f", categoryAmount))")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemGray6))
+        )
     }
     
     func colorForCategory(_ cat: String) -> Color {
@@ -586,5 +875,117 @@ struct PieLabel: View {
         return Text(label)
             .font(.caption2)
             .position(x: x, y: y)
+    }
+}
+
+// MARK: - Interactive Pie Chart View
+struct InteractivePieChartView: View {
+    let data: [(category: String, percent: Double)]
+    @Binding var selectedItem: (category: String, percent: Double)?
+    @Binding var showingDetail: Bool
+    
+    var total: Double { data.reduce(0) { $0 + $1.percent } }
+    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
+    
+    struct Slice {
+        let startAngle: Angle
+        let endAngle: Angle
+        let color: Color
+        let label: String
+        let percentValue: Double
+        let category: String
+    }
+    
+    var slices: [Slice] {
+        var result: [Slice] = []
+        var currentAngle = Angle(degrees: 0)
+        for (i, d) in data.enumerated() {
+            let percent = d.percent / total
+            let angle = Angle(degrees: percent * 360)
+            let slice = Slice(
+                startAngle: currentAngle,
+                endAngle: currentAngle + angle,
+                color: colors[i % colors.count],
+                label: d.category,
+                percentValue: d.percent,
+                category: d.category
+            )
+            result.append(slice)
+            currentAngle += angle
+        }
+        return result
+    }
+    
+    var body: some View {
+        GeometryReader { g in
+            let size = min(g.size.width, g.size.height)
+            let radius = size / 2
+            let center = CGPoint(x: size/2, y: size/2)
+            ZStack {
+                ForEach(Array(slices.enumerated()), id: \.offset) { i, slice in
+                    InteractivePieSlice(
+                        start: slice.startAngle,
+                        end: slice.endAngle,
+                        color: slice.color,
+                        isSelected: selectedItem?.category == slice.category
+                    )
+                    .onTapGesture {
+                        selectedItem = (category: slice.category, percent: slice.percentValue)
+                        showingDetail = true
+                    }
+                    
+                    InteractivePieLabel(
+                        center: center,
+                        radius: radius,
+                        start: slice.startAngle,
+                        angle: slice.endAngle - slice.startAngle,
+                        label: "\(slice.label)\n\(Int(slice.percentValue))%",
+                        isSelected: selectedItem?.category == slice.category
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct InteractivePieSlice: View {
+    let start: Angle
+    let end: Angle
+    let color: Color
+    let isSelected: Bool
+    
+    var body: some View {
+        GeometryReader { g in
+            let size = min(g.size.width, g.size.height)
+            Path { path in
+                path.move(to: CGPoint(x: size/2, y: size/2))
+                path.addArc(center: CGPoint(x: size/2, y: size/2), radius: size/2, startAngle: start, endAngle: end, clockwise: false)
+            }
+            .fill(color)
+            .scaleEffect(isSelected ? 1.1 : 1.0)
+            .animation(.easeInOut(duration: 0.2), value: isSelected)
+        }
+    }
+}
+
+struct InteractivePieLabel: View {
+    let center: CGPoint
+    let radius: CGFloat
+    let start: Angle
+    let angle: Angle
+    let label: String
+    let isSelected: Bool
+    
+    var body: some View {
+        let midAngle = Angle(degrees: start.degrees + angle.degrees/2)
+        let labelRadius = radius * (isSelected ? 0.75 : 0.65)
+        let x = center.x + labelRadius * CGFloat(cos(midAngle.radians))
+        let y = center.y + labelRadius * CGFloat(sin(midAngle.radians))
+        return Text(label)
+            .font(.caption2)
+            .fontWeight(isSelected ? .bold : .regular)
+            .foregroundColor(isSelected ? .white : .primary)
+            .position(x: x, y: y)
+            .animation(.easeInOut(duration: 0.2), value: isSelected)
     }
 }
