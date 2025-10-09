@@ -18,6 +18,11 @@ struct Expense: Identifiable, Codable {
     let status: ExpenseStatus
     let remark: String? // Optional remark for approval/rejection
     
+    // Anonymous Department Tracking
+    let isAnonymous: Bool? // Whether this expense is in anonymous department
+    let originalDepartment: String? // Original department name before it was deleted
+    let departmentDeletedAt: Timestamp? // When the department was deleted
+    
     // Firestore Timestamps
     let createdAt: Timestamp
     let updatedAt: Timestamp
@@ -101,6 +106,9 @@ extension Expense {
             submittedBy: "+919876543210",
             status: .pending,
             remark: nil,
+            isAnonymous: false,
+            originalDepartment: nil,
+            departmentDeletedAt: nil,
             createdAt: Timestamp(),
             updatedAt: Timestamp()
         )

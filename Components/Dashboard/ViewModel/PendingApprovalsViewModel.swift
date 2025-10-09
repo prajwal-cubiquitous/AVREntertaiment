@@ -338,6 +338,9 @@ class PendingApprovalsViewModel: ObservableObject {
                 submittedBy: "Anil",
                 status: .pending,
                 remark: nil,
+                isAnonymous: nil,
+                originalDepartment: nil,
+                departmentDeletedAt: nil,
                 createdAt: Timestamp(),
                 updatedAt: Timestamp()
             ),
@@ -355,6 +358,9 @@ class PendingApprovalsViewModel: ObservableObject {
                 submittedBy: "Priya",
                 status: .pending,
                 remark: nil,
+                isAnonymous: nil,
+                originalDepartment: nil,
+                departmentDeletedAt: nil,
                 createdAt: Timestamp(),
                 updatedAt: Timestamp()
             ),
@@ -372,6 +378,9 @@ class PendingApprovalsViewModel: ObservableObject {
                 submittedBy: "Vrew",
                 status: .pending,
                 remark: nil,
+                isAnonymous: nil,
+                originalDepartment: nil,
+                departmentDeletedAt: nil,
                 createdAt: Timestamp(), 
                 updatedAt: Timestamp()
             ),
@@ -389,6 +398,9 @@ class PendingApprovalsViewModel: ObservableObject {
                 submittedBy: "Ramesh",
                 status: .pending,
                 remark: nil,
+                isAnonymous: nil,
+                originalDepartment: nil,
+                departmentDeletedAt: nil,
                 createdAt: Timestamp(),
                 updatedAt: Timestamp()
             )

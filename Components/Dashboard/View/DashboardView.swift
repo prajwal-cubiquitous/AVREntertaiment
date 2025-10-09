@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartmentForDetail: String? = nil
     @State private var showingTeamMembersDetail = false
+    @State private var showingAnonymousExpensesDetail = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -352,6 +353,12 @@ struct DashboardView: View {
                     .presentationDetents([.large])
             }
         }
+        .sheet(isPresented: $showingAnonymousExpensesDetail) {
+            if let project = project {
+                AnonymousExpensesDetailView(project: project)
+                    .presentationDetents([.large])
+            }
+        }
         .onAppear {
             if let projectId = project?.id{
                 viewModel.loadDashboardData()
@@ -516,8 +523,13 @@ struct DashboardView: View {
                             HapticManager.selection()
                         }
                         .onLongPressGesture {
-                            selectedDepartmentForDetail = budget.department
-                            showingDepartmentDetail = true
+                            if budget.department == "Other Expenses" {
+                                // Show anonymous expenses detail
+                                showingAnonymousExpensesDetail = true
+                            } else {
+                                selectedDepartmentForDetail = budget.department
+                                showingDepartmentDetail = true
+                            }
                             HapticManager.impact(.medium)
                         }
                     }
@@ -653,8 +665,10 @@ struct DashboardView: View {
     
     // MARK: - Department Legend Row
     private func departmentLegendRow(budget: DepartmentBudget, index: Int) -> some View {
-        let totalBudget = viewModel.departmentBudgets.reduce(0) { $0 + $1.totalBudget }
-        let percentage = Int((budget.totalBudget / totalBudget) * 100)
+        // Use max of totalBudget and approvedBudget for calculation to include "Other Expenses"
+        let totalBudget = viewModel.departmentBudgets.reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
+        let budgetValue = max(budget.totalBudget, budget.approvedBudget)
+        let percentage = Int((budgetValue / totalBudget) * 100)
         
         return HStack(spacing: DesignSystem.Spacing.medium) {
             // Color indicator with enhanced styling
@@ -685,7 +699,7 @@ struct DashboardView: View {
                     .lineLimit(1)
                 
                 HStack(spacing: 4) {
-                    Text("₹\(budget.totalBudget.formattedCurrency)")
+                    Text("₹\(budgetValue.formattedCurrency)")
                         .font(DesignSystem.Typography.caption1)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -932,18 +946,20 @@ struct EnhancedDepartmentBudgetCard: View {
             
             // Budget information
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                // Total budget
-                HStack {
-                    Text("Budget:")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("\(budget.totalBudget.formattedCurrency)")
-                        .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                // Total budget (only show if there's an allocated budget)
+                if budget.totalBudget > 0 {
+                    HStack {
+                        Text("Budget:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("\(budget.totalBudget.formattedCurrency)")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
                 }
                 
                 // Spent amount (Approved expenses)
@@ -961,37 +977,72 @@ struct EnhancedDepartmentBudgetCard: View {
 
                 }
                 
-                // Remaining amount
-                HStack {
-                    Text("Remaining:")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("₹\(Int(viewModel.remainingBudget(for: budget.department, allocatedBudget: budget.totalBudget)))")
-                        .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)
+                // Remaining amount (only show if there's an allocated budget)
+                if budget.totalBudget > 0 {
+                    HStack {
+                        Text("Remaining:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("₹\(Int(viewModel.remainingBudget(for: budget.department, allocatedBudget: budget.totalBudget)))")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)
+                    }
+                } else {
+                    // For "Other Expenses" department, show a note
+                    HStack {
+                        Text("Unallocated Expenses")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("No Budget")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                    }
                 }
             }
             
-            // Progress bar
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color(.systemGray5))
-                        .frame(height: 8)
-                    
-                    // Progress
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(budget.color)
-                        .frame(width: min(CGFloat(budget.approvedBudget / budget.totalBudget) * geometry.size.width, geometry.size.width), height: 8)
+            // Progress bar (only show if there's an allocated budget)
+            if budget.totalBudget > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 8)
+                        
+                        // Progress
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(budget.color)
+                            .frame(width: min(CGFloat(budget.approvedBudget / budget.totalBudget) * geometry.size.width, geometry.size.width), height: 8)
+                    }
                 }
+                .frame(height: 8)
+                .padding(.top, 4)
+            } else {
+                // For "Other Expenses" department, show a different indicator
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 8)
+                        
+                        // Full bar for unallocated expenses
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(budget.color.opacity(0.6))
+                            .frame(width: geometry.size.width, height: 8)
+                    }
+                }
+                .frame(height: 8)
+                .padding(.top, 4)
             }
-            .frame(height: 8)
-            .padding(.top, 4)
         }
         .padding()
         .background(Color(.secondarySystemBackground))
@@ -1215,7 +1266,7 @@ struct TotalBudgetCard: View {
                     .foregroundColor(.secondary)
                 
                 // Remaining amount
-                Text("Remaining: \(viewModel.remainingBudgetFormatted)")
+                Text("Remaining: \(viewModel.remainingBudget.formattedCurrency)")
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
                     .fontWeight(.medium)
@@ -1227,6 +1278,211 @@ struct TotalBudgetCard: View {
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+}
+
+// MARK: - Anonymous Expenses Detail View
+struct AnonymousExpensesDetailView: View {
+    let project: Project
+    @StateObject private var viewModel = AnonymousExpensesViewModel()
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.orange)
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("Anonymous Expenses")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Expenses from deleted departments")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, DesignSystem.Spacing.large)
+                .padding(.top, DesignSystem.Spacing.large)
+                
+                // Content
+                if viewModel.anonymousExpenses.isEmpty {
+                    // Empty state
+                    VStack(spacing: DesignSystem.Spacing.medium) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.green)
+                        
+                        Text("No Anonymous Expenses")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("All expenses are properly categorized")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(.systemGroupedBackground))
+                } else {
+                    // Expenses list
+                    ScrollView {
+                        LazyVStack(spacing: DesignSystem.Spacing.medium) {
+                            ForEach(viewModel.anonymousExpenses, id: \.id) { expense in
+                                AnonymousExpenseCard(expense: expense)
+                            }
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.vertical, DesignSystem.Spacing.large)
+                    }
+                }
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+        }
+        .onAppear {
+            viewModel.loadAnonymousExpenses(for: project)
+        }
+    }
+}
+
+// MARK: - Anonymous Expenses ViewModel
+@MainActor
+class AnonymousExpensesViewModel: ObservableObject {
+    @Published var anonymousExpenses: [Expense] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let db = Firestore.firestore()
+    
+    func loadAnonymousExpenses(for project: Project) {
+        guard let projectId = project.id else { return }
+        
+        isLoading = true
+        
+        Task {
+            do {
+                let expensesSnapshot = try await db.collection("projects_ios")
+                    .document(projectId)
+                    .collection("expenses")
+                    .whereField("isAnonymous", isEqualTo: true)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .order(by: "createdAt", descending: true)
+                    .getDocuments()
+                
+                var expenses: [Expense] = []
+                for expenseDoc in expensesSnapshot.documents {
+                    if let expense = try? expenseDoc.data(as: Expense.self) {
+                        expenses.append(expense)
+                    }
+                }
+                
+                await MainActor.run {
+                    self.anonymousExpenses = expenses
+                    self.isLoading = false
+                }
+                
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to load anonymous expenses: \(error.localizedDescription)"
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Anonymous Expense Card
+struct AnonymousExpenseCard: View {
+    let expense: Expense
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Header with original department
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(expense.originalDepartment ?? "Unknown Department")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text("Originally: \(expense.originalDepartment ?? "Unknown")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Text(expense.amountFormatted)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+            }
+            
+            // Department deletion info
+            if let deletedAt = expense.departmentDeletedAt {
+                HStack {
+                    Image(systemName: "calendar.badge.minus")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    
+                    Text("Department deleted on: \(deletedAt.dateValue(), formatter: dateFormatter)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Expense details
+            VStack(alignment: .leading, spacing: 4) {
+                Text(expense.description)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                
+                HStack {
+                    Text(expense.categoriesString)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(expense.modeOfPayment.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
     }
 }
 

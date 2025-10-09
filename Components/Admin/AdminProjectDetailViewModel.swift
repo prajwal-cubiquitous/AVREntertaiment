@@ -336,6 +336,18 @@ class AdminProjectDetailViewModel: ObservableObject {
     func updateProjectDepartments() {
         Task {
             do {
+                // Get current department names
+                let currentDepartmentNames = Set(departments.map { $0.name })
+                let newDepartmentNames = Set(tempDepartments.map { $0.name })
+                
+                // Find deleted departments
+                let deletedDepartments = currentDepartmentNames.subtracting(newDepartmentNames)
+                
+                // Move expenses from deleted departments to anonymous
+                if !deletedDepartments.isEmpty {
+                    await moveExpensesToAnonymous(departments: Array(deletedDepartments))
+                }
+                
                 let departmentsDict = Dictionary(
                     uniqueKeysWithValues: tempDepartments.map { ($0.name, Double($0.amount) ?? 0) }
                 )
@@ -357,6 +369,50 @@ class AdminProjectDetailViewModel: ObservableObject {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update departments: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    // MARK: - Anonymous Department Management
+    
+    private func moveExpensesToAnonymous(departments: [String]) async {
+        guard let projectId = project.id else { return }
+        
+        for departmentName in departments {
+            do {
+                // Find all expenses in this department
+                let expensesSnapshot = try await db.collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("expenses")
+                    .whereField("department", isEqualTo: departmentName)
+                    .getDocuments()
+                
+                // Update each expense to be anonymous
+                let batch = db.batch()
+                let currentTime = Timestamp()
+                
+                for expenseDoc in expensesSnapshot.documents {
+                    let expenseRef = db.collection(FirebaseCollections.projects)
+                        .document(projectId)
+                        .collection("expenses")
+                        .document(expenseDoc.documentID)
+                    
+                    batch.updateData([
+                        "department": "Anonymous Department",
+                        "isAnonymous": true,
+                        "originalDepartment": departmentName,
+                        "departmentDeletedAt": currentTime,
+                        "updatedAt": currentTime
+                    ], forDocument: expenseRef)
+                }
+                
+                try await batch.commit()
+                print("✅ Moved \(expensesSnapshot.documents.count) expenses from '\(departmentName)' to Anonymous Department")
+                
+            } catch {
+                print("❌ Error moving expenses from '\(departmentName)' to anonymous: \(error)")
+                errorMessage = "Failed to move expenses from deleted department '\(departmentName)': \(error.localizedDescription)"
                 showError = true
             }
         }

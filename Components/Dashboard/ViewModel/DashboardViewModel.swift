@@ -118,7 +118,7 @@ class DashboardViewModel: ObservableObject {
         }
         
         // Convert to DepartmentBudget objects
-        departmentBudgets = budgets.map { (department, budget) in
+        var departmentBudgetsList = budgets.map { (department, budget) in
             DepartmentBudget(
                 department: department,
                 totalBudget: budget.total,
@@ -126,6 +126,17 @@ class DashboardViewModel: ObservableObject {
                 color: colorForDepartment(department)
             )
         }.sorted { $0.department < $1.department }
+        
+        // Always add "Other Expenses" department for anonymous expenses
+        let otherExpensesBudget = DepartmentBudget(
+            department: "Other Expenses",
+            totalBudget: 0, // No allocated budget for anonymous expenses
+            approvedBudget: 0, // Will be updated when loading expenses
+            color: .gray
+        )
+        departmentBudgetsList.append(otherExpensesBudget)
+        
+        departmentBudgets = departmentBudgetsList
         
         // Load approved expenses asynchronously
         Task {
@@ -144,24 +155,56 @@ class DashboardViewModel: ObservableObject {
                 .getDocuments()
             
             var departmentSpent: [String: Double] = [:]
+            var anonymousExpenses: Double = 0
+            var anonymousDepartmentInfo: [String: String] = [:] // Track original departments
+            
+            // Get list of valid departments from project
+            let validDepartments = Set(project.departments.keys)
             
             for expenseDoc in expensesSnapshot.documents {
                 if let expense = try? expenseDoc.data(as: Expense.self) {
                     let department = expense.department
-                    departmentSpent[department, default: 0] += expense.amount
+                    
+                    if validDepartments.contains(department) {
+                        // Department exists in project, add to normal spending
+                        departmentSpent[department, default: 0] += expense.amount
+                    } else if expense.isAnonymous == true {
+                        // Anonymous expense, add to anonymous total
+                        anonymousExpenses += expense.amount
+                        // Track original department for display
+                        if let originalDept = expense.originalDepartment {
+                            anonymousDepartmentInfo[originalDept] = originalDept
+                        }
+                    } else {
+                        // Department doesn't exist in project, add to anonymous
+                        anonymousExpenses += expense.amount
+                    }
                 }
             }
             
             await MainActor.run {
-                // Update departmentBudgets with actual spent amounts
-                departmentBudgets = departmentBudgets.map { budget in
-                    DepartmentBudget(
-                        department: budget.department,
-                        totalBudget: budget.totalBudget,
-                        approvedBudget: departmentSpent[budget.department] ?? 0,
-                        color: budget.color
-                    )
+                // Update existing departmentBudgets with actual spent amounts
+                var updatedBudgets = departmentBudgets.map { budget in
+                    if budget.department == "Other Expenses" {
+                        // Update Other Expenses with anonymous expenses
+                        return DepartmentBudget(
+                            department: budget.department,
+                            totalBudget: budget.totalBudget,
+                            approvedBudget: anonymousExpenses,
+                            color: budget.color
+                        )
+                    } else {
+                        // Update normal departments with their spent amounts
+                        return DepartmentBudget(
+                            department: budget.department,
+                            totalBudget: budget.totalBudget,
+                            approvedBudget: departmentSpent[budget.department] ?? 0,
+                            color: budget.color
+                        )
+                    }
                 }
+                
+                departmentBudgets = updatedBudgets
             }
             
         } catch {
@@ -193,11 +236,15 @@ class DashboardViewModel: ObservableObject {
             let project = try document.data(as: Project.self)
             
             var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
+            var anonymousExpenses: Double = 0
             
             // Add department budgets from project
             for (department, amount) in project.departments {
                 departmentBudgetDict[department] = (Double(amount), 0)
             }
+            
+            // Get list of valid departments from project
+            let validDepartments = Set(project.departments.keys)
             
             // Fetch and calculate approved amounts from expenses
             let expensesSnapshot = try await document.reference
@@ -208,21 +255,39 @@ class DashboardViewModel: ObservableObject {
             for expenseDoc in expensesSnapshot.documents {
                 if let expense = try? expenseDoc.data(as: Expense.self) {
                     let department = expense.department
-                    var currentValues = departmentBudgetDict[department] ?? (0, 0)
-                    currentValues.approved += expense.amount
-                    departmentBudgetDict[department] = currentValues
+                    
+                    if validDepartments.contains(department) {
+                        // Department exists in project, add to normal spending
+                        var currentValues = departmentBudgetDict[department] ?? (0, 0)
+                        currentValues.approved += expense.amount
+                        departmentBudgetDict[department] = currentValues
+                    } else {
+                        // Department doesn't exist in project, add to anonymous
+                        anonymousExpenses += expense.amount
+                    }
                 }
             }
             
             // Convert to DepartmentBudget objects
             let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint]
-            let budgets = departmentBudgetDict.enumerated().map { index, entry in
+            var budgets = departmentBudgetDict.enumerated().map { index, entry in
                 DepartmentBudget(
                     department: entry.key,
                     totalBudget: entry.value.total,
                     approvedBudget: entry.value.approved,
                     color: colors[index % colors.count]
                 )
+            }
+            
+            // Add anonymous department if there are expenses
+            if anonymousExpenses > 0 {
+                let anonymousBudget = DepartmentBudget(
+                    department: "Other Expenses",
+                    totalBudget: 0, // No allocated budget for anonymous expenses
+                    approvedBudget: anonymousExpenses,
+                    color: .gray
+                )
+                budgets.append(anonymousBudget)
             }
             
             await MainActor.run {
@@ -378,8 +443,9 @@ class DashboardViewModel: ObservableObject {
     func startAngle(for index: Int) -> CGFloat {
         guard !departmentBudgets.isEmpty else { return 0 }
         
-        let totalBudget = departmentBudgets.reduce(0) { $0 + $1.totalBudget }
-        let previousBudgets = departmentBudgets.prefix(index).reduce(0) { $0 + $1.totalBudget }
+        // Use approved budget for calculation to include "Other Expenses"
+        let totalBudget = departmentBudgets.reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
+        let previousBudgets = departmentBudgets.prefix(index).reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
         
         return previousBudgets / totalBudget
     }
@@ -387,8 +453,9 @@ class DashboardViewModel: ObservableObject {
     func endAngle(for index: Int) -> CGFloat {
         guard !departmentBudgets.isEmpty else { return 0 }
         
-        let totalBudget = departmentBudgets.reduce(0) { $0 + $1.totalBudget }
-        let currentAndPreviousBudgets = departmentBudgets.prefix(index + 1).reduce(0) { $0 + $1.totalBudget }
+        // Use approved budget for calculation to include "Other Expenses"
+        let totalBudget = departmentBudgets.reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
+        let currentAndPreviousBudgets = departmentBudgets.prefix(index + 1).reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
         
         return currentAndPreviousBudgets / totalBudget
     }
