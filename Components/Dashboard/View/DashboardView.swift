@@ -298,10 +298,18 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingAnalytics) {
-            if let project = project {
-                AnalyticsView(project: project)
-                    .presentationDetents([.large])
+//            if let projectId = project?.id , let projectBudget = project?.budget{
+////                PredictiveAnalysisView1(projectId: projectId, budget: projectBudget)
+////                    .presentationDetents([.large])
+//                AnalyticsDashboardView(projectId: projectId)
+//                    .presentationDetents([.large])
+//            }
+
+
+            if let project = project{
+                PredictiveAnalysisScreen(project: project)
             }
+            
         }
         .sheet(isPresented: $showingDelegate) {
             if let project = project, let role = role {

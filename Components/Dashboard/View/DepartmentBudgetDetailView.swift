@@ -503,7 +503,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 await loadApproverNames(for: loadedExpenses)
                 
                 await MainActor.run {
-                    self.totalBudget = loadedProject.budget
+                    self.totalBudget = loadedProject.departments[department] ?? 0
                     self.expenses = loadedExpenses
                     self.totalSpent = totalSpent
                     self.isLoading = false
