@@ -209,18 +209,18 @@ class PredictiveAnalysisViewModel: ObservableObject {
 
 
 
-    func movingAverageForecast(history: [MonthlyData], futureMonths: Int) -> [Double] {
-        var values = history.compactMap { $0.actual }
-        var result: [Double] = []
-        let window = 3
-        for _ in 0..<futureMonths {
-            let slice = values.suffix(window)
-            let avg = slice.reduce(0, +) / Double(slice.count)
-            result.append(avg)
-            values.append(avg)
-        }
-        return result
-    }
+//    func movingAverageForecast(history: [MonthlyData], futureMonths: Int) -> [Double] {
+//        var values = history.compactMap { $0.actual }
+//        var result: [Double] = []
+//        let window = 3
+//        for _ in 0..<futureMonths {
+//            let slice = values.suffix(window)
+//            let avg = slice.reduce(0, +) / Double(slice.count)
+//            result.append(avg)
+//            values.append(avg)
+//        }
+//        return result
+//    }
     
     func fetchStartDate(projectId: String) async -> (Date?, Date?)?{
         do{
@@ -639,46 +639,75 @@ class PredictiveAnalysisViewModel: ObservableObject {
     private func generateSummary() {
         // Use the project's total budget, not the sum of monthly budgets
         let totalBudget = project.budget
-        let totalActual = actuals.reduce(0, +)
-        _ = forecast.reduce(0, +)
         
         // Calculate monthly budget (same for all months)
         let projectDuration = calculateProjectDuration()
         let monthlyBudget = project.budget / Double(projectDuration)
         
-        // Calculate historical vs future performance
-        let historicalMonths = min(4, months.count) // 3 historical + current
-        let futureMonths = max(0, months.count - 4) // remaining months
+        // Analyze customMonthlyData for professional insights
+        let actualData = customMonthlyData.filter { $0.actual != nil }
+        let forecastData = customMonthlyData.filter { $0.forecast != nil }
         
-        let historicalActuals = Array(actuals.prefix(historicalMonths))
-        let historicalBudgets = Array(perMonthBudget.prefix(historicalMonths))
-        let futureForecasts = Array(forecast.suffix(futureMonths))
-        let futureBudgets = Array(perMonthBudget.suffix(futureMonths))
+        // Calculate current month performance
+        let currentMonthActual = actualData.last?.actual ?? 0
+        let currentMonthBudget = actualData.last?.budget ?? monthlyBudget
+        let currentMonthVariance = currentMonthBudget > 0 ? ((currentMonthActual - currentMonthBudget) / currentMonthBudget) * 100 : 0
         
-        let historicalVariance = calculateAverageVariance(actuals: historicalActuals, budgets: historicalBudgets)
-        let forecastVariance = calculateAverageVariance(actuals: futureForecasts, budgets: futureBudgets)
+        // Calculate forecast vs budget analysis
+        let averageForecast = forecastData.isEmpty ? 0 : forecastData.map { $0.forecast ?? 0 }.reduce(0, +) / Double(forecastData.count)
+        let forecastVariance = monthlyBudget > 0 ? ((averageForecast - monthlyBudget) / monthlyBudget) * 100 : 0
         
-        summaryText = """
-        📊 PROJECT FINANCIAL OVERVIEW:
-        Total Budget: ₹\(String(format: "%.0f", totalBudget))
-        Total Actual: ₹\(String(format: "%.0f", totalActual))
-        Monthly Budget: ₹\(String(format: "%.0f", monthlyBudget))
+        // Calculate total spending efficiency
+        let totalSpent = actualData.map { $0.actual ?? 0 }.reduce(0, +)
+        let totalBudgeted = actualData.map { $0.budget }.reduce(0, +)
+        let overallEfficiency = totalBudgeted > 0 ? ((totalSpent - totalBudgeted) / totalBudgeted) * 100 : 0
         
-        📈 HISTORICAL PERFORMANCE (Last \(historicalMonths) months):
-        • Average variance: \(String(format: "%.1f", historicalVariance))%
-        • \(historicalVariance > 5 ? "⚠️ OVERSPENDING" : historicalVariance < -5 ? "✅ UNDER BUDGET" : "✅ ON TRACK")
+        // Generate professional summary
+        var summary = "📊 FINANCIAL PERFORMANCE ANALYSIS\n\n"
         
-        🤖 ML-BASED FORECAST (Next \(futureMonths) months):
-        • Predicted variance: \(String(format: "%.1f", forecastVariance))%
-        • \(forecastVariance > 10 ? "⚠️ HIGH RISK of overruns" : forecastVariance < -10 ? "✅ OPPORTUNITY for savings" : "✅ STABLE forecast")
-        • Forecast based on \(historicalActuals.count) months of actual data
+        // Current Month Analysis
+        summary += "📅 CURRENT MONTH STATUS:\n"
+        if currentMonthVariance > 0 {
+            let overspend = currentMonthActual - currentMonthBudget
+            summary += "• ⚠️ OVERSPENT by ₹\(String(format: "%.0f", overspend)) (\(String(format: "%.1f", currentMonthVariance))% above budget)\n"
+            summary += "• Recommendation: Implement immediate cost controls to align with budget\n\n"
+        } else if currentMonthVariance < -5 {
+            let underspend = currentMonthBudget - currentMonthActual
+            summary += "• ✅ UNDERSPENT by ₹\(String(format: "%.0f", underspend)) (\(String(format: "%.1f", abs(currentMonthVariance)))% below budget)\n"
+            summary += "• Opportunity: Consider accelerating planned activities or reallocating funds\n\n"
+        } else {
+            summary += "• ✅ ON TRACK - Spending within acceptable variance of budget\n\n"
+        }
         
-        💡 KEY INSIGHTS:
-        • Top spending category: \(trends.first?.category ?? "N/A")
-        • Monthly average: ₹\(String(format: "%.0f", totalActual / Double(historicalMonths)))
-        • ML Trend: \(getTrendDescription())
-        • Recommendation: \(getRecommendation(historicalVariance: historicalVariance, forecastVariance: forecastVariance))
-        """
+        // Forecast Analysis
+        summary += "🔮 FORECAST ANALYSIS:\n"
+        if forecastVariance > 10 {
+            let excessForecast = averageForecast - monthlyBudget
+            summary += "• ⚠️ HIGH RISK: Forecast exceeds budget by ₹\(String(format: "%.0f", excessForecast)) per month\n"
+            summary += "• Action Required: Review spending patterns and implement budget controls\n\n"
+        } else if forecastVariance < -10 {
+            let savingsForecast = monthlyBudget - averageForecast
+            summary += "• 💰 OPPORTUNITY: Forecast shows potential savings of ₹\(String(format: "%.0f", savingsForecast)) per month\n"
+            summary += "• Recommendation: Consider expanding project scope or accelerating initiatives\n\n"
+        } else {
+            summary += "• ✅ STABLE: Forecast aligns well with monthly budget expectations\n\n"
+        }
+        
+        // Overall Project Health
+        summary += "📈 PROJECT HEALTH SUMMARY:\n"
+        summary += "• Total Budget: ₹\(String(format: "%.0f", totalBudget))\n"
+        summary += "• Total Spent: ₹\(String(format: "%.0f", totalSpent))\n"
+        summary += "• Monthly Budget: ₹\(String(format: "%.0f", monthlyBudget))\n"
+        summary += "• Average Forecast: ₹\(String(format: "%.0f", averageForecast))\n\n"
+        
+        // Key Insights
+        summary += "💡 KEY INSIGHTS:\n"
+        summary += "• Top spending category: \(trends.first?.category ?? "N/A")\n"
+        summary += "• Overall efficiency: \(String(format: "%.1f", overallEfficiency))% variance from budget\n"
+        summary += "• Data points analyzed: \(actualData.count) months of actual spending\n"
+        summary += "• Forecast confidence: \(forecastData.count) months projected\n"
+        
+        summaryText = summary
     }
     
     private func calculateAverageVariance(actuals: [Double], budgets: [Double]) -> Double {

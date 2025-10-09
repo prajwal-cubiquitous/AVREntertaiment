@@ -5,7 +5,6 @@
 //  Created by Prajwal S S Reddy on 10/8/25.
 //
 
-
 import SwiftUI
 import Charts
 
@@ -19,86 +18,216 @@ struct PredictiveAnalysisScreen: View {
         _vm = StateObject(wrappedValue: PredictiveAnalysisViewModel(project: project))
     }
 
-    @State private var tab = 0
-    let tabTitles = ["Forecast", "Variance", "Trends"]
+    @State private var selectedTab = 0
+    @State private var showingDetailView = false
+    
+    private let tabTitles = ["Forecast", "Variance", "Trends"]
+    private let tabIcons = ["chart.line.uptrend.xyaxis", "chart.bar.fill", "chart.pie.fill"]
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("AVR Entertainment").font(.title3).bold().padding()
-                Spacer()
-            }
-            Text("PREDICTIVE ANALYSIS")
-                .font(.title2).bold().foregroundColor(.purple)
-                .padding(.bottom, 10)
-            
-            // Tabs
-            HStack {
-                ForEach(0..<tabTitles.count, id: \.self) { idx in
-                    Button(action: { tab = idx }) {
-                        Text(tabTitles[idx])
-                            .bold(tab == idx)
-                            .foregroundColor(tab == idx ? .blue : .gray)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(tab == idx ? Color.blue.opacity(0.15) : .clear)
-                            .clipShape(Capsule())
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header Section
+                    headerSection
+                    
+                    // Tab Selection
+                    tabSelectionView
+                    
+                    // Content Section
+                    if vm.isLoading {
+                        loadingView
+                    } else {
+                        contentView
                     }
+                    
+                    // Summary Section
+                    summarySection
                 }
-            }.padding(.vertical, 6)
-            
-            if vm.isLoading {
-                VStack {
-                    ProgressView("Loading analytics...")
-                        .frame(height: 200)
-                }
-            } else {
-                TabView(selection: $tab) {
-                    linechart.tag(0)
-                    varianceTab.tag(1)
-                    trendsTab.tag(2)
-                }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                .frame(height: 340)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Summary")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(vm.summaryText)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(nil)
-                        .multilineTextAlignment(.leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.systemGray6))
-                                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
-                        )
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-            Spacer()
+            .background(Color(.systemGroupedBackground))
+            .navigationBarHidden(true)
         }
-        .background(Color(.systemGroupedBackground))
         .task {
             await vm.fetchData()
         }
     }
-            
-    var linechart: some View {
-        VStack(alignment: .leading) {
-            
-            if vm.customMonthlyData == []{
-                Text("No data is available")
-            }else{
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("AVR Entertainment")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Predictive Analysis")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
                 
+                Button(action: { showingDetailView = true }) {
+                    Image(systemName: "info.circle")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                }
+            }
+            
+            // Project Info Card
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Project Budget")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("₹\(String(format: "%.0f", project.budget))")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                Divider()
+                    .frame(height: 30)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Duration")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(vm.monthlyData.count) months")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+            )
+        }
+    }
+    
+    // MARK: - Tab Selection
+    private var tabSelectionView: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<tabTitles.count, id: \.self) { index in
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        selectedTab = index
+                    }
+                }) {
+                    VStack(spacing: 8) {
+                        Image(systemName: tabIcons[index])
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(selectedTab == index ? .white : .blue)
+                        
+                        Text(tabTitles[index])
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedTab == index ? .white : .blue)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(selectedTab == index ? Color.blue : Color.clear)
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemGray6))
+        )
+    }
+    
+    // MARK: - Content View
+    private var contentView: some View {
+        VStack(spacing: 0) {
+            switch selectedTab {
+            case 0:
+                forecastView
+            case 1:
+                varianceView
+            case 2:
+                trendsView
+            default:
+                EmptyView()
+            }
+        }
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+            
+            Text("Loading analytics...")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(height: 200)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Summary Section
+    private var summarySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Financial Summary")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button(action: {}) {
+                    Text("View Details")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text(vm.summaryText)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+            )
+        }
+    }
+    
+    // MARK: - Forecast View
+    private var forecastView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if vm.customMonthlyData.isEmpty {
+                emptyStateView(title: "No Forecast Data", message: "Unable to generate forecast data for this project")
+            } else {
                 Chart {
                     // Budget Line (Blue)
                     ForEach(vm.customMonthlyData) { item in
@@ -108,94 +237,121 @@ struct PredictiveAnalysisScreen: View {
                             series: .value("Type", "Budget")
                         )
                         .foregroundStyle(.blue)
+                        .lineStyle(StrokeStyle(lineWidth: 3))
+                        .symbol(.circle)
+                        .symbolSize(40)
                     }
                     
                     // Actual Line (Purple)
                     ForEach(vm.customMonthlyData) { item in
-                        if let actualPoint = item.actual{
+                        if let actualPoint = item.actual {
                             LineMark(
                                 x: .value("Month", item.month),
                                 y: .value("Amount", actualPoint),
                                 series: .value("Type", "Actual")
                             )
                             .foregroundStyle(.purple)
+                            .lineStyle(StrokeStyle(lineWidth: 3))
+                            .symbol(.circle)
+                            .symbolSize(40)
                         }
                     }
                     
                     // Forecast Line (Green)
                     ForEach(vm.customMonthlyData) { item in
-                        if let ForecastPoint = item.forecast{
+                        if let forecastPoint = item.forecast {
                             LineMark(
                                 x: .value("Month", item.month),
-                                y: .value("Amount", ForecastPoint),
+                                y: .value("Amount", forecastPoint),
                                 series: .value("Type", "Forecast")
                             )
                             .foregroundStyle(.green)
+                            .lineStyle(StrokeStyle(lineWidth: 3, dash: [8, 4]))
+                            .symbol(.diamond)
+                            .symbolSize(40)
                         }
                     }
                 }
-                .frame(height: 300)
-                .chartYAxisLabel("Amount", position: .leading)
+                .frame(height: 280)
+                .chartYAxisLabel("Amount (₹)", position: .leading)
                 .chartXAxisLabel("Months")
                 .chartForegroundStyleScale([
                     "Budget": .blue,
                     "Forecast": .green,
                     "Actual": .purple
                 ])
-                .chartLegend(position: .bottom)
+                .chartLegend(position: .bottom, alignment: .center)
                 .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(16)
-                .shadow(radius: 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
             }
         }
-        .padding()
     }
-
-    var varianceTab: some View {
-        VStack {
-            Text("Variance Analysis").font(.headline).foregroundColor(.purple)
-            if vm.months.isEmpty {
-                Text("No data available")
-                    .foregroundColor(.gray)
-                    .frame(height: 180)
+    
+    // MARK: - Variance View (Enhanced with fetchExpenses data)
+    private var varianceView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if vm.customMonthlyData.isEmpty {
+                emptyStateView(title: "No Variance Data", message: "Unable to calculate variance for this project")
             } else {
+                // Key Metrics Cards
+                HStack(spacing: 12) {
+                    metricCard(
+                        title: "Total Spent",
+                        value: "₹\(String(format: "%.0f", vm.customMonthlyData.compactMap { $0.actual }.reduce(0, +)))",
+                        color: .purple
+                    )
+                    
+                    metricCard(
+                        title: "Remaining",
+                        value: "₹\(String(format: "%.0f", project.budget - vm.customMonthlyData.compactMap { $0.actual }.reduce(0, +)))",
+                        color: .green
+                    )
+                }
+                
+                // Variance Chart
                 Chart {
-                    ForEach(Array(vm.months.enumerated()), id: \.0) { i, m in
+                    ForEach(Array(vm.customMonthlyData.enumerated()), id: \.offset) { index, item in
                         // Budget Bar
                         BarMark(
-                            x: .value("Month", m),
-                            y: .value("Budget", vm.perMonthBudget[i])
+                            x: .value("Month", item.month),
+                            y: .value("Budget", item.budget)
                         )
                         .foregroundStyle(.blue)
                         .position(by: .value("Type", "Budget"))
                         
                         // Actual Bar
-                        BarMark(
-                            x: .value("Month", m),
-                            y: .value("Actual", vm.actuals[i])
-                        )
-                        .foregroundStyle(.purple)
-                        .position(by: .value("Type", "Actual"))
+                        if let actual = item.actual {
+                            BarMark(
+                                x: .value("Month", item.month),
+                                y: .value("Actual", actual)
+                            )
+                            .foregroundStyle(.purple)
+                            .position(by: .value("Type", "Actual"))
+                        }
                         
                         // Forecast Bar
-                        BarMark(
-                            x: .value("Month", m),
-                            y: .value("Forecast", vm.forecast[i])
-                        )
-                        .foregroundStyle(.green)
-                        .position(by: .value("Type", "Forecast"))
+                        if let forecast = item.forecast {
+                            BarMark(
+                                x: .value("Month", item.month),
+                                y: .value("Forecast", forecast)
+                            )
+                            .foregroundStyle(.green)
+                            .position(by: .value("Type", "Forecast"))
+                        }
                     }
                 }
-                .frame(height: 180)
-                .padding(.horizontal, 6)
+                .frame(height: 200)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
                         AxisGridLine()
                         AxisValueLabel {
                             if let intValue = value.as(Double.self) {
-                                Text("\(Int(intValue))")
-                                    .font(.caption)
+                                Text("₹\(Int(intValue))")
+                                    .font(.caption2)
                             }
                         }
                     }
@@ -205,60 +361,149 @@ struct PredictiveAnalysisScreen: View {
                         AxisValueLabel {
                             if let stringValue = value.as(String.self) {
                                 Text(stringValue)
-                                    .font(.caption)
+                                    .font(.caption2)
                             }
                         }
                     }
                 }
                 .chartPlotStyle { plotArea in
                     plotArea
-                        .background(Color.white)
+                        .background(Color(.systemGray6))
                 }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
+                
+                // Legend
+                legendView
             }
-            legendBox
         }
     }
     
-    var trendsTab: some View {
-        VStack {
-            Text("Trends Analysis").font(.headline).foregroundColor(.purple)
+    // MARK: - Trends View
+    private var trendsView: some View {
+        VStack(alignment: .leading, spacing: 16) {
             if vm.trends.isEmpty {
-                Text("No data available")
-                    .foregroundColor(.gray)
-                    .frame(height: 180)
+                emptyStateView(title: "No Trends Data", message: "Unable to generate spending trends for this project")
             } else {
                 GeometryReader { geometry in
-                    PieChartView(data: vm.trends)
-                        .frame(width: geometry.size.width * 0.82, height: 160)
-                }
-                HStack(spacing: 10) {
-                    ForEach(vm.trends, id: \.category) { t in
-                        RoundedRectangle(cornerRadius: 2).fill(colorForCategory(t.category)).frame(width: 22, height: 8)
-                        Text(t.category)
+                    HStack {
+                        Spacer()
+                        PieChartView(data: vm.trends)
+                            .frame(width: min(geometry.size.width * 0.8, 200), height: 200)
+                        Spacer()
                     }
-                }.font(.caption)
+                }
+                .frame(height: 200)
+                
+                // Category Legend
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 8) {
+                    ForEach(vm.trends, id: \.category) { trend in
+                        HStack(spacing: 8) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(colorForCategory(trend.category))
+                                .frame(width: 16, height: 16)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(trend.category)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                
+                                Text("\(String(format: "%.1f", trend.percent))%")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemGray6))
+                        )
+                    }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
             }
         }
     }
     
-    var legendBox: some View {
-        HStack(spacing: 10) {
-            Color.blue.frame(width: 22, height: 8).cornerRadius(3)
-            Text("Budget")
-            Color.purple.frame(width: 22, height: 8).cornerRadius(3)
-            Text("Actual")
-            Color.green.frame(width: 22, height: 8).cornerRadius(3)
-            Text("Forecast")
-        }.font(.caption)
+    // MARK: - Helper Views
+    private func metricCard(title: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Text(value)
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(color.opacity(0.1))
+        )
+    }
+    
+    private func emptyStateView(title: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 40))
+                .foregroundColor(.secondary)
+            
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text(message)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(height: 200)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
+    }
+    
+    private var legendView: some View {
+        HStack(spacing: 16) {
+            ForEach([("Budget", Color.blue), ("Actual", Color.purple), ("Forecast", Color.green)], id: \.0) { item in
+                HStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(item.1)
+                        .frame(width: 12, height: 12)
+                    
+                    Text(item.0)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
     }
     
     func colorForCategory(_ cat: String) -> Color {
-        switch cat {
-        case "Travel": return .blue
-        case "Meals": return .purple
-        case "Misc": return .green
-        default: return .gray
-        }
+        let colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
+        let hash = cat.hashValue
+        return colors[abs(hash) % colors.count]
     }
 }
 
@@ -266,7 +511,7 @@ struct PredictiveAnalysisScreen: View {
 struct PieChartView: View {
     let data: [(category: String, percent: Double)]
     var total: Double { data.reduce(0) { $0 + $1.percent } }
-    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .gray, .mint, .teal]
+    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
     
     struct Slice {
         let startAngle: Angle
