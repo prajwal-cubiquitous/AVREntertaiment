@@ -63,6 +63,19 @@ class DashboardViewModel: ObservableObject {
         return total.formattedCurrency
     }
     
+    var totalApprovedExpenses: Double {
+        return departmentBudgets.reduce(0) { $0 + $1.approvedBudget }
+    }
+    
+    var remainingBudget: Double {
+        let totalBudget = departmentBudgets.reduce(0) { $0 + $1.totalBudget }
+        return totalBudget - totalApprovedExpenses
+    }
+    
+    var remainingBudgetFormatted: String {
+        return remainingBudget.formattedCurrency
+    }
+    
     // MARK: - Update Project Method
     func updateProject(_ newProject: Project?) {
         // Update the internal project property
@@ -113,6 +126,47 @@ class DashboardViewModel: ObservableObject {
                 color: colorForDepartment(department)
             )
         }.sorted { $0.department < $1.department }
+        
+        // Load approved expenses asynchronously
+        Task {
+            await loadApprovedExpensesForProject(project)
+        }
+    }
+    
+    private func loadApprovedExpensesForProject(_ project: Project) async {
+        guard let projectId = project.id else { return }
+        
+        do {
+            let expensesSnapshot = try await db.collection("projects_ios")
+                .document(projectId)
+                .collection("expenses")
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            var departmentSpent: [String: Double] = [:]
+            
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self) {
+                    let department = expense.department
+                    departmentSpent[department, default: 0] += expense.amount
+                }
+            }
+            
+            await MainActor.run {
+                // Update departmentBudgets with actual spent amounts
+                departmentBudgets = departmentBudgets.map { budget in
+                    DepartmentBudget(
+                        department: budget.department,
+                        totalBudget: budget.totalBudget,
+                        approvedBudget: departmentSpent[budget.department] ?? 0,
+                        color: budget.color
+                    )
+                }
+            }
+            
+        } catch {
+            print("Error loading approved expenses: \(error)")
+        }
     }
     
     private func loadNotificationsFromProject() async {

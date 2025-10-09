@@ -406,12 +406,7 @@ struct DashboardView: View {
                     )
                 }
                 
-                ProjectStatsCard(
-                    title: "Total Budget",
-                    value: viewModel.totalProjectBudgetFormatted,
-                    icon: "indianrupeesign.circle.fill",
-                    color: .orange
-                )
+                TotalBudgetCard(viewModel: viewModel)
                 
                 Button(action: {
                     showingTeamMembersDetail = true
@@ -1190,6 +1185,48 @@ struct ActionMenuButton: View {
         }
         .buttonStyle(.plain)
         .frame(width: 200)
+    }
+}
+
+// MARK: - Total Budget Card
+struct TotalBudgetCard: View {
+    @ObservedObject var viewModel: DashboardViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: "indianrupeesign.circle.fill")
+                    .font(DesignSystem.Typography.title3)
+                    .foregroundColor(.orange)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.totalProjectBudgetFormatted)
+                    .font(DesignSystem.Typography.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .contentTransition(.numericText())
+                
+                Text("Total Budget")
+                    .font(DesignSystem.Typography.subheadline)
+                    .foregroundColor(.secondary)
+                
+                // Remaining amount
+                Text("Remaining: \(viewModel.remainingBudgetFormatted)")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
+                    .fontWeight(.medium)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 100)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .cardStyle(shadow: DesignSystem.Shadow.small)
     }
 }
 
