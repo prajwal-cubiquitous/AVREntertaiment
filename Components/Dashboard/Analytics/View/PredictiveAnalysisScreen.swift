@@ -19,7 +19,6 @@ struct PredictiveAnalysisScreen: View {
     }
 
     @State private var selectedTab = 0
-    @State private var showingDetailView = false
     
     // Chart interaction states
     @State private var selectedForecastItem: MonthlyData?
@@ -76,12 +75,6 @@ struct PredictiveAnalysisScreen: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                
-                Button(action: { showingDetailView = true }) {
-                    Image(systemName: "info.circle")
-                        .font(.title3)
-                        .foregroundColor(.blue)
-                }
             }
             
             // Project Info Card
@@ -203,12 +196,6 @@ struct PredictiveAnalysisScreen: View {
                     .foregroundColor(.primary)
                 
                 Spacer()
-                
-                Button(action: {}) {
-                    Text("View Details")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
             }
             
             VStack(alignment: .leading, spacing: 12) {

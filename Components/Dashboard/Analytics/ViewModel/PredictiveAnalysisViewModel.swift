@@ -637,77 +637,53 @@ class PredictiveAnalysisViewModel: ObservableObject {
     }
     
     private func generateSummary() {
-        // Use the project's total budget, not the sum of monthly budgets
-        let totalBudget = project.budget
-        
-        // Calculate monthly budget (same for all months)
-        let projectDuration = calculateProjectDuration()
-        let monthlyBudget = project.budget / Double(projectDuration)
-        
-        // Analyze customMonthlyData for professional insights
+        // Use actual data from the graphs
         let actualData = customMonthlyData.filter { $0.actual != nil }
-        let forecastData = customMonthlyData.filter { $0.forecast != nil }
-        
-        // Calculate current month performance
-        let currentMonthActual = actualData.last?.actual ?? 0
-        let currentMonthBudget = actualData.last?.budget ?? monthlyBudget
-        let currentMonthVariance = currentMonthBudget > 0 ? ((currentMonthActual - currentMonthBudget) / currentMonthBudget) * 100 : 0
-        
-        // Calculate forecast vs budget analysis
-        let averageForecast = forecastData.isEmpty ? 0 : forecastData.map { $0.forecast ?? 0 }.reduce(0, +) / Double(forecastData.count)
-        let forecastVariance = monthlyBudget > 0 ? ((averageForecast - monthlyBudget) / monthlyBudget) * 100 : 0
-        
-        // Calculate total spending efficiency
+        let monthlyBudget = actualData.first?.budget ?? 0
         let totalSpent = actualData.map { $0.actual ?? 0 }.reduce(0, +)
-        let totalBudgeted = actualData.map { $0.budget }.reduce(0, +)
-        let overallEfficiency = totalBudgeted > 0 ? ((totalSpent - totalBudgeted) / totalBudgeted) * 100 : 0
+        let averageMonthlySpending = actualData.isEmpty ? 0 : totalSpent / Double(actualData.count)
+        let spendingVariance = monthlyBudget > 0 ? ((averageMonthlySpending - monthlyBudget) / monthlyBudget) * 100 : 0
         
-        // Generate professional summary
-        var summary = "📊 FINANCIAL PERFORMANCE ANALYSIS\n\n"
+        // Generate short and sweet summary
+        var summary = ""
         
-        // Current Month Analysis
-        summary += "📅 CURRENT MONTH STATUS:\n"
-        if currentMonthVariance > 0 {
-            let overspend = currentMonthActual - currentMonthBudget
-            summary += "• ⚠️ OVERSPENT by ₹\(String(format: "%.0f", overspend)) (\(String(format: "%.1f", currentMonthVariance))% above budget)\n"
-            summary += "• Recommendation: Implement immediate cost controls to align with budget\n\n"
-        } else if currentMonthVariance < -5 {
-            let underspend = currentMonthBudget - currentMonthActual
-            summary += "• ✅ UNDERSPENT by ₹\(String(format: "%.0f", underspend)) (\(String(format: "%.1f", abs(currentMonthVariance)))% below budget)\n"
-            summary += "• Opportunity: Consider accelerating planned activities or reallocating funds\n\n"
+        if spendingVariance > 10 {
+            let excess = averageMonthlySpending - monthlyBudget
+            summary = "⚠️ OVERSPENDING: ₹\(String(format: "%.0f", excess)) above budget monthly. Need cost controls."
+        } else if spendingVariance < -10 {
+            let savings = monthlyBudget - averageMonthlySpending
+            summary = "💰 UNDERSPENDING: ₹\(String(format: "%.0f", savings)) savings monthly. Consider expanding scope."
         } else {
-            summary += "• ✅ ON TRACK - Spending within acceptable variance of budget\n\n"
+            summary = "✅ ON TRACK: Spending aligns with ₹\(String(format: "%.0f", monthlyBudget)) monthly budget."
         }
         
-        // Forecast Analysis
-        summary += "🔮 FORECAST ANALYSIS:\n"
-        if forecastVariance > 10 {
-            let excessForecast = averageForecast - monthlyBudget
-            summary += "• ⚠️ HIGH RISK: Forecast exceeds budget by ₹\(String(format: "%.0f", excessForecast)) per month\n"
-            summary += "• Action Required: Review spending patterns and implement budget controls\n\n"
-        } else if forecastVariance < -10 {
-            let savingsForecast = monthlyBudget - averageForecast
-            summary += "• 💰 OPPORTUNITY: Forecast shows potential savings of ₹\(String(format: "%.0f", savingsForecast)) per month\n"
-            summary += "• Recommendation: Consider expanding project scope or accelerating initiatives\n\n"
-        } else {
-            summary += "• ✅ STABLE: Forecast aligns well with monthly budget expectations\n\n"
-        }
-        
-        // Overall Project Health
-        summary += "📈 PROJECT HEALTH SUMMARY:\n"
-        summary += "• Total Budget: ₹\(String(format: "%.0f", totalBudget))\n"
-        summary += "• Total Spent: ₹\(String(format: "%.0f", totalSpent))\n"
-        summary += "• Monthly Budget: ₹\(String(format: "%.0f", monthlyBudget))\n"
-        summary += "• Average Forecast: ₹\(String(format: "%.0f", averageForecast))\n\n"
-        
-        // Key Insights
-        summary += "💡 KEY INSIGHTS:\n"
-        summary += "• Top spending category: \(trends.first?.category ?? "N/A")\n"
-        summary += "• Overall efficiency: \(String(format: "%.1f", overallEfficiency))% variance from budget\n"
-        summary += "• Data points analyzed: \(actualData.count) months of actual spending\n"
-        summary += "• Forecast confidence: \(forecastData.count) months projected\n"
+        summary += "\n📊 Total: ₹\(String(format: "%.0f", totalSpent)) spent across \(actualData.count) months"
+        summary += "\n📈 Top category: \(trends.first?.category ?? "N/A")"
         
         summaryText = summary
+    }
+    
+    private func calculateSpendingTrend(actualData: [MonthlyData]) -> Double {
+        guard actualData.count >= 2 else { return 0 }
+        
+        let amounts = actualData.map { $0.actual ?? 0 }
+        var sumX = 0.0
+        var sumY = 0.0
+        var sumXY = 0.0
+        var sumXX = 0.0
+        
+        for (index, amount) in amounts.enumerated() {
+            let x = Double(index)
+            let y = amount
+            sumX += x
+            sumY += y
+            sumXY += x * y
+            sumXX += x * x
+        }
+        
+        let n = Double(amounts.count)
+        let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX)
+        return slope
     }
     
     private func calculateAverageVariance(actuals: [Double], budgets: [Double]) -> Double {
