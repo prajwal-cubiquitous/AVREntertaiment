@@ -45,7 +45,11 @@ class ProjectDetailViewModel: ObservableObject {
                     var departmentTotals: [String: Double] = [:]
                     for document in documents {
                         if let expense = try? document.data(as: Expense.self) {
-                            departmentTotals[expense.department, default: 0] += expense.amount
+                            if expense.isAnonymous == true{
+                                departmentTotals["Other Expenses", default: 0] += expense.amount
+                            }else{
+                                departmentTotals[expense.department, default: 0] += expense.amount
+                            }
                         }
                     }
                     
@@ -55,6 +59,7 @@ class ProjectDetailViewModel: ObservableObject {
     }
     
     func approvedAmount(for department: String) -> Double {
+        print("DEBUG 30 : \(approvedExpensesByDepartment)")
         return approvedExpensesByDepartment[department] ?? 0
     }
     

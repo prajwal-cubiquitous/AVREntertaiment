@@ -625,9 +625,9 @@ struct DashboardView: View {
                             .foregroundColor(.primary)
                             .contentTransition(.numericText())
                         
-                        Text("₹")
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundColor(.secondary)
+//                        Text("₹")
+//                            .font(DesignSystem.Typography.caption2)
+//                            .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -699,7 +699,7 @@ struct DashboardView: View {
                     .lineLimit(1)
                 
                 HStack(spacing: 4) {
-                    Text("₹\(budgetValue.formattedCurrency)")
+                    Text("\(budgetValue.formattedCurrency)")
                         .font(DesignSystem.Typography.caption1)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -991,21 +991,22 @@ struct EnhancedDepartmentBudgetCard: View {
                             .fontWeight(.semibold)
                             .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)
                     }
-                } else {
-                    // For "Other Expenses" department, show a note
-                    HStack {
-                        Text("Unallocated Expenses")
-                            .font(DesignSystem.Typography.caption1)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Text("No Budget")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.orange)
-                    }
                 }
+//                else {
+//                    // For "Other Expenses" department, show a note
+//                    HStack {
+//                        Text("Unallocated Expenses")
+//                            .font(DesignSystem.Typography.caption1)
+//                            .foregroundColor(.secondary)
+//                        
+//                        Spacer()
+//                        
+//                        Text("No Budget")
+//                            .font(DesignSystem.Typography.subheadline)
+//                            .fontWeight(.semibold)
+//                            .foregroundColor(.orange)
+//                    }
+//                }
             }
             
             // Progress bar (only show if there's an allocated budget)

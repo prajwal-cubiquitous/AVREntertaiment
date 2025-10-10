@@ -160,9 +160,10 @@ class DashboardViewModel: ObservableObject {
             
             // Get list of valid departments from project
             let validDepartments = Set(project.departments.keys)
-            
             for expenseDoc in expensesSnapshot.documents {
+
                 if let expense = try? expenseDoc.data(as: Expense.self) {
+
                     let department = expense.department
                     
                     if validDepartments.contains(department) {
