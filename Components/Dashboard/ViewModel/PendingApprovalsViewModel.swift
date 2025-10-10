@@ -104,8 +104,6 @@ class PendingApprovalsViewModel: ObservableObject {
                 for expenseDoc in expensesSnapshot.documents {
                     var expense = try expenseDoc.data(as: Expense.self)
                     expense.id = expenseDoc.documentID
-                    print("Debug 1 : \(expense)")
-                    print("DEBUG 2: docuemntID for \(expenseDoc.documentID)")
                     expenses.append(expense)
                 }
             
@@ -137,8 +135,6 @@ class PendingApprovalsViewModel: ObservableObject {
                 for expenseDoc in expensesSnapshot.documents {
                     var expense = try expenseDoc.data(as: Expense.self)
                     expense.id = expenseDoc.documentID
-                    print("Debug 1 : \(expense)")
-                    print("DEBUG 2: docuemntID for \(expenseDoc.documentID)")
                     expenses.append(expense)
                 }
             
@@ -292,9 +288,7 @@ class PendingApprovalsViewModel: ObservableObject {
         
         // 2. Fetch the document
         let userSnapshot = try await db.collection("users_ios").document(updatedUserId).getDocument()
-        
-        print("Debug 20 : userid \(userId)")
-        
+                
         // 3. Safely unwrap the document data
         guard let data = userSnapshot.data() else {
             throw UserDataError.userNotFound

@@ -59,7 +59,6 @@ class ProjectDetailViewModel: ObservableObject {
     }
     
     func approvedAmount(for department: String) -> Double {
-        print("DEBUG 30 : \(approvedExpensesByDepartment)")
         return approvedExpensesByDepartment[department] ?? 0
     }
     

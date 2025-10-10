@@ -60,9 +60,6 @@ struct ProjectDetailView: View {
                     .frame(height: 80)
             }
             .padding(.top, DesignSystem.Spacing.small)
-            .onAppear {
-                print("DEBUG 10: \(phoneNumber)")
-            }
         }
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Project Details")
@@ -171,9 +168,6 @@ private struct KeyInformationView: View {
                     value: formatCurrency(totalApprovedAmount),
                     iconColor: .blue
                 )
-                .onAppear{
-                    print("DEBUG 1 \(totalApprovedAmount)")
-                }
                 
                 Divider()
                 

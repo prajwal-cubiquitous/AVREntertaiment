@@ -88,9 +88,40 @@ class ReportViewModel: ObservableObject {
             
             var keys = Array(departments.keys).sorted()
             keys.insert("All", at: 0) // Add "All" at the beginning
-
-            DispatchQueue.main.async {
-                self.departmentNames = keys
+            
+            // Check if there are any anonymous expenses (Other Expenses)
+            Task {
+                do {
+                    let expensesSnapshot = try await db.collection("projects_ios").document(documentID)
+                        .collection("expenses")
+                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                        .getDocuments()
+                    
+                    let validDepartments = Set(departments.keys)
+                    var hasAnonymousExpenses = false
+                    
+                    for expenseDoc in expensesSnapshot.documents {
+                        if let expense = try? expenseDoc.data(as: Expense.self) {
+                            if !validDepartments.contains(expense.department) {
+                                hasAnonymousExpenses = true
+                                break
+                            }
+                        }
+                    }
+                    
+                    if hasAnonymousExpenses {
+                        keys.append("Other Expenses")
+                    }
+                    
+                    await MainActor.run {
+                        self.departmentNames = keys
+                    }
+                } catch {
+                    print("Error checking for anonymous expenses: \(error)")
+                    await MainActor.run {
+                        self.departmentNames = keys
+                    }
+                }
             }
         }
     }
@@ -128,12 +159,12 @@ class ReportViewModel: ObservableObject {
         let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
         do {
             let snapshot: QuerySnapshot
-            if selectedDepartment != "All"{
+            if selectedDepartment != "All" && selectedDepartment != "Other Expenses" {
                 snapshot = try await expenseCollectionRef
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                     .whereField("department", isEqualTo: selectedDepartment)
                     .getDocuments()
-            }else{
+            } else {
                 snapshot = try await expenseCollectionRef
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                     .getDocuments()
@@ -143,6 +174,24 @@ class ReportViewModel: ObservableObject {
             for doc in snapshot.documents {
                 if let expense = try? doc.data(as: Expense.self) {
                     loadedExpenses.append(expense)
+                }
+            }
+            
+            // Filter for "Other Expenses" if selected
+            if selectedDepartment == "Other Expenses" {
+                // Get valid departments from project
+                let projectDoc = try await db.collection("projects_ios").document(projectId).getDocument()
+                guard let projectData = projectDoc.data(),
+                      let departments = projectData["departments"] as? [String: Double] else {
+                    await MainActor.run {
+                        self.expenses = []
+                    }
+                    return
+                }
+                
+                let validDepartments = Set(departments.keys)
+                loadedExpenses = loadedExpenses.filter { expense in
+                    !validDepartments.contains(expense.department)
                 }
             }
             
@@ -169,6 +218,7 @@ class ReportViewModel: ObservableObject {
             
             // Calculate approved expenses for each department
             var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
+            var anonymousExpenses: Double = 0
             
             // Initialize with project department budgets
             for (department, amount) in departments {
@@ -181,29 +231,50 @@ class ReportViewModel: ObservableObject {
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
+            let validDepartments = Set(departments.keys)
+            
             // Calculate approved amounts per department
             for expenseDoc in expensesSnapshot.documents {
                 if let expense = try? expenseDoc.data(as: Expense.self) {
                     let department = expense.department
-                    if var current = departmentBudgetDict[department] {
-                        current.approved += expense.amount
-                        departmentBudgetDict[department] = current
+                    
+                    if validDepartments.contains(department) {
+                        // Department exists in project, add to normal spending
+                        if var current = departmentBudgetDict[department] {
+                            current.approved += expense.amount
+                            departmentBudgetDict[department] = current
+                        }
+                    } else {
+                        // Department doesn't exist in project, add to anonymous
+                        anonymousExpenses += expense.amount
                     }
                 }
             }
             
             // Convert to DepartmentBudget objects
-            let budgets = departmentBudgetDict.map { (department, values) in
+            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint]
+            var budgets = departmentBudgetDict.enumerated().map { index, entry in
                 DepartmentBudget(
-                    department: department,
-                    totalBudget: values.total,
-                    approvedBudget: values.approved,
-                    color: .blue // Simple color for now
+                    department: entry.key,
+                    totalBudget: entry.value.total,
+                    approvedBudget: entry.value.approved,
+                    color: colors[index % colors.count]
                 )
-            }.sorted { $0.department < $1.department }
+            }
+            
+            // Add anonymous department if there are expenses
+            if anonymousExpenses > 0 {
+                let anonymousBudget = DepartmentBudget(
+                    department: "Other Expenses",
+                    totalBudget: 0, // No allocated budget for anonymous expenses
+                    approvedBudget: anonymousExpenses,
+                    color: .gray
+                )
+                budgets.append(anonymousBudget)
+            }
             
             await MainActor.run {
-                self.departmentBudgets = budgets
+                self.departmentBudgets = budgets.sorted { $0.totalBudget > $1.totalBudget }
             }
             
         } catch {
@@ -404,6 +475,9 @@ class ReportViewModel: ObservableObject {
             drawSectionHeader(title: "Expense Categories Breakdown", yPosition: &yPosition, leftMargin: leftMargin, icon: "📈")
             
             if !expenseCategories.isEmpty {
+                // Draw bar chart visualization
+                drawBarChart(yPosition: &yPosition, leftMargin: leftMargin, contentWidth: contentWidth)
+                
                 let tableY = yPosition
                 let rowHeight: CGFloat = 25
                 let headerHeight: CGFloat = 30
@@ -488,6 +562,10 @@ class ReportViewModel: ObservableObject {
                     let remaining = budget.totalBudget - budget.approvedBudget
                     let utilization = budget.totalBudget > 0 ? (budget.approvedBudget / budget.totalBudget) : 0
                     
+                    // Special handling for "Other Expenses"
+                    let displayAmount = budget.department == "Other Expenses" ? budget.approvedBudget : remaining
+                    let displayColor = budget.department == "Other Expenses" ? UIColor(red: 0.0, green: 0.667, blue: 0.0, alpha: 1.0) : (remaining < 0 ? UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1.0) : UIColor(red: 0.0, green: 0.667, blue: 0.0, alpha: 1.0))
+                    
                     // Row background with borders - white with dark border
                     UIColor.white.setFill()
                     UIBezierPath(rect: CGRect(x: leftMargin, y: rowY, width: contentWidth, height: rowHeight)).fill()
@@ -504,14 +582,17 @@ class ReportViewModel: ObservableObject {
                     // Color-coded remaining amount - darker colors
                     let remainingAttributes: [NSAttributedString.Key: Any] = [
                         .font: UIFont.systemFont(ofSize: 11),
-                        .foregroundColor: remaining < 0 ? UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1.0) : UIColor(red: 0.0, green: 0.667, blue: 0.0, alpha: 1.0)
+                        .foregroundColor: displayColor
                     ]
-                    "₹\(Int(remaining).formatted())".draw(at: CGPoint(x: leftMargin + 350, y: rowY + 8), withAttributes: remainingAttributes)
+                    "₹\(Int(displayAmount).formatted())".draw(at: CGPoint(x: leftMargin + 350, y: rowY + 8), withAttributes: remainingAttributes)
                     
                     // Status indicator with darker colors
                     let statusText: String
                     let statusColor: UIColor
-                    if utilization >= 1.0 {
+                    if budget.department == "Other Expenses" {
+                        statusText = "📊 Other Expenses"
+                        statusColor = UIColor(red: 0.0, green: 0.667, blue: 0.0, alpha: 1.0)
+                    } else if utilization >= 1.0 {
                         statusText = "⚠️ Over Budget"
                         statusColor = UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1.0)
                     } else if utilization >= 0.8 {
@@ -609,6 +690,83 @@ class ReportViewModel: ObservableObject {
         value.draw(at: CGPoint(x: x + 10, y: y + 25), withAttributes: valueAttributes)
     }
     
+    private func drawBarChart(yPosition: inout CGFloat, leftMargin: CGFloat, contentWidth: CGFloat) {
+        let chartHeight: CGFloat = 120
+        let chartY = yPosition
+        let barWidth: CGFloat = 30
+        let barSpacing: CGFloat = 10
+        let maxBarHeight: CGFloat = 80
+        
+        // Chart background
+        UIColor(red: 0.98, green: 0.98, blue: 0.98, alpha: 1.0).setFill()
+        UIBezierPath(roundedRect: CGRect(x: leftMargin, y: chartY, width: contentWidth, height: chartHeight), cornerRadius: 8).fill()
+        
+        // Chart border
+        UIColor(red: 0.8, green: 0.8, blue: 0.8, alpha: 1.0).setStroke()
+        let borderPath = UIBezierPath(roundedRect: CGRect(x: leftMargin, y: chartY, width: contentWidth, height: chartHeight), cornerRadius: 8)
+        borderPath.lineWidth = 1
+        borderPath.stroke()
+        
+        // Chart title
+        let chartTitleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.boldSystemFont(ofSize: 12),
+            .foregroundColor: UIColor.black
+        ]
+        "Expense Categories Chart".draw(at: CGPoint(x: leftMargin + 10, y: chartY + 10), withAttributes: chartTitleAttributes)
+        
+        // Calculate max amount for scaling
+        let maxAmount = expenseCategories.map(\.amount).max() ?? 1
+        
+        // Draw bars
+        let startX = leftMargin + 20
+        let startY = chartY + 40
+        let availableWidth = contentWidth - 40
+        let totalBarWidth = CGFloat(expenseCategories.count) * barWidth + CGFloat(expenseCategories.count - 1) * barSpacing
+        let chartStartX = startX + (availableWidth - totalBarWidth) / 2
+        
+        for (index, category) in expenseCategories.enumerated() {
+            let barX = chartStartX + CGFloat(index) * (barWidth + barSpacing)
+            let barHeight = maxAmount > 0 ? (category.amount / maxAmount) * maxBarHeight : 0
+            let barY = startY + maxBarHeight - barHeight
+            
+            // Bar background
+            UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 0.2).setFill()
+            UIBezierPath(roundedRect: CGRect(x: barX, y: startY, width: barWidth, height: maxBarHeight), cornerRadius: 2).fill()
+            
+            // Bar fill
+            UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 0.8).setFill()
+            UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: barWidth, height: barHeight), cornerRadius: 2).fill()
+            
+            // Bar border
+            UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0).setStroke()
+            let barPath = UIBezierPath(roundedRect: CGRect(x: barX, y: barY, width: barWidth, height: barHeight), cornerRadius: 2)
+            barPath.lineWidth = 0.5
+            barPath.stroke()
+            
+            // Amount label on top of bar
+            if barHeight > 15 {
+                let amountAttributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 8),
+                    .foregroundColor: UIColor.black
+                ]
+                let amountText = "₹\(Int(category.amount).formatted())"
+                let amountSize = amountText.size(withAttributes: amountAttributes)
+                amountText.draw(at: CGPoint(x: barX + (barWidth - amountSize.width) / 2, y: barY - 12), withAttributes: amountAttributes)
+            }
+            
+            // Category name below bar
+            let categoryAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 8),
+                .foregroundColor: UIColor.black
+            ]
+            let categoryText = category.name
+            let categorySize = categoryText.size(withAttributes: categoryAttributes)
+            categoryText.draw(at: CGPoint(x: barX + (barWidth - categorySize.width) / 2, y: startY + maxBarHeight + 5), withAttributes: categoryAttributes)
+        }
+        
+        yPosition += chartHeight + 20
+    }
+    
     // MARK: - Enhanced Excel (CSV) Generation
     private func generateExcelReport() async throws -> String {
         var csvContent = ""
@@ -633,18 +791,34 @@ class ReportViewModel: ObservableObject {
         csvContent += "Remaining Budget,\(String(format: "%.0f", remainingBudget)),\(String(format: "%.1f", 100 - utilizationPercentage))%,\(remainingBudget < 0 ? "Over Budget" : "Available")\n\n"
         
         // MARK: - Expense Categories (Chart Ready)
-        csvContent += "EXPENSE CATEGORIES\n"
-        csvContent += "Category,Amount,Percentage,Transaction Count\n"
+        csvContent += "EXPENSE CATEGORIES - CHART DATA\n"
+        csvContent += "Category,Amount,Percentage,Transaction Count,Bar Height (0-100),Color Code\n"
+        
+        let maxAmount = expenseCategories.map(\.amount).max() ?? 1
         
         for category in expenseCategories {
             let categoryExpenses = filteredExpenses.filter { expense in
                 expense.categories.first ?? "Other" == category.name
             }
             let percentage = totalExpenses > 0 ? (category.amount / totalExpenses) * 100 : 0
+            let barHeight = maxAmount > 0 ? (category.amount / maxAmount) * 100 : 0
             
-            csvContent += "\(category.name),\(String(format: "%.0f", category.amount)),\(String(format: "%.1f", percentage))%,\(categoryExpenses.count)\n"
+            csvContent += "\(category.name),\(String(format: "%.0f", category.amount)),\(String(format: "%.1f", percentage))%,\(categoryExpenses.count),\(String(format: "%.1f", barHeight)),Blue\n"
         }
         
+        csvContent += "\n"
+        
+        // MARK: - Chart Instructions
+        csvContent += "CHART CREATION INSTRUCTIONS\n"
+        csvContent += "Step,Description\n"
+        csvContent += "1,Select the Category and Amount columns (A1:B\(expenseCategories.count + 1))\n"
+        csvContent += "2,Insert a Bar Chart (2D Column Chart)\n"
+        csvContent += "3,Set Category names as X-axis labels\n"
+        csvContent += "4,Set Amount as Y-axis values\n"
+        csvContent += "5,Use Bar Height column for proportional scaling\n"
+        csvContent += "6,Apply blue color scheme (#007AFF)\n"
+        csvContent += "7,Add data labels showing amounts\n"
+        csvContent += "8,Title: 'Expense Categories Breakdown'\n"
         csvContent += "\n"
         
         // MARK: - Department Analysis (Chart Ready)
@@ -655,8 +829,13 @@ class ReportViewModel: ObservableObject {
             let remaining = budget.totalBudget - budget.approvedBudget
             let utilization = budget.totalBudget > 0 ? (budget.approvedBudget / budget.totalBudget) * 100 : 0
             
+            // Special handling for "Other Expenses"
+            let displayAmount = budget.department == "Other Expenses" ? budget.approvedBudget : remaining
+            
             let status: String
-            if utilization >= 100 {
+            if budget.department == "Other Expenses" {
+                status = "Other Expenses"
+            } else if utilization >= 100 {
                 status = "Over Budget"
             } else if utilization >= 80 {
                 status = "High Usage"
@@ -666,7 +845,7 @@ class ReportViewModel: ObservableObject {
                 status = "Low Usage"
             }
             
-            csvContent += "\(budget.department),\(String(format: "%.0f", budget.totalBudget)),\(String(format: "%.0f", budget.approvedBudget)),\(String(format: "%.0f", remaining)),\(String(format: "%.1f", utilization))%,\(status)\n"
+            csvContent += "\(budget.department),\(String(format: "%.0f", budget.totalBudget)),\(String(format: "%.0f", budget.approvedBudget)),\(String(format: "%.0f", displayAmount)),\(String(format: "%.1f", utilization))%,\(status)\n"
         }
         
         csvContent += "\n"

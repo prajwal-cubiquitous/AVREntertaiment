@@ -83,7 +83,6 @@ class ChatsViewModel: ObservableObject {
         self.project = project
         self.currentUserPhone = currentUserPhone
         self.currentUserRole = currentUserRole
-        print("DEBUG 1: \(self.currentUserPhone) and \(self.currentUserRole)")
     }
     
     func loadChatParticipants() async {

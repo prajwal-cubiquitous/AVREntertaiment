@@ -390,6 +390,23 @@ struct BudgetRow: View {
         return budget.approvedBudget / budget.totalBudget
     }
     
+    // Special handling for "Other Expenses" - show spent amount as positive
+    private var displayAmount: Double {
+        if budget.department == "Other Expenses" {
+            return budget.approvedBudget // Show spent amount as positive
+        } else {
+            return remainingAmount
+        }
+    }
+    
+    private var displayColor: Color {
+        if budget.department == "Other Expenses" {
+            return .green // Always green for Other Expenses
+        } else {
+            return remainingAmount < 0 ? .red : .green
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -408,9 +425,9 @@ struct BudgetRow: View {
                     .foregroundStyle(spentPercentage > 0.8 ? .orange : .primary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 
-                Text("₹\(Int(remainingAmount).formatted())")
+                Text("₹\(Int(displayAmount).formatted())")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(remainingAmount < 0 ? .red : .green)
+                    .foregroundStyle(displayColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(.horizontal)
