@@ -11,6 +11,7 @@ import SwiftUI
 struct ProjectCell: View {
     let project: Project
     let role: UserRole?
+    let tempApproverStatus: TempApproverStatus?
     @State private var isPressed = false
     
     private var daysRemainingText: String {
@@ -67,6 +68,11 @@ struct ProjectCell: View {
                 
                 HStack(spacing: DesignSystem.Spacing.small) {
                     StatusView(status: project.statusType)
+                    
+                    // Temp Approver Status Indicator
+                    if let tempStatus = tempApproverStatus {
+                        TempApproverStatusView(status: tempStatus)
+                    }
                     
                     // Edit button for Admin role
                     if role == .ADMIN {
@@ -158,6 +164,7 @@ struct ProjectCell: View {
             return .green
         }
     }
+    
 }
 
 // MARK: - Helper Subviews
@@ -188,6 +195,64 @@ struct StatusView: View {
                 )
         )
         .foregroundColor(status.color.darker(by: 20))
+    }
+}
+
+// A reusable view for the Temp Approver Status tag
+struct TempApproverStatusView: View {
+    let status: TempApproverStatus
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.extraSmall) {
+            Image(systemName: statusIcon)
+                .font(.caption2)
+                .foregroundColor(statusColor)
+            
+            Text(statusText)
+                .font(DesignSystem.Typography.caption2)
+                .fontWeight(.semibold)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(
+            Capsule()
+                .fill(statusColor.opacity(0.12))
+                .overlay(
+                    Capsule()
+                        .stroke(statusColor.opacity(0.3), lineWidth: 0.5)
+                )
+        )
+        .foregroundColor(statusColor.darker(by: 20))
+    }
+    
+    private var statusColor: Color {
+        switch status {
+        case .pending: return .orange
+        case .accepted: return .green
+        case .rejected: return .red
+        case .active: return .blue
+        case .expired: return .gray
+        }
+    }
+    
+    private var statusIcon: String {
+        switch status {
+        case .pending: return "clock.fill"
+        case .accepted: return "checkmark.circle.fill"
+        case .rejected: return "xmark.circle.fill"
+        case .active: return "person.badge.clock.fill"
+        case .expired: return "exclamationmark.triangle.fill"
+        }
+    }
+    
+    private var statusText: String {
+        switch status {
+        case .pending: return "Temp Pending"
+        case .accepted: return "Temp Accepted"
+        case .rejected: return "Temp Rejected"
+        case .active: return "Temp Active"
+        case .expired: return "Temp Expired"
+        }
     }
 }
 
@@ -248,5 +313,5 @@ extension Color {
 }
 
 #Preview{
-    ProjectCell(project: Project.sampleData[0], role: .ADMIN)
+    ProjectCell(project: Project.sampleData[0], role: .ADMIN, tempApproverStatus: .pending)
 }

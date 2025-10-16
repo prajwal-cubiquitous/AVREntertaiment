@@ -14,6 +14,9 @@ struct ProjectListView: View {
     @State private var isShowingMenuSheet = false
     @State private var selectedProject: Project?
     @State private var shouldNavigateToDashboard = false
+    @State private var showingTempApproval = false
+    @State private var tempApproverData: TempApprover?
+    @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @StateObject var viewModel: ProjectListViewModel
     let role: UserRole
     
@@ -140,6 +143,9 @@ struct ProjectListView: View {
         }
         .onAppear {
             viewModel.fetchProjects()
+            if role == .APPROVER {
+                loadTempApproverStatuses()
+            }
         }
         .sheet(isPresented: $viewModel.showingFullNotifications) {
             NotificationView(viewModel: viewModel)
@@ -151,23 +157,44 @@ struct ProjectListView: View {
                 .presentationCornerRadius(20)
                 .presentationBackground(.regularMaterial)
         }
-        .confirmationDialog("Temporary Approver Role", isPresented: $viewModel.showingTempApproverAction) {
-            Button("Accept Role") {
-                Task {
-                    await viewModel.acceptTempApproverRole()
-                    // Navigate to dashboard after acceptance
-                    shouldNavigateToDashboard = true
-                }
-            }
-            Button("Reject Role", role: .destructive) {
-                viewModel.rejectTempApproverRole()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("You have been assigned as a temporary approver for a project. Would you like to accept this role?")
-        }
         .sheet(isPresented: $viewModel.showingRejectionSheet) {
             tempApproverRejectionSheet
+        }
+        .sheet(isPresented: $showingTempApproval) {
+            if let project = selectedProject, let tempApprover = tempApproverData {
+                TempApproverApprovalView(
+                    project: project,
+                    tempApprover: tempApprover,
+                    onAccept: {
+                        await viewModel.acceptTempApproverRole()
+                        showingTempApproval = false
+                        shouldNavigateToDashboard = true
+                    },
+                    onReject: { reason in
+                        await viewModel.confirmRejectionWithReason(reason)
+                        showingTempApproval = false
+                    }
+                )
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func loadTempApproverStatuses() {
+        Task {
+            var statuses: [String: TempApproverStatus] = [:]
+            
+            for project in viewModel.projects {
+                if let projectId = project.id,
+                   let tempApprover = await viewModel.getTempApproverForProject(project) {
+                    statuses[projectId] = tempApprover.status
+                }
+            }
+            
+            await MainActor.run {
+                projectTempStatuses = statuses
+            }
         }
     }
     
@@ -239,12 +266,22 @@ struct ProjectListView: View {
                             Task {
                                 selectedProject = project
                                 let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
-                                if !needsApproval {
+                                if needsApproval {
+                                    // Show temp approver approval view
+                                    if let tempApprover = await viewModel.getTempApproverForProject(project) {
+                                        tempApproverData = tempApprover
+                                        showingTempApproval = true
+                                    }
+                                } else {
                                     shouldNavigateToDashboard = true
                                 }
                             }
                         }) {
-                            ProjectCell(project: project, role: role)
+                            ProjectCell(
+                                project: project, 
+                                role: role, 
+                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                            )
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
@@ -252,7 +289,11 @@ struct ProjectListView: View {
                         })
                     } else if role == .ADMIN {
                         NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)) {
-                            ProjectCell(project: project, role: role)
+                            ProjectCell(
+                                project: project, 
+                                role: role, 
+                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                            )
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
@@ -260,7 +301,11 @@ struct ProjectListView: View {
                         })
                     } else {
                         NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber)) {
-                            ProjectCell(project: project, role: role)
+                            ProjectCell(
+                                project: project, 
+                                role: role, 
+                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                            )
                         }
                         .buttonStyle(.plain)
                         .simultaneousGesture(TapGesture().onEnded {
@@ -351,7 +396,7 @@ struct ProjectListView: View {
                         Task {
                             await viewModel.acceptTempApproverRole()
                             // Navigate to dashboard after acceptance
-                            shouldNavigateToDashboard = true
+//                            shouldNavigateToDashboard = true
                         }
                     }
                     .primaryButton()

@@ -718,6 +718,7 @@ class DelegateViewModel: ObservableObject {
                     "startDate": startDate,
                     "endDate": endDate,
                     "updatedAt": Date(),
+                    "status": "pending"
                 ])
             
             await MainActor.run {

@@ -28,6 +28,7 @@ class ProjectListViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private var projectListener: ListenerRegistration?
+    private let tempApproverService = TempApproverService()
     
     init(phoneNumber: String = "", role: UserRole) {
         self.phoneNumber = phoneNumber
@@ -260,6 +261,7 @@ class ProjectListViewModel: ObservableObject {
                 .document(projectId)
                 .collection("tempApprover")
                 .whereField("approverId", isEqualTo: cleanPhone)
+                .whereField("status", in: ["pending", "active"])
                 .limit(to: 1)
                 .getDocuments()
             
@@ -289,11 +291,22 @@ class ProjectListViewModel: ObservableObject {
                 
                 tempApproverStatus = tempApprover.status
                 
-                // Return true if status is pending (needs user action)
-                if tempApprover.status == .pending {
-                    showingTempApproverAction = true
+                // Return true if status is pending (needs user action) and not expired
+                if tempApprover.status == .pending && !tempApprover.hasExpired {
                     return true
                 }
+                
+                // If expired, automatically remove tempApproverID from project
+                if tempApprover.hasExpired {
+                    try await db
+                        .collection(FirebaseCollections.projects)
+                        .document(projectId)
+                        .updateData([
+                            "tempApproverID": FieldValue.delete()
+                        ])
+                    print("🗑️ Removed expired tempApproverID from project: \(projectId)")
+                }
+                
                 return false
             } else {
                 tempApproverStatus = nil
@@ -312,45 +325,37 @@ class ProjectListViewModel: ObservableObject {
         
         let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
         
-        do {
-            // Get current tempApprover data to determine the correct status
-            let tempApproverSnapshot = try await db
-                .collection(FirebaseCollections.projects)
-                .document(projectId)
-                .collection("tempApprover")
-                .whereField("approverId", isEqualTo: cleanPhone)
-                .limit(to: 1)
-                .getDocuments()
+        // Get current tempApprover to determine the correct status
+        if let tempApprover = await tempApproverService.getTempApproverForProject(
+            projectId: projectId,
+            approverId: cleanPhone
+        ) {
             
-            if let tempApproverDoc = tempApproverSnapshot.documents.first,
-               let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
-                
-                // Create updated tempApprover with accepted status
-                let updatedTempApprover = TempApprover(
-                    approverId: tempApprover.approverId,
-                    startDate: tempApprover.startDate,
-                    endDate: tempApprover.endDate,
-                    status: .accepted,
-                    approvedExpense: tempApprover.approvedExpense
-                )
-                
-                // Determine the actual status based on dates
-                let actualStatus = updatedTempApprover.currentStatus
-                
-                try await tempApproverDoc.reference.updateData([
-                    "status": actualStatus.rawValue,
-                    "updatedAt": Date()
-                ])
-                
+            print("DEBUG 1 : TempApprover role accepted")
+            // Determine the actual status based on dates
+            let updatedTempApprover = TempApprover(
+                approverId: tempApprover.approverId,
+                startDate: tempApprover.startDate,
+                endDate: tempApprover.endDate,
+                status: .accepted,
+                approvedExpense: tempApprover.approvedExpense
+            )
+            
+            let actualStatus = updatedTempApprover.currentStatus
+            
+            let success = await tempApproverService.updateTempApproverStatus(
+                projectId: projectId,
+                approverId: cleanPhone,
+                status: actualStatus
+            )
+            
+            if success {
                 tempApproverStatus = actualStatus
-                showingTempApproverAction = false
-                
                 print("✅ TempApprover role accepted with status: \(actualStatus.rawValue)")
                 HapticManager.notification(.success)
+            } else {
+                HapticManager.notification(.error)
             }
-        } catch {
-            print("❌ Error accepting temp approver role: \(error)")
-            HapticManager.notification(.error)
         }
     }
     
@@ -397,6 +402,8 @@ class ProjectListViewModel: ObservableObject {
                     "updatedAt": Date()
                 ])
                 
+                print("DEBUG 2 : \(newStatus.rawValue)")
+                
                 print("✅ Successfully updated tempApprover status to \(newStatus.rawValue)")
             }
         } catch {
@@ -437,7 +444,6 @@ class ProjectListViewModel: ObservableObject {
                 ])
             
             tempApproverStatus = .rejected
-            showingTempApproverAction = false
             showingRejectionSheet = false
             rejectionReason = ""
             
@@ -451,6 +457,33 @@ class ProjectListViewModel: ObservableObject {
         }
     }
     
+    func confirmRejectionWithReason(_ reason: String) async {
+        guard let project = projects.first(where: { $0.tempApproverID == phoneNumber }) else { return }
+        guard let projectId = project.id else { return }
+        
+        let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+        
+        let success = await tempApproverService.updateTempApproverStatus(
+            projectId: projectId,
+            approverId: cleanPhone,
+            status: .rejected,
+            rejectionReason: reason
+        )
+        
+        if success {
+            tempApproverStatus = .rejected
+            showingRejectionSheet = false
+            rejectionReason = ""
+            
+            // Refresh projects to remove the rejected project
+            await fetchProjects()
+            
+            HapticManager.notification(.success)
+        } else {
+            HapticManager.notification(.error)
+        }
+    }
+    
     // Computed property for filtered projects based on temp approver status
     var filteredProjectsForTempApprover: [Project] {
         if role == .APPROVER && tempApproverStatus == .rejected {
@@ -458,6 +491,19 @@ class ProjectListViewModel: ObservableObject {
             return projects.filter { $0.tempApproverID != phoneNumber }
         }
         return filteredProjects
+    }
+    
+    // MARK: - Temp Approver Data Retrieval
+    
+    func getTempApproverForProject(_ project: Project) async -> TempApprover? {
+        guard let projectId = project.id else { return nil }
+        
+        let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+        
+        return await tempApproverService.getTempApproverForProject(
+            projectId: projectId,
+            approverId: cleanPhone
+        )
     }
 }
 

@@ -79,8 +79,11 @@ struct TempApprover: Identifiable, Codable, Equatable, Hashable {
             return .rejected
         }
         
-        // If not yet accepted, keep pending
+        // If not yet accepted, check if it's expired
         if status == .pending {
+            if now > endDate {
+                return .expired
+            }
             return .pending
         }
         
@@ -109,6 +112,24 @@ struct TempApprover: Identifiable, Codable, Equatable, Hashable {
         }
         
         return status
+    }
+    
+    // Computed property to check if the temp approver period is currently active
+    var isCurrentlyActive: Bool {
+        let now = Date()
+        return now >= startDate && now <= endDate && (status == .accepted || status == .active)
+    }
+    
+    // Computed property to check if the temp approver period has expired
+    var hasExpired: Bool {
+        let now = Date()
+        return now > endDate
+    }
+    
+    // Computed property to check if the temp approver period is pending (not yet started)
+    var isPending: Bool {
+        let now = Date()
+        return now < startDate && status == .accepted
     }
     
     // Helper method to check if status needs to be updated
