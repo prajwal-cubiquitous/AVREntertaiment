@@ -13,8 +13,6 @@ struct TeamMembersDetailView: View {
     @StateObject private var viewModel = TeamMembersDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
-    @State private var selectedRole: UserRole? = nil
-    
     private var filteredMembers: [User] {
         var members = viewModel.teamMembers
         
@@ -27,11 +25,6 @@ struct TeamMembersDetailView: View {
             }
         }
         
-        // Filter by role
-        if let role = selectedRole {
-            members = members.filter { $0.role == role }
-        }
-        
         return members
     }
     
@@ -41,8 +34,8 @@ struct TeamMembersDetailView: View {
                 // Header
                 headerView
                 
-                // Search and Filter
-                searchAndFilterView
+                // Search
+                searchView
                 
                 // Content
                 if viewModel.isLoading {
@@ -104,8 +97,8 @@ struct TeamMembersDetailView: View {
         )
     }
     
-    // MARK: - Search and Filter View
-    private var searchAndFilterView: some View {
+    // MARK: - Search View
+    private var searchView: some View {
         VStack(spacing: 12) {
             // Search Bar
             HStack {
@@ -126,30 +119,6 @@ struct TeamMembersDetailView: View {
             .padding(.vertical, 8)
             .background(Color(.systemGray6))
             .cornerRadius(10)
-            
-            // Role Filter Chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    TeamFilterChip(
-                        title: "All",
-                        isSelected: selectedRole == nil,
-                        color: .blue
-                    ) {
-                        selectedRole = nil
-                    }
-                    
-                    ForEach(UserRole.allCases, id: \.self) { role in
-                        TeamFilterChip(
-                            title: role.displayName,
-                            isSelected: selectedRole == role,
-                            color: role.color
-                        ) {
-                            selectedRole = selectedRole == role ? nil : role
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
         }
         .padding()
         .background(Color(.systemBackground))
@@ -228,23 +197,9 @@ struct TeamMemberRowView: View {
             
             // Member Info
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(member.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    // Role Badge
-                    Text(member.role.displayName)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(member.role.color)
-                        .cornerRadius(8)
-                }
+                Text(member.name)
+                    .font(.headline)
+                    .foregroundColor(.primary)
                 
                 HStack {
                     Image(systemName: "phone.fill")
@@ -275,10 +230,10 @@ struct TeamMemberRowView: View {
                 // Status indicator
                 HStack {
                     Circle()
-                        .fill(member.role == .ADMIN ? .green : .blue)
+                        .fill(.blue)
                         .frame(width: 8, height: 8)
                     
-                    Text(member.role == .ADMIN ? "Project Manager" : "Team Member")
+                    Text("Team Member")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     
@@ -293,29 +248,6 @@ struct TeamMemberRowView: View {
     }
 }
 
-// MARK: - Team Filter Chip
-struct TeamFilterChip: View {
-    let title: String
-    let isSelected: Bool
-    let color: Color
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(isSelected ? .white : color)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(isSelected ? color : color.opacity(0.1))
-                )
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 // MARK: - Team Members Detail ViewModel
 class TeamMembersDetailViewModel: ObservableObject {

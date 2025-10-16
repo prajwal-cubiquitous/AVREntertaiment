@@ -11,10 +11,14 @@ import FirebaseFirestore
 struct DepartmentBudgetDetailView: View {
     let department: String
     let projectId: String
+    let role: UserRole?
+    let phoneNumber: String
     @StateObject private var viewModel = DepartmentBudgetDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedFilter: ExpenseStatus? = nil
     @State private var searchText = ""
+    @State private var showingExpenseChat = false
+    @State private var selectedExpenseForChat: Expense?
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -78,6 +82,23 @@ struct DepartmentBudgetDetailView: View {
         }
         .onAppear {
             viewModel.loadExpenses(for: department, projectId: projectId)
+            print("DEBUG 1 : pritniting role :\(role)")
+        }
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = selectedExpenseForChat {
+//                ExpenseChatView(
+//                    expense: expense,
+//                    userPhoneNumber: viewModel.getCurrentUserPhoneNumber(),
+//                    projectId: projectId,
+//                    role: role ?? .USER
+//                )
+//                
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: phoneNumber, projectId: projectId, role: role ?? .USER
+                )
+
+            }
         }
     }
     
@@ -269,7 +290,14 @@ struct DepartmentBudgetDetailView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(filteredExpenses) { expense in
-                    DepartmentExpenseRowView(expense: expense, approverName: viewModel.getApproverName(for: expense))
+                    DepartmentExpenseRowView(
+                        expense: expense, 
+                        approverName: viewModel.getApproverName(for: expense),
+                        onChatTapped: {
+                            selectedExpenseForChat = expense
+                            showingExpenseChat = true
+                        }
+                    )
                 }
             }
             .padding(.horizontal, 16)
@@ -306,6 +334,7 @@ struct DepartmentFilterChip: View {
 struct DepartmentExpenseRowView: View {
     let expense: Expense
     let approverName: String?
+    let onChatTapped: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -325,20 +354,36 @@ struct DepartmentExpenseRowView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: expense.status.icon)
-                            .font(.caption)
-                            .foregroundColor(expense.status.color)
+                    HStack(spacing: 8) {
+                        // Status badge
+                        HStack(spacing: 4) {
+                            Image(systemName: expense.status.icon)
+                                .font(.caption)
+                                .foregroundColor(expense.status.color)
+                            
+                            Text(expense.status.rawValue.capitalized)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(expense.status.color)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(expense.status.color.opacity(0.1))
+                        .cornerRadius(8)
                         
-                        Text(expense.status.rawValue.capitalized)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(expense.status.color)
+                        // Chat button - only show for pending expenses
+                        if expense.status == .pending {
+                            Button {
+                                HapticManager.selection()
+                                onChatTapped()
+                            } label: {
+                                Image(systemName: "message")
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundColor(.primary)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(expense.status.color.opacity(0.1))
-                    .cornerRadius(8)
                     
                     if let approver = approverName {
                         Text("Approved by \(approver)")
@@ -548,11 +593,19 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     func getApproverName(for expense: Expense) -> String? {
         return approvers[expense.submittedBy]
     }
+    
+    func getCurrentUserPhoneNumber() -> String {
+        // This should be passed from the parent view or retrieved from user defaults
+        // For now, returning a placeholder - you may need to implement proper user management
+        return UserDefaults.standard.string(forKey: "userPhoneNumber") ?? ""
+    }
 }
 
 #Preview {
     DepartmentBudgetDetailView(
         department: "Costumes",
-        projectId: "128YgC7uVnge9RLxVrgG"
+        projectId: "128YgC7uVnge9RLxVrgG",
+        role: .APPROVER,
+        phoneNumber: "9876543218"
     )
 }

@@ -122,10 +122,12 @@ struct DashboardView: View {
                                         HapticManager.selection()
                                     }
                                     
-                                    ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
-                                        showingAnalytics = true
-                                        showingActionMenu = false
-                                        HapticManager.selection()
+                                    if role == .ADMIN {
+                                        ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
+                                            showingAnalytics = true
+                                            showingActionMenu = false
+                                            HapticManager.selection()
+                                        }
                                     }
                                     
                                     ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.teal) {
@@ -342,7 +344,9 @@ struct DashboardView: View {
             if let department = selectedDepartmentForDetail, let project = project {
                 DepartmentBudgetDetailView(
                     department: department,
-                    projectId: project.id ?? ""
+                    projectId: project.id ?? "",
+                    role: role,
+                    phoneNumber: phoneNumber
                 )
                 .presentationDetents([.large])
             }
