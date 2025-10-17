@@ -1250,14 +1250,14 @@ struct TotalBudgetCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            HStack {
-                Image(systemName: "indianrupeesign.circle.fill")
-                    .font(DesignSystem.Typography.title3)
-                    .foregroundColor(.orange)
-                    .symbolRenderingMode(.hierarchical)
-                
-                Spacer()
-            }
+//            HStack {
+//                Image(systemName: "indianrupeesign.circle.fill")
+//                    .font(DesignSystem.Typography.title3)
+//                    .foregroundColor(.orange)
+//                    .symbolRenderingMode(.hierarchical)
+//                
+//                Spacer()
+//            }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.totalProjectBudgetFormatted)
