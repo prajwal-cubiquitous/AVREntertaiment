@@ -15,7 +15,7 @@ struct GroupChatView: View {
     let role: UserRole
     
     @StateObject private var viewModel: GroupChatViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var messageText = ""
     @State private var showingImagePicker = false
     @State private var showingDocumentPicker = false
@@ -454,8 +454,8 @@ struct GroupMessageBubble: View {
         }
     }
     
-    private func highlightedText(_ text: String) -> AttributedString {
-        var attributedString = AttributedString(text)
+    private func highlightedText(_ text: String) -> String {
+        var attributedString = String(text)
         
         // Highlight mentions
         let mentionPattern = "@([A-Za-z0-9_]+)"
@@ -493,7 +493,7 @@ struct ProjectMember: Identifiable, Hashable {
 struct MentionPickerView: View {
     let projectMembers: [ProjectMember]
     let onMentionSelected: (ProjectMember) -> Void
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var searchText = ""
     
     var filteredMembers: [ProjectMember] {

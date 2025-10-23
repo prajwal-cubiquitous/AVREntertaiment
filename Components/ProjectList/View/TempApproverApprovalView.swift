@@ -1,19 +1,20 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct TempApproverApprovalView: View {
     let project: Project
     let tempApprover: TempApprover
     @State private var isProcessing = false
     @State private var showingRejectionSheet = false
     @State private var rejectionReason = ""
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     let onAccept: () async -> Void
     let onReject: (String) async -> Void
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(spacing: DesignSystem.Spacing.large) {
                     // Header Section
@@ -31,15 +32,11 @@ struct TempApproverApprovalView: View {
                 .padding(DesignSystem.Spacing.medium)
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .navigationTitle("Temporary Approver Role")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
+            .compatibleNavigationTitle("Temporary Approver Role")
+            // .navigationBarTitleDisplayMode(.inline) // iOS 14+ only
+            .navigationBarItems(trailing: Button("Cancel") {
+                dismiss()
+            })
         }
         .sheet(isPresented: $showingRejectionSheet) {
             rejectionSheet
@@ -53,12 +50,12 @@ struct TempApproverApprovalView: View {
             Image(systemName: "person.badge.clock.fill")
                 .font(.system(size: 60))
                 .foregroundColor(.orange)
-                .symbolRenderingMode(.hierarchical)
+                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
             
             // Title and Description
             VStack(spacing: DesignSystem.Spacing.small) {
                 Text("Temporary Approver Assignment")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                     .multilineTextAlignment(.center)
@@ -79,7 +76,7 @@ struct TempApproverApprovalView: View {
             HStack {
                 Image(systemName: "folder.fill")
                     .foregroundColor(.blue)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .medium))
                 
                 Text("Project Information")
                     .font(.headline)
@@ -114,7 +111,7 @@ struct TempApproverApprovalView: View {
                     icon: "person.2.circle.fill",
                     label: "Team Members",
                     value: "\(project.teamMembers.count) members",
-                    iconColor: .mint
+                    iconColor: .green
                 )
             }
         }
@@ -127,7 +124,7 @@ struct TempApproverApprovalView: View {
             HStack {
                 Image(systemName: "person.badge.clock.fill")
                     .foregroundColor(.orange)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .medium))
                 
                 Text("Approval Period")
                     .font(.headline)
@@ -195,12 +192,12 @@ struct TempApproverApprovalView: View {
             }) {
                 HStack {
                     if isProcessing {
-                        ProgressView()
+                        CompatibleProgressView()
                             .scaleEffect(0.8)
                             .foregroundColor(.white)
                     } else {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
+                            .font(.system(size: 20, weight: .medium))
                     }
                     
                     Text(isProcessing ? "Accepting..." : "Accept Role")
@@ -218,7 +215,7 @@ struct TempApproverApprovalView: View {
             }) {
                 HStack {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
+                        .font(.system(size: 20, weight: .medium))
                     
                     Text("Reject Role")
                         .fontWeight(.semibold)
@@ -233,17 +230,16 @@ struct TempApproverApprovalView: View {
     
     // MARK: - Rejection Sheet
     private var rejectionSheet: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: DesignSystem.Spacing.large) {
                 VStack(spacing: DesignSystem.Spacing.medium) {
                     Image(systemName: "person.badge.clock.fill")
                         .font(.system(size: 50))
                         .foregroundColor(.red)
-                        .symbolRenderingMode(.hierarchical)
+                        // .symbolRenderingMode(.hierarchical) // iOS 15+ only
                     
                     Text("Reject Temporary Approver Role")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(.primary)
                     
                     Text("Please provide a reason for rejecting this temporary approver role. This will help us understand your decision.")
@@ -257,9 +253,12 @@ struct TempApproverApprovalView: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     
-                    TextField("Enter your reason...", text: $rejectionReason, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .lineLimit(3...6)
+                    TextEditor(text: $rejectionReason)
+                        .frame(minHeight: 100)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                        )
                 }
                 
                 Spacer()
@@ -285,16 +284,11 @@ struct TempApproverApprovalView: View {
                 }
             }
             .padding(DesignSystem.Spacing.large)
-            .navigationTitle("Reject Role")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        showingRejectionSheet = false
-                        rejectionReason = ""
-                    }
-                }
-            }
+            .navigationBarTitle("Reject Role", displayMode: .inline)
+            .navigationBarItems(trailing: Button("Cancel") {
+                showingRejectionSheet = false
+                rejectionReason = ""
+            })
         }
     }
     
@@ -371,17 +365,17 @@ private struct TempApproverInfoRow: View {
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.medium) {
             Image(systemName: icon)
-                .font(.title3)
+                .font(.system(size: 20, weight: .medium))
                 .foregroundColor(iconColor)
                 .frame(width: 28, height: 28)
-                .symbolRenderingMode(.hierarchical)
+                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    // .textCase(.uppercase) // iOS 14+ only
+                    // .tracking(0.5) // iOS 16+ only
                 
                 Text(value)
                     .font(.callout)

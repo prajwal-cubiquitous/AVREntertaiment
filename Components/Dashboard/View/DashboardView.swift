@@ -9,7 +9,7 @@ import SwiftUI
 import FirebaseFirestore
 
 struct DashboardView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @StateObject private var viewModel: DashboardViewModel
     @State private var showingNotifications = false
     @State private var showingPendingApprovals = false
@@ -67,7 +67,7 @@ struct DashboardView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .ignoresSafeArea()
+                .compatibleIgnoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: DesignSystem.Spacing.large) {
@@ -123,14 +123,14 @@ struct DashboardView: View {
                                     }
                                     
                                     if role == .ADMIN {
-                                        ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
+                                        ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.purple) {
                                             showingAnalytics = true
                                             showingActionMenu = false
                                             HapticManager.selection()
                                         }
                                     }
                                     
-                                    ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.teal) {
+                                    ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.blue) {
                                         showingChats = true
                                         showingActionMenu = false
                                         HapticManager.selection()
@@ -148,8 +148,7 @@ struct DashboardView: View {
                                 HapticManager.impact(.medium)
                             }) {
                                 Image(systemName: showingActionMenu ? "xmark" : "chevron.up")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
+                                    .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.white)
                                     .frame(width: 56, height: 56)
                                     .background(Color.accentColor)
@@ -175,8 +174,7 @@ struct DashboardView: View {
                                 HapticManager.impact(.light)
                             }) {
                                 Image(systemName: "doc.text.fill")
-                                    .font(.title2)
-                                    .fontWeight(.semibold)
+                                    .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.white)
                                     .frame(width: 56, height: 56)
                                     .background(Color.blue)
@@ -193,7 +191,7 @@ struct DashboardView: View {
                 // Notification popup overlay
                 if showingNotifications {
                     Color.black.opacity(0.1)
-                        .ignoresSafeArea()
+                        .compatibleIgnoresSafeArea()
                         .onTapGesture {
                             withAnimation(.spring(response: 0.3)) {
                                 showingNotifications = false
@@ -229,8 +227,8 @@ struct DashboardView: View {
                 }
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
+        // .navigationBarTitleDisplayMode(.inline) // iOS 14+ only
+        .compatibleToolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
                     Text(project?.name ?? "Project Dashboard")
@@ -251,7 +249,7 @@ struct DashboardView: View {
                             Image(systemName: "pencil.circle.fill")
                                 .font(.title3)
                                 .foregroundColor(.blue)
-                                .symbolRenderingMode(.hierarchical)
+                                .applysymbolRenderingModeIfAvailable
                         }
                         .buttonStyle(.plain)
                     }
@@ -292,23 +290,15 @@ struct DashboardView: View {
         .sheet(isPresented: $showingReportSheet) {
             // TODO: Add Report View here
             ReportView(projectId: project?.id)
-                .presentationDetents([.large])
+                .applypresentationDetentsLargeIfAvailable
         }
         .sheet(isPresented: $showingAddExpense) {
             if let project = project {
                 AddExpenseView(project: project)
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
             }
         }
         .sheet(isPresented: $showingAnalytics) {
-//            if let projectId = project?.id , let projectBudget = project?.budget{
-////                PredictiveAnalysisView1(projectId: projectId, budget: projectBudget)
-////                    .presentationDetents([.large])
-//                AnalyticsDashboardView(projectId: projectId)
-//                    .presentationDetents([.large])
-//            }
-
-
             if let project = project{
                 PredictiveAnalysisScreen(project: project)
             }
@@ -317,7 +307,7 @@ struct DashboardView: View {
         .sheet(isPresented: $showingDelegate) {
             if let project = project, let role = role {
                 DelegateView(project: project, currentUserRole: role, showingDelegate: $showingDelegate)
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
             }
         }
         .sheet(isPresented: $showingChats) {
@@ -327,7 +317,7 @@ struct DashboardView: View {
                         project: project,
                         currentUserRole: .ADMIN
                     )
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
                 }
             }else{
                 if let project = project {
@@ -336,7 +326,7 @@ struct DashboardView: View {
                         currentUserPhone: phoneNumber,
                         currentUserRole: role ?? .USER
                     )
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
                 }
             }
         }
@@ -348,19 +338,19 @@ struct DashboardView: View {
                     role: role,
                     phoneNumber: phoneNumber
                 )
-                .presentationDetents([.large])
+                .applypresentationDetentsLargeIfAvailable
             }
         }
         .sheet(isPresented: $showingTeamMembersDetail) {
             if let project = project {
                 TeamMembersDetailView(project: project)
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
             }
         }
         .sheet(isPresented: $showingAnonymousExpensesDetail) {
             if let project = project {
                 AnonymousExpensesDetailView(project: project)
-                    .presentationDetents([.large])
+                    .applypresentationDetentsLargeIfAvailable
             }
         }
         .onAppear {
@@ -399,10 +389,7 @@ struct DashboardView: View {
                     .cornerRadius(12)
             }
             
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: DesignSystem.Spacing.medium) {
+            VStack(spacing: DesignSystem.Spacing.medium) {
                 if let tempApproverName = tempApproverName, let tempApproverEndDate = tempApproverEndDate {
                     TempApproverStatsCard(
                         approverName: tempApproverName,
@@ -428,7 +415,8 @@ struct DashboardView: View {
                             Image(systemName: "person.2.fill")
                                 .font(DesignSystem.Typography.title3)
                                 .foregroundColor(.blue)
-                                .symbolRenderingMode(.hierarchical)
+                                .applysymbolRenderingModeIfAvailable
+
                             
                             Spacer()
                             
@@ -437,12 +425,22 @@ struct DashboardView: View {
                                 .foregroundColor(.secondary)
                         }
                         
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(project?.teamMembers.count ?? 0)")
-                                .font(DesignSystem.Typography.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.primary)
-                                .contentTransition(.numericText())
+                        if #available(iOS 16.0, *){
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("\(project?.teamMembers.count ?? 0)")
+                                    .font(DesignSystem.Typography.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.primary)
+                                    .contentTransition(.numericText())
+                            }
+                            }else{
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(project?.teamMembers.count ?? 0)")
+                                        .font(DesignSystem.Typography.title2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.primary)
+                                }
+                            }
                             
                             Text("Team Members")
                                 .font(DesignSystem.Typography.subheadline)
@@ -491,10 +489,17 @@ struct DashboardView: View {
             if viewModel.departmentBudgets.isEmpty {
                 // Empty state for departments
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    Image(systemName: "chart.bar.doc.horizontal")
-                        .font(.system(size: 40))
-                        .foregroundColor(.secondary.opacity(0.6))
-                        .symbolRenderingMode(.hierarchical)
+                    if #available(iOS 15.0, *) {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.system(size: 40))
+                            .foregroundColor(.secondary.opacity(0.6))
+                            .applysymbolRenderingModeIfAvailable
+                    } else {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.system(size: 40))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+
                     
                     Text("No Department Data")
                         .font(DesignSystem.Typography.headline)
@@ -510,10 +515,7 @@ struct DashboardView: View {
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(DesignSystem.CornerRadius.medium)
             } else {
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: DesignSystem.Spacing.medium) {
+                VStack(spacing: DesignSystem.Spacing.medium) {
                     ForEach(viewModel.departmentBudgets, id: \.department) { budget in
                         EnhancedDepartmentBudgetCard(
                             budget: budget,
@@ -624,14 +626,18 @@ struct DashboardView: View {
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
                         
-                        Text(viewModel.totalProjectBudgetFormatted)
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.primary)
-                            .contentTransition(.numericText())
+                        if #available(iOS 16.0, *) {
+                            Text(viewModel.totalProjectBudgetFormatted)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(.primary)
+                                .contentTransition(.numericText())
+                        } else {
+                            Text(viewModel.totalProjectBudgetFormatted)
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(.primary)
+                        }
+
                         
-//                        Text("₹")
-//                            .font(DesignSystem.Typography.caption2)
-//                            .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -860,7 +866,6 @@ struct DashboardView: View {
             .cardStyle(shadow: DesignSystem.Shadow.small)
         }
     }
-}
 
 // MARK: - Budget Comparison Row
 private struct BudgetComparisonRow: View {
@@ -897,10 +902,14 @@ private struct BudgetComparisonRow: View {
                         .frame(height: 12)
                     
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(budget.color.gradient)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [budget.color, budget.color.opacity(0.7)]),
+                                startPoint: .leading,
+                                endPoint: .trailing)
+                        )
                         .frame(width: geometry.size.width * spentPercentage, height: 12)
-                        .animation(.easeInOut(duration: 1.0), value: spentPercentage)
-                }
+                        .animation(.easeInOut(duration: 1.0))                }
             }
             .frame(height: 12)
             
@@ -1091,7 +1100,7 @@ struct ProjectStatsCard: View {
                 Image(systemName: icon)
                     .font(DesignSystem.Typography.title3)
                     .foregroundColor(color)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
                 
                 Spacer()
             }
@@ -1135,7 +1144,7 @@ struct TempApproverStatsCard: View {
                 Image(systemName: "person.badge.clock.fill")
                     .font(DesignSystem.Typography.title3)
                     .foregroundColor(.orange)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
                 
                 Spacer()
             }
@@ -1217,7 +1226,7 @@ struct ActionMenuButton: View {
                     Image(systemName: icon)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
-                        .symbolRenderingMode(.hierarchical)
+                        .applysymbolRenderingModeIfAvailable
                 }
                 
                 // Title
@@ -1254,7 +1263,7 @@ struct TotalBudgetCard: View {
 //                Image(systemName: "indianrupeesign.circle.fill")
 //                    .font(DesignSystem.Typography.title3)
 //                    .foregroundColor(.orange)
-//                    .symbolRenderingMode(.hierarchical)
+//                    .applysymbolRenderingModeIfAvailable
 //                
 //                Spacer()
 //            }
@@ -1290,7 +1299,7 @@ struct TotalBudgetCard: View {
 struct AnonymousExpensesDetailView: View {
     let project: Project
     @StateObject private var viewModel = AnonymousExpensesViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -1300,7 +1309,7 @@ struct AnonymousExpensesDetailView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 40))
                         .foregroundColor(.orange)
-                        .symbolRenderingMode(.hierarchical)
+                        .applysymbolRenderingModeIfAvailable
                     
                     Text("Anonymous Expenses")
                         .font(.title2)
@@ -1494,3 +1503,40 @@ struct AnonymousExpenseCard: View {
 #Preview {
     DashboardView(project: Project.sampleData.first, phoneNumber: "1234567890")
 } 
+
+
+extension View {
+    @ViewBuilder
+    func ifAvailable(iOS15: Bool, apply: (Self) -> some View) -> some View {
+        if #available(iOS 15.0, *) {
+            apply(self)
+        } else {
+            self
+        }
+    }
+}
+
+
+    
+
+extension View {
+    @ViewBuilder
+    var applypresentationDetentsLargeIfAvailable: some View {
+        if #available(iOS 15.0, *) {
+            self.presentationDetents([.large])
+        } else {
+            self
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    var applysymbolRenderingModeIfAvailable: some View {
+        if #available(iOS 15.0, *) {
+            self.symbolRenderingMode(.hierarchical)
+        } else {
+            self
+        }
+    }
+}

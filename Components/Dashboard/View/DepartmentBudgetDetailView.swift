@@ -8,13 +8,14 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct DepartmentBudgetDetailView: View {
     let department: String
     let projectId: String
     let role: UserRole?
     let phoneNumber: String
     @StateObject private var viewModel = DepartmentBudgetDetailViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var selectedFilter: ExpenseStatus? = nil
     @State private var searchText = ""
     @State private var showingExpenseChat = false
@@ -59,7 +60,7 @@ struct DepartmentBudgetDetailView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .compatibleToolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Done") {
                         dismiss()
@@ -113,7 +114,7 @@ struct DepartmentBudgetDetailView: View {
                         .foregroundColor(.secondary)
                     
                     Text(viewModel.totalBudgetFormatted)
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
                 }
@@ -126,7 +127,7 @@ struct DepartmentBudgetDetailView: View {
                         .foregroundColor(.secondary)
                     
                     Text(viewModel.totalSpentFormatted)
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                         .fontWeight(.bold)
                         .foregroundColor(.green)
                 }
@@ -139,7 +140,7 @@ struct DepartmentBudgetDetailView: View {
                         .foregroundColor(.secondary)
                     
                     Text(viewModel.remainingBudgetFormatted)
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                         .fontWeight(.bold)
                         .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
                 }
@@ -254,7 +255,7 @@ struct DepartmentBudgetDetailView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.2)
-                .tint(.accentColor)
+                .accentColor(.accentColor)
             
             Text("Loading expenses...")
                 .font(.subheadline)
@@ -269,7 +270,7 @@ struct DepartmentBudgetDetailView: View {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary.opacity(0.6))
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             Text("No Expenses Found")
                 .font(.title2)

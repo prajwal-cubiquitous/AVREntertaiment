@@ -270,7 +270,7 @@ class DashboardViewModel: ObservableObject {
             }
             
             // Convert to DepartmentBudget objects
-            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint]
+            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .green]
             var budgets = departmentBudgetDict.enumerated().map { index, entry in
                 DepartmentBudget(
                     department: entry.key,

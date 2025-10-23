@@ -9,12 +9,13 @@ import SwiftUI
 import PhotosUI
 import FirebaseStorage
 
+@available(iOS 14.0, *)
 struct ExpenseChatView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @StateObject private var viewModel: ExpenseChatViewModel
     @State private var messageText = ""
     @State private var showingMediaPicker = false
-    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var selectedPhotos: [Any] = []
     @State private var selectedImages: [UIImage] = []
     @State private var isUploadingImage = false
     @State private var uploadProgress: Double = 0.0
@@ -41,7 +42,7 @@ struct ExpenseChatView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 // Header
                 headerView
@@ -57,7 +58,7 @@ struct ExpenseChatView: View {
         .onAppear {
             viewModel.loadChatMessages()
         }
-        .onChange(of: selectedPhotos) { _, newPhotos in
+        .onChange(of: selectedPhotos) { newPhotos in
             Task {
                 await loadSelectedImages(newPhotos)
             }
@@ -69,6 +70,12 @@ struct ExpenseChatView: View {
                 allImageURLs: viewModel.messages.flatMap { $0.mediaURL }
             )
         }
+        .sheet(isPresented: $showingMediaPicker) {
+            ImagePicker(selectedImage: Binding(
+                get: { nil },
+                set: { if let image = $0 { selectedImages.append(image) } }
+            ))
+        }
     }
     
     // MARK: - Header View
@@ -78,7 +85,7 @@ struct ExpenseChatView: View {
                 dismiss()
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.primary)
             }
             
@@ -98,7 +105,7 @@ struct ExpenseChatView: View {
                 // More options
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.primary)
             }
         }
@@ -116,7 +123,7 @@ struct ExpenseChatView: View {
     // MARK: - Chat Messages View
     private var chatMessagesView: some View {
         ScrollView {
-            LazyVStack(spacing: DesignSystem.Spacing.small) {
+            VStack(spacing: DesignSystem.Spacing.small) {
                 ForEach(viewModel.messages) { message in
                     ChatMessageBubble(
                         message: message,
@@ -140,23 +147,42 @@ struct ExpenseChatView: View {
     private var messageInputView: some View {
         HStack(spacing: DesignSystem.Spacing.small) {
             // Media Button
-            PhotosPicker(
-                selection: $selectedPhotos,
-                maxSelectionCount: 5,
-                matching: .images
-            ) {
+            if #available(iOS 16.0, *) {
+                PhotosPicker(
+                    selection: $selectedPhotos,
+                    maxSelectionCount: 5,
+                    matching: .images
+                ) {
                 HStack(spacing: 4) {
                     if isUploadingImage {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: "paperclip")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .bold))
                     }
                 }
                 .foregroundColor(.secondary)
             }
             .disabled(isUploadingImage)
+            } else {
+                // Fallback for iOS 13-15
+                Button {
+                    showingMediaPicker = true
+                } label: {
+                    HStack(spacing: 4) {
+                        if isUploadingImage {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "paperclip")
+                                .font(.system(size: 22, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .disabled(isUploadingImage)
+            }
             
             // Text Input
             VStack(spacing: 8) {
@@ -202,8 +228,30 @@ struct ExpenseChatView: View {
                             sendMessage()
                         } label: {
                             Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
+                                .font(.system(size: 22, weight: .bold))
                                 .foregroundColor(.accentColor)
+                        }
+                    } else {
+                        // Fallback for iOS 13
+                        VStack(spacing: 4) {
+                            ForEach(Array(message.mediaURL.enumerated()), id: \.offset) { index, url in
+                                AsyncImage(url: URL(string: url)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 80, height: 80)
+                                        .clipped()
+                                        .cornerRadius(8)
+                                        .onTapGesture {
+                                            selectedImageIndex = index
+                                            showingImageViewer = true
+                                        }
+                                } placeholder: {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 80, height: 80)
+                                }
+                            }
                         }
                     }
                 }
@@ -262,18 +310,25 @@ struct ExpenseChatView: View {
         }
     }
     
-    private func loadSelectedImages(_ photos: [PhotosPickerItem]) async {
+    private func loadSelectedImages(_ photos: [Any]) async {
         guard !photos.isEmpty else { return }
         
         var loadedImages: [UIImage] = []
         
         for photo in photos {
             do {
-                guard let data = try await photo.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else {
+                if #available(iOS 16.0, *) {
+                    guard let photoItem = photo as? PhotosPickerItem,
+                          let data = try await photoItem.loadTransferable(type: Data.self),
+                          let image = UIImage(data: data) else {
+                        continue
+                    }
+                    loadedImages.append(image)
+                } else {
+                    // For iOS 13-15, we'll use a different approach
+                    // This is a simplified fallback
                     continue
                 }
-                loadedImages.append(image)
             } catch {
                 print("Error loading image: \(error.localizedDescription)")
             }
@@ -349,7 +404,7 @@ struct ExpenseChatView: View {
     }
 }
 
-// MARK: - Chat Message Bubble
+@available(iOS 14.0, *)
 struct ChatMessageBubble: View {
     let message: ExpenseChat
     let isFromCurrentUser: Bool
@@ -387,7 +442,8 @@ struct ChatMessageBubble: View {
                 
                 // Media URLs
                 if !message.mediaURL.isEmpty {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
+                    if #available(iOS 14.0, *) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 4) {
                         ForEach(Array(message.mediaURL.enumerated()), id: \.offset) { index, url in
                             AsyncImage(url: URL(string: url)) { image in
                                 image
@@ -412,6 +468,34 @@ struct ChatMessageBubble: View {
                     }
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isFromCurrentUser ? .trailing : .leading)
+                    } else {
+                        // Fallback for iOS 13
+                        VStack(spacing: 4) {
+                            ForEach(Array(message.mediaURL.enumerated()), id: \.offset) { index, url in
+                                AsyncImage(url: URL(string: url)) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(height: 100)
+                                        .clipped()
+                                        .cornerRadius(8)
+                                        .onTapGesture {
+                                            onImageTapped(url, index)
+                                        }
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.secondary.opacity(0.3))
+                                        .frame(height: 100)
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            ProgressView()
+                                        )
+                                }
+                            }
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isFromCurrentUser ? .trailing : .leading)
+                    }
                 }
                 
                 // Mentions
@@ -461,7 +545,7 @@ struct ImageViewerView: View {
     let imageIndex: Int
     let allImageURLs: [String]
     
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var currentIndex: Int
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
@@ -574,7 +658,7 @@ struct ImageViewerView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .bold))
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)
@@ -611,7 +695,7 @@ struct ImageViewerView: View {
                         shareImage()
                     } label: {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .bold))
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)
@@ -626,7 +710,7 @@ struct ImageViewerView: View {
                         downloadImage()
                     } label: {
                         Image(systemName: "arrow.down.circle")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .bold))
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)

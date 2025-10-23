@@ -10,6 +10,7 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct ProjectDetailView: View {
     // The view takes a single project object as input.
     var project: Project
@@ -27,8 +28,8 @@ struct ProjectDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
                 // MARK: - Main Header Card
                 ProjectHeaderView(project: project)
                     .cardStyle()
@@ -64,27 +65,30 @@ struct ProjectDetailView: View {
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    HapticManager.impact(.light)
-                    showingChats = true
-                } label: {
-                    Image(systemName: "message.fill")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                        .symbolRenderingMode(.hierarchical)
-                }
+        .navigationBarItems(trailing:
+            Button {
+                HapticManager.impact(.light)
+                showingChats = true
+            } label: {
+                Image(systemName: "message.fill")
+                    .font(.title3)
+                    .foregroundColor(.primary)
+                    .applysymbolRenderingModeIfAvailable
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            addExpenseButton
-        }
+        )
+        .overlay(
+            VStack {
+                Spacer()
+                addExpenseButton
+            }
+        )
         .onAppear {
             viewModel.fetchApprovedExpenses()
         }
-        .refreshable {
-            viewModel.fetchApprovedExpenses()
+        .compatibleRefreshable {
+            Task {
+                await viewModel.fetchApprovedExpenses()
+            }
         }
     }
     
@@ -94,15 +98,30 @@ struct ProjectDetailView: View {
             HapticManager.impact(.medium)
             showingAddExpense = true
         }) {
-            Label("Add New Expense", systemImage: "plus")
-                .font(DesignSystem.Typography.headline)
+            Group {
+                if #available(iOS 14.0, *) {
+                    Label("Add New Expense", systemImage: "plus")
+                } else {
+                    HStack {
+                        Image(systemName: "plus")
+                        Text("Add New Expense")
+                    }
+                }
+            }
+            .font(DesignSystem.Typography.headline)
         }
         .primaryButton()
         .padding(DesignSystem.Spacing.medium)
         .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.extraLarge)
+            Group {
+                if #available(iOS 15.0, *) {
+                    Color(.systemBackground)
+                } else {
+                    Color(.systemBackground)
+                }
+            }
         )
+        .cornerRadius(DesignSystem.CornerRadius.extraLarge)
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView(project: project)
         }
@@ -112,14 +131,14 @@ struct ProjectDetailView: View {
                     project: project,
                     currentUserRole: .ADMIN
                 )
-                .presentationDetents([.large])
+                .applypresentationDetentsLargeIfAvailable
             } else {
                 ChatsView(
                     project: project,
                     currentUserPhone: phoneNumber,
                     currentUserRole: role ?? .USER
                 )
-                .presentationDetents([.large])
+                .applypresentationDetentsLargeIfAvailable
             }
         }
     }
@@ -193,7 +212,7 @@ private struct KeyInformationView: View {
                     icon: "person.crop.circle.badge.checkmark",
                     label: "Project Manager",
                     value: project.managerId,
-                    iconColor: .indigo
+                    iconColor: .blue
                 )
                 
                 Divider()
@@ -202,7 +221,7 @@ private struct KeyInformationView: View {
                     icon: "person.2.circle.fill",
                     label: "Team Size",
                     value: "\(project.teamMembers.count) members",
-                    iconColor: .mint
+                    iconColor: .green
                 )
             }
             
@@ -233,7 +252,7 @@ private struct EnhancedDepartmentBreakdownView: View {
             if viewModel.isLoading {
                 HStack {
                     Spacer()
-                    ProgressView()
+                    CompatibleProgressView()
                         .scaleEffect(0.8)
                     Text("Loading expenses...")
                         .font(.caption)
@@ -361,9 +380,26 @@ private struct EnhancedDepartmentRow: View {
                 }
                 
                 // Progress bar
-                ProgressView(value: min(spentPercentage, 1.0))
-                    .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                if #available(iOS 14.0, *) {
+                    ProgressView(value: min(spentPercentage, 1.0))
+                        .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                        .scaleEffect(y: 0.8)
+                } else {
+                    // Fallback for iOS 13
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color(.systemGray5))
+                                .frame(height: 4)
+                            
+                            Rectangle()
+                                .fill(progressColor)
+                                .frame(width: geometry.size.width * min(spentPercentage, 1.0), height: 4)
+                        }
+                    }
+                    .frame(height: 4)
                     .scaleEffect(y: 0.8)
+                }
                 
                 // Percentage text
                 HStack {
@@ -395,7 +431,7 @@ private struct EmptyStateRow: View {
             Image(systemName: icon)
                 .foregroundColor(.secondary)
                 .font(DesignSystem.Typography.title3)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             Text(text)
                 .font(DesignSystem.Typography.callout)
@@ -451,14 +487,12 @@ private struct InfoRowDetial: View {
                 .font(DesignSystem.Typography.title3)
                 .foregroundColor(iconColor)
                 .frame(width: 28, height: 28)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text(label)
+                Text(label.uppercased())
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
                 
                 Text(value)
                     .font(DesignSystem.Typography.callout)
@@ -485,7 +519,7 @@ private struct TeamMembersView: View {
                     text: "No team members assigned"
                 )
             } else {
-                LazyVStack(spacing: DesignSystem.Spacing.small) {
+                VStack(spacing: DesignSystem.Spacing.small) {
                     ForEach(teamMembers, id: \.self) { memberId in
                         TeamMemberRow(memberId: memberId)
                     }
@@ -504,7 +538,7 @@ private struct TeamMemberRow: View {
             Image(systemName: "person.circle.fill")
                 .foregroundColor(.blue)
                 .font(DesignSystem.Typography.title3)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(memberId)

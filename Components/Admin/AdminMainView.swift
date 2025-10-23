@@ -1,5 +1,6 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct AdminMainView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var selectedTab: AdminTab = .projects
@@ -39,7 +40,7 @@ struct AdminMainView: View {
                         .environmentObject(authService)
                         .tag(AdminTab.users)
                 }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .compatibleTabViewStyle
                 .animation(DesignSystem.Animation.standardSpring, value: selectedTab)
                 
                 // Tab Bar at bottom
@@ -54,7 +55,7 @@ struct AdminMainView: View {
         .onAppear {
             projectListViewModel.fetchProjects()
         }
-        .refreshable {
+        .compatibleRefreshable {
             projectListViewModel.fetchProjects()
         }
     }
@@ -72,8 +73,7 @@ struct AdminMainView: View {
                         .foregroundColor(.secondary)
                     
                     Text("No Projects Yet")
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(.system(size: 22, weight: .bold))
                         .foregroundColor(.primary)
                     
                     Text("Create your first project to get started")
@@ -84,7 +84,7 @@ struct AdminMainView: View {
                     Button("Create Project") {
                         isShowingCreateProject = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .compatibleButtonStyle
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,7 +104,7 @@ struct AdminMainView: View {
                 }) {
                     VStack(spacing: DesignSystem.Spacing.extraSmall) {
                         Image(systemName: selectedTab == tab ? tab.selectedIcon : tab.icon)
-                            .font(.title3)
+                            .font(.system(size: 20, weight: .medium))
                             .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
                         
                         Text(tab.rawValue)

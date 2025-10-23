@@ -1,5 +1,6 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct AuthenticationView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var phoneNumber = ""
@@ -84,7 +85,7 @@ struct AuthenticationView: View {
             ZStack {
                 // Background
                 Color(.systemBackground)
-                    .ignoresSafeArea()
+                    .compatibleIgnoresSafeArea()
                 
                 VStack(spacing: 0) {
                     // Top section with method selector
@@ -109,12 +110,14 @@ struct AuthenticationView: View {
                 }
             }
         }
-        .alert("Authentication Error", isPresented: .constant(errorMessage != nil)) {
-            Button("OK") {
-                errorMessage = nil
-            }
-        } message: {
-            Text(errorMessage ?? "")
+        .alert(isPresented: .constant(errorMessage != nil)) {
+            Alert(
+                title: Text("Authentication Error"),
+                message: Text(errorMessage ?? ""),
+                dismissButton: .default(Text("OK")) {
+                    errorMessage = nil
+                }
+            )
         }
     }
     
@@ -182,7 +185,7 @@ struct AuthenticationView: View {
         .background(
             RoundedRectangle(cornerRadius: 32)
                 .fill(Color(.secondarySystemBackground))
-                .ignoresSafeArea(edges: .bottom)
+                .compatibleIgnoresSafeArea(.bottom)
         )
     }
     
@@ -225,8 +228,8 @@ struct AuthenticationView: View {
             }) {
                 HStack(spacing: DesignSystem.Spacing.small) {
                     if isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        CompatibleProgressView()
+                            // .progressViewStyle(CircularProgressViewStyle(tint: .white)) // iOS 14+ only
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: "arrow.right")
@@ -292,7 +295,7 @@ struct AuthenticationView: View {
                     // Country Code
                     HStack(spacing: DesignSystem.Spacing.small) {
                         Text("🇮🇳")
-                            .font(.title3)
+                            .font(.system(size: 20, weight: .medium))
                         
                         Text("+91")
                             .font(.system(size: 18, weight: .semibold))
@@ -330,8 +333,8 @@ struct AuthenticationView: View {
             }) {
                 HStack(spacing: DesignSystem.Spacing.small) {
                     if isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        CompatibleProgressView()
+                            // .progressViewStyle(CircularProgressViewStyle(tint: .white)) // iOS 14+ only
                             .scaleEffect(0.8)
                     } else {
                         Image(systemName: "arrow.right")
@@ -352,7 +355,7 @@ struct AuthenticationView: View {
             }
             .disabled(!isPhoneNumberValid || isLoading)
             .animation(.easeInOut(duration: 0.2), value: isPhoneNumberValid)
-            .accessibilityLabel("Send OTP code to entered phone number")
+            // .accessibilityLabel("Send OTP code to entered phone number") // iOS 14+ only
         }
     }
     
@@ -426,8 +429,8 @@ struct AuthenticationView: View {
                 }) {
                     HStack(spacing: DesignSystem.Spacing.small) {
                         if isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            CompatibleProgressView()
+                                // .progressViewStyle(CircularProgressViewStyle(tint: .white)) // iOS 14+ only
                                 .scaleEffect(0.8)
                         } else {
                             Image(systemName: "checkmark")

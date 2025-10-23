@@ -7,8 +7,9 @@
 
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct PendingApprovalsView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @StateObject private var viewModel: PendingApprovalsViewModel
     @State private var showingExpenseDetail = false
     @State private var selectedExpense: Expense?
@@ -25,10 +26,10 @@ struct PendingApprovalsView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+                    .compatibleIgnoresSafeArea()
                 
                 VStack(spacing: 0) {
                     // Minimal Header
@@ -55,13 +56,13 @@ struct PendingApprovalsView: View {
         .onAppear {
             viewModel.loadPendingExpenses()
         }
-        .alert("Confirm Action", isPresented: $viewModel.showingConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button(viewModel.pendingAction == .approve ? "Approve" : "Reject", role: viewModel.pendingAction == .approve ? .none : .destructive) {
-                viewModel.executeAction()
-            }
-        } message: {
-            Text(viewModel.confirmationMessage)
+        .alert(isPresented: $viewModel.showingConfirmation) {
+            Alert(
+                title: Text("Confirm Action"),
+                message: Text(viewModel.confirmationMessage),
+                primaryButton: .cancel(),
+                secondaryButton: viewModel.pendingAction == .approve ? .default(Text("Approve"), action: { viewModel.executeAction() }) : .destructive(Text("Reject"), action: { viewModel.executeAction() })
+            )
         }
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpense {
@@ -87,7 +88,7 @@ struct PendingApprovalsView: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)
                     .foregroundColor(.secondary)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
             }
             
             Spacer()
@@ -198,7 +199,7 @@ struct PendingApprovalsView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 50))
                     .foregroundColor(.green)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
                 
                 Text("All Caught Up!")
                     .font(.title2)
@@ -289,9 +290,17 @@ struct PendingApprovalsView: View {
             .padding(.horizontal, DesignSystem.Spacing.medium)
             .padding(.bottom, DesignSystem.Spacing.medium)
             .background(
-                Rectangle()
-                    .fill(.regularMaterial)
-                    .ignoresSafeArea()
+                Group {
+                    if #available(iOS 15, *) {
+                        Rectangle()
+                            .fill(.regularMaterial)
+                            .ignoresSafeArea()
+                    } else {
+                        Rectangle()
+                            .fill(Color(.systemBackground).opacity(0.9)) // fallback style
+                            .ignoresSafeArea()
+                    }
+                }
             )
         }
     }
@@ -345,7 +354,7 @@ struct ModernExpenseApprovalRow: View {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
                     .foregroundColor(isSelected ? .green : .secondary)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
             }
             .buttonStyle(.plain)
             
@@ -425,26 +434,12 @@ struct ModernExpenseApprovalRow: View {
             }
             .buttonStyle(.plain)
         }
-        .task {
-            do {
-                UserName = try await viewModel.loadUserData(userId: expense.submittedBy)
-            } catch {
-                // Now you can handle specific failures
-                print("Failed to load user data: \(error)") // More descriptive now
-                
-                // Optional: Update the UI based on the specific error
-                if let userDataError = error as? UserDataError {
-                    switch userDataError {
-                    case .userNotFound:
-                        print("User Not Found Error")
-                    case .missingNameField:
-                        print("Name not available")
-                    case .invalidUserId:
-                        print("Invalid user")
-                    }
-                } else {
-                    // Handle other errors like network issues
-                   print("Error loading")
+        .onAppear {
+            Task {
+                do {
+                    UserName = try await viewModel.loadUserData(userId: expense.submittedBy)
+                } catch {
+                    print("Error loading user data: \(error)")
                 }
             }
         }
@@ -462,3 +457,21 @@ struct ModernExpenseApprovalRow: View {
 //#Preview {
 //    PendingApprovalsView(role: .ADMIN, project: .constant(Project(id: "123", name: "Test"))
 //} 
+
+
+extension View {
+    @ViewBuilder
+    func asyncTask(_ action: @escaping @Sendable () async -> Void) -> some View {
+        if #available(iOS 15.0, *) {
+            self.task {
+                await action()
+            }
+        } else {
+            self.onAppear {
+                Task {
+                    await action()
+                }
+            }
+        }
+    }
+}

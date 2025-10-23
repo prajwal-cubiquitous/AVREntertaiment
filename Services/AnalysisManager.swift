@@ -203,8 +203,7 @@ class AnalysisManager: ObservableObject {
     private func getDynamicColor(for name: String, at index: Int) -> Color {
         let colorPalette: [Color] = [
             .blue, .green, .orange, .red, .purple,
-            .brown, .pink, .cyan, .mint, .indigo,
-            .teal, .yellow, .gray, .primary, .secondary
+            .pink, .yellow, .gray, .primary, .secondary
         ]
         
         let colorIndex = index % colorPalette.count

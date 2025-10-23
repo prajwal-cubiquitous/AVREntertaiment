@@ -14,7 +14,7 @@ import SwiftUI
 struct CreateProjectView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @StateObject private var viewModel = CreateProjectViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -36,21 +36,21 @@ struct CreateProjectView: View {
             }
             .navigationTitle("New Project")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.secondary)
+            .navigationBarItems(leading:
+                Button("Cancel") {
+                    dismiss()
                 }
-            }
+                .foregroundColor(.secondary)
+            )
             .onAppear {
                 viewModel.setAuthService(authService)
             }
-            .alert("Project Status", isPresented: $viewModel.showAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.alertMessage)
+            .alert(isPresented: $viewModel.showAlert) {
+                Alert(
+                    title: Text("Project Status"),
+                    message: Text(viewModel.alertMessage),
+                    dismissButton: .cancel(Text("OK"))
+                )
             }
         }
     }
@@ -133,10 +133,17 @@ struct CreateProjectView: View {
                         viewModel.addDepartment()
                     }
                 }) {
-                    Label("Add Department", systemImage: "plus.circle.fill")
-                        .foregroundColor(.accentColor)
-                        .font(DesignSystem.Typography.callout)
-                        .fontWeight(.medium)
+                    if #available(iOS 16, *) {
+                        Label("Add Department", systemImage: "plus.circle.fill")
+                            .foregroundColor(.accentColor)
+                            .font(DesignSystem.Typography.callout)
+                            .fontWeight(.medium)
+                    } else {
+                        Label("Add Department", systemImage: "plus.circle.fill")
+                            .foregroundColor(.accentColor)
+                            .font(.system(size: 16, weight: .medium, design: .default)) // Use weight here
+                    }
+
                 }
                 .secondaryButton()
                 .padding(.top, DesignSystem.Spacing.small)
@@ -276,7 +283,7 @@ struct CreateProjectView: View {
             Image(systemName: "indianrupeesign.circle.fill")
                 .foregroundColor(.green)
                 .font(DesignSystem.Typography.callout)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             Text("Total Budget:")
                 .font(DesignSystem.Typography.callout)
@@ -304,7 +311,7 @@ struct CreateProjectView: View {
                         .scaleEffect(0.8)
                 } else {
                     Label("Create Project", systemImage: "plus.app.fill")
-                        .symbolRenderingMode(.hierarchical)
+                        .applysymbolRenderingModeIfAvailable
                 }
             }
             .font(DesignSystem.Typography.headline)
@@ -329,14 +336,19 @@ struct SearchableDropdownView: View {
         VStack(alignment: .leading) {
             TextField(title, text: $searchText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                .overlay(alignment: .trailing) {
-                    if !searchText.isEmpty {
-                        Button(action: { searchText = "" }) {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
-                        }.padding(.trailing, 8)
+                .overlay(
+                    HStack {
+                        Spacer()
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.trailing, 8)
+                        }
                     }
-                }
-            
+                )
+
             if !items.isEmpty && !searchText.isEmpty {
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -390,7 +402,7 @@ private struct SectionHeaderLabel: View {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .font(DesignSystem.Typography.callout)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             Text(title)
                 .sectionHeaderStyle()
@@ -423,11 +435,11 @@ private struct DepartmentInputRow: View {
                     
                     TextField("₹0", text: $item.amount)
                         .keyboardType(.decimalPad)
-                        .font(DesignSystem.Typography.callout)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium, design: .default))  // specify weight here
                         .multilineTextAlignment(.trailing)
                         .textFieldStyle(.plain)
                         .frame(width: 100)
+
                 }
             }
             

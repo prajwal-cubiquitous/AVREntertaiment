@@ -10,6 +10,7 @@ enum TempApproverStatus: String, Codable, CaseIterable {
     case expired = "expired"
 }
 
+@available(iOS 14.0, *)
 struct TempApprover: Identifiable, Codable, Equatable, Hashable {
     @DocumentID var id: String?
     
@@ -24,7 +25,7 @@ struct TempApprover: Identifiable, Codable, Equatable, Hashable {
         self.approverId = approverId
         self.startDate = startDate
         self.endDate = endDate
-        self.updatedAt = Date.now
+        self.updatedAt = Date()
         self.status = status
         self.approvedExpense = approvedExpense
     }

@@ -14,7 +14,7 @@ struct ExpenseApprovalRow: View {
             } label: {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(isSelected ? .blue : .gray)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .medium))
             }
             .padding(.trailing, DesignSystem.Spacing.small)
             
@@ -51,7 +51,7 @@ struct ExpenseApprovalRow: View {
             } label: {
                 Image(systemName: "info.circle")
                     .foregroundColor(.blue)
-                    .font(.title3)
+                    .font(.system(size: 20, weight: .medium))
             }
         }
         .padding(.horizontal, DesignSystem.Spacing.medium)

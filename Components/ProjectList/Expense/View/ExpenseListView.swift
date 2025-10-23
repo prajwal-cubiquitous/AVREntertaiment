@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct ExpenseListView: View {
     let project: Project
     @StateObject private var viewModel: ExpenseListViewModel
@@ -56,7 +57,7 @@ struct ExpenseListView: View {
         HStack {
             Spacer()
             VStack(spacing: 10) {
-                ProgressView()
+                CompatibleProgressView()
                     .scaleEffect(0.8)
                 Text("Loading expenses...")
                     .font(.caption)
@@ -89,7 +90,7 @@ struct ExpenseListView: View {
     
     // MARK: - Expenses List
     private var expensesList: some View {
-        LazyVStack(spacing: 12) {
+        VStack(spacing: 12) {
             ForEach(viewModel.expenses.prefix(5)) { expense in
                 ExpenseRowView(
                     expense: expense,

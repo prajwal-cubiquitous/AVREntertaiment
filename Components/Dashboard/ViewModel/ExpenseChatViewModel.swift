@@ -9,6 +9,7 @@ import Foundation
 import FirebaseFirestore
 import Combine
 
+@available(iOS 14.0, *)
 @MainActor
 class ExpenseChatViewModel: ObservableObject {
     @Published var messages: [ExpenseChat] = []

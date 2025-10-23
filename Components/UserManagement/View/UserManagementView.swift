@@ -1,5 +1,6 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct UserManagementView: View {
     @State private var showCreateUser = false
     @State private var showUserList = false
@@ -14,9 +15,8 @@ struct UserManagementView: View {
                     managementOptionsSection
                 }
                 .padding(DesignSystem.Spacing.medium)
-            }
-            .navigationTitle("User Management")
-            .navigationBarTitleDisplayMode(.large)
+                }
+                .compatibleNavigationTitle("User Management")
         }
         .sheet(isPresented: $showCreateUser) {
             CreateUserView()
@@ -34,7 +34,7 @@ struct UserManagementView: View {
             Image(systemName: "person.3.sequence")
                 .font(.system(size: 60))
                 .foregroundColor(.accentColor)
-                .symbolRenderingMode(.hierarchical)
+                // .compatibleSymbolRenderingMode(.hierarchical) // iOS 15+ only
             
             Text("User Management")
                 .font(DesignSystem.Typography.title2)
@@ -83,6 +83,7 @@ struct UserManagementView: View {
     }
 }
 
+@available(iOS 14.0, *)
 struct ManagementOptionCard: View {
     let title: String
     let description: String
@@ -98,7 +99,7 @@ struct ManagementOptionCard: View {
         }) {
             HStack(spacing: DesignSystem.Spacing.medium) {
                 Image(systemName: icon)
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(color)
                     .frame(width: 40, height: 40)
                     .background(color.opacity(0.1))

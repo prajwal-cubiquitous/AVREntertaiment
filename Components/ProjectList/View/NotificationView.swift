@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NotificationView: View {
     @ObservedObject var viewModel: ProjectListViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var selectedExpense: (String, Expense)? // (projectId, expense)
     
     var body: some View {

@@ -107,15 +107,15 @@ struct ContentView: View {
 private struct SplashView: View {
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
+            Color.compatibleSystemBackground
+                .compatibleIgnoresSafeArea()
             
             VStack(spacing: DesignSystem.Spacing.large) {
                 // App Logo
                 Image(systemName: "film.fill")
                     .font(.system(size: 80))
-                    .foregroundColor(.accentColor)
-                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.compatibleAccentColor)
+                    // .compatibleSymbolRenderingMode(.hierarchical) // iOS 15+ only
                 
                 VStack(spacing: DesignSystem.Spacing.small) {
                     Text("AVR Entertainment")
@@ -129,7 +129,7 @@ private struct SplashView: View {
                 }
                 
                 // Loading indicator
-                ProgressView()
+                CompatibleProgressView()
                     .scaleEffect(1.2)
                     .padding(.top, DesignSystem.Spacing.large)
             }

@@ -12,7 +12,7 @@ struct AnalysisView: View {
     let projectId: String
     let reportData: ReportData
     @StateObject private var viewModel = AnalysisViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     var body: some View {
         NavigationView {

@@ -4,7 +4,7 @@ import FirebaseFirestore
 struct AdminProjectDetailView: View {
     let project: Project
     @StateObject private var viewModel: AdminProjectDetailViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     init(project: Project) {
         self.project = project
@@ -53,7 +53,7 @@ struct AdminProjectDetailView: View {
             Image(systemName: "folder.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.blue.gradient)
-                .symbolRenderingMode(.hierarchical)
+                .applysymbolRenderingModeIfAvailable
             
             Text("Project Administration")
                 .font(.title2.weight(.bold))
@@ -412,7 +412,7 @@ struct ModernEditableCard: View {
                     Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
                         .font(.title3)
                         .foregroundStyle(isEditing ? .green : .blue)
-                        .symbolRenderingMode(.hierarchical)
+                        .applysymbolRenderingModeIfAvailable
                 }
             }
             
@@ -530,7 +530,7 @@ struct ModernSectionHeader: View {
                 Image(systemName: isEditing ? "xmark.circle.fill" : "pencil.circle.fill")
                     .font(.title3)
                     .foregroundStyle(isEditing ? .red : .blue)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
             }
         }
     }
@@ -1180,7 +1180,7 @@ struct TempApproverSheet: View {
     let allApprovers: [User]
     let onSet: (TempApprover) -> Void
     
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var searchText = ""
     @State private var selectedApprover: User?
     @State private var startDate = Date()

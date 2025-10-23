@@ -252,7 +252,7 @@ class ReportViewModel: ObservableObject {
             }
             
             // Convert to DepartmentBudget objects
-            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .mint]
+            let colors: [Color] = [.blue, .green, .orange, .purple, .pink, .red, .yellow, .black]
             var budgets = departmentBudgetDict.enumerated().map { index, entry in
                 DepartmentBudget(
                     department: entry.key,
@@ -316,7 +316,9 @@ class ReportViewModel: ObservableObject {
         Task {
             do {
                 let pdfData = try await generatePDFReport()
-                let fileName = "AVR_Entertainment_Report_\(Date().formatted(.dateTime.day().month().year())).pdf"
+                let formatter = DateFormatter()
+                formatter.dateFormat = "dd_MM_yyyy"
+                let fileName = "AVR_Entertainment_Report_\(formatter.string(from: Date())).pdf"
                 let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
                 
                 try pdfData.write(to: tempURL)
@@ -334,7 +336,9 @@ class ReportViewModel: ObservableObject {
         Task {
             do {
                 let csvData = try await generateExcelReport()
-                let fileName = "AVR_Entertainment_Report_\(Date().formatted(.dateTime.day().month().year())).csv"
+                let formatter = DateFormatter()
+                formatter.dateFormat = "dd_MM_yyyy"
+                let fileName = "AVR_Entertainment_Report_\(formatter.string(from: Date())).csv"
                 let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
                 
                 try csvData.write(to: tempURL, atomically: true, encoding: .utf8)
@@ -749,7 +753,7 @@ class ReportViewModel: ObservableObject {
                     .font: UIFont.systemFont(ofSize: 8),
                     .foregroundColor: UIColor.black
                 ]
-                let amountText = "₹\(Int(category.amount).formatted())"
+                let amountText = "₹\(Int(category.amount).formattedWithSeparator())"
                 let amountSize = amountText.size(withAttributes: amountAttributes)
                 amountText.draw(at: CGPoint(x: barX + (barWidth - amountSize.width) / 2, y: barY - 12), withAttributes: amountAttributes)
             }
@@ -773,7 +777,9 @@ class ReportViewModel: ObservableObject {
         
         // MARK: - Report Header
         csvContent += "AVR ENTERTAINMENT - PROJECT FINANCIAL REPORT\n"
-        csvContent += "Report Generated: \(Date().formatted(.dateTime.day().month().year().hour().minute()))\n"
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy HH:mm"
+        csvContent += "Report Generated: \(formatter.string(from: Date()))\n"
         csvContent += "Filter Period: \(selectedDateRange.description)\n"
         csvContent += "Department: \(selectedDepartment)\n\n"
         
@@ -857,7 +863,9 @@ class ReportViewModel: ObservableObject {
         let sortedExpenses = filteredExpenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
         
         for expense in sortedExpenses {
-            let dateString = expense.createdAt.dateValue().formatted(.dateTime.day().month().year())
+            let formatter = DateFormatter()
+            formatter.dateFormat = "dd/MM/yyyy"
+            let dateString = formatter.string(from: expense.createdAt.dateValue())
             let category = expense.categories.first ?? "Other"
             let description = expense.description.replacingOccurrences(of: ",", with: ";") // Handle commas in description
             
@@ -877,7 +885,9 @@ class ReportViewModel: ObservableObject {
         }
         
         for (month, expenses) in monthlyData.sorted(by: { $0.key < $1.key }) {
-            let monthString = month.formatted(.dateTime.month(.wide).year())
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMMM yyyy"
+            let monthString = formatter.string(from: month)
             let totalAmount = expenses.reduce(0) { $0 + $1.amount }
             let averageAmount = expenses.count > 0 ? totalAmount / Double(expenses.count) : 0
             
@@ -885,7 +895,7 @@ class ReportViewModel: ObservableObject {
         }
         
         return csvContent
-    }
+    } 
     
     // MARK: - Share Sheet Presentation
     private func presentShareSheet(url: URL) async {
@@ -918,6 +928,6 @@ struct ExpenseCategory {
     let amount: Double
     
     var formattedAmount: String {
-        "₹\(Int(amount).formatted())"
+        "₹\(Int(amount).formattedWithSeparator())"
     }
 }

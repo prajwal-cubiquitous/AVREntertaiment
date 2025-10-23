@@ -60,7 +60,7 @@ struct NotificationsView: View {
             
             // Notifications List
             ScrollView {
-                LazyVStack(spacing: DesignSystem.Spacing.extraSmall) {
+                VStack(spacing: DesignSystem.Spacing.extraSmall) {
                     ForEach(notifications, id: \.id) { notification in
                         NotificationRow(notification: notification)
                         
@@ -92,8 +92,8 @@ struct NotificationsView: View {
             .background(Color(.systemBackground))
         }
         .background(Color(.systemBackground))
-        .fullScreenCover(isPresented: $OpenPendingApprovals) {
-            NavigationStack {
+        .sheet(isPresented: $OpenPendingApprovals) {
+            NavigationView {
                 PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
             }
         }

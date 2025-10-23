@@ -3,7 +3,7 @@ import FirebaseFirestore
 
 struct CreateUserView: View {
     @StateObject private var viewModel = CreateUserViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     
     var body: some View {
@@ -190,7 +190,7 @@ struct LoadingView: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.3)
-                .ignoresSafeArea()
+                .compatibleIgnoresSafeArea()
             
             VStack(spacing: 16) {
                 ProgressView()

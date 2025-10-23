@@ -8,9 +8,10 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct ExpenseDetailView: View {
     let expense: Expense
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var remark: String = ""
     @State private var showingActionSheet = false
     @State private var isProcessing = false
@@ -28,10 +29,10 @@ struct ExpenseDetailView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ZStack {
                 Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+                    .compatibleIgnoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: DesignSystem.Spacing.large) {
@@ -59,8 +60,7 @@ struct ExpenseDetailView: View {
                     .padding(.bottom, DesignSystem.Spacing.extraLarge)
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .compatibleToolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Expense Details")
                         .font(.headline)
@@ -71,7 +71,7 @@ struct ExpenseDetailView: View {
                     Button("Close") {
                         dismiss()
                     }
-                    .fontWeight(.medium)
+                    .font(.system(size: 16, weight: .medium))
                 }
             }
         }
@@ -90,31 +90,35 @@ struct ExpenseDetailView: View {
                 ]
             )
         }
-        .alert("Success", isPresented: $showingSuccessAlert) {
-            Button("OK") {
-                dismiss()
-            }
-        } message: {
-            Text(successMessage)
-        }
-        .overlay {
-            if isProcessing {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                
-                VStack(spacing: DesignSystem.Spacing.medium) {
-                    ProgressView()
-                        .scaleEffect(1.2)
-                    
-                    Text("Processing...")
-                        .font(.subheadline)
-                        .foregroundColor(.white)
+        .alert(isPresented: $showingSuccessAlert) {
+            Alert(
+                title: Text("Success"),
+                message: Text(successMessage),
+                dismissButton: .default(Text("OK")) {
+                    dismiss()
                 }
-                .padding(DesignSystem.Spacing.large)
-                .background(Color(.systemGray6))
-                .cornerRadius(DesignSystem.CornerRadius.large)
-            }
+            )
         }
+        .overlay(
+            Group {
+                if isProcessing {
+                    Color.black.opacity(0.3)
+                        .ignoresSafeArea()
+                    
+                    VStack(spacing: DesignSystem.Spacing.medium) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        
+                        Text("Processing...")
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                    }
+                    .padding(DesignSystem.Spacing.large)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(DesignSystem.CornerRadius.large)
+                }
+            }
+        )
     }
     
     // MARK: - Header Card
@@ -142,7 +146,7 @@ struct ExpenseDetailView: View {
                     
                     Text(expense.status.rawValue)
                         .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 8)
@@ -160,7 +164,7 @@ struct ExpenseDetailView: View {
                     
                     Text(expense.department)
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.primary)
                     
                     Spacer()
@@ -173,7 +177,7 @@ struct ExpenseDetailView: View {
                     
                     Text(expense.categoriesString)
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.primary)
                         .lineLimit(2)
                     
@@ -221,7 +225,7 @@ struct ExpenseDetailView: View {
             
             HStack {
                 Image(systemName: expense.modeOfPayment.icon)
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.accentColor)
                     .frame(width: 30)
                 
@@ -232,7 +236,7 @@ struct ExpenseDetailView: View {
                     
                     Text(expense.modeOfPayment.rawValue)
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.primary)
                 }
                 
@@ -255,14 +259,14 @@ struct ExpenseDetailView: View {
             
             HStack {
                 Image(systemName: "doc.fill")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.accentColor)
                     .frame(width: 30)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(expense.attachmentName ?? "Document")
                         .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.primary)
                     
                     Text("Tap to view")
@@ -276,7 +280,7 @@ struct ExpenseDetailView: View {
                     // Handle attachment view
                 }
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.accentColor)
             }
         }
@@ -424,7 +428,7 @@ struct DetailRow: View {
             
             Text(value)
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.leading)
             

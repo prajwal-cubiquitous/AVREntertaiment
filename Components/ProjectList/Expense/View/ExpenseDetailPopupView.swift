@@ -1,6 +1,7 @@
 import SwiftUI
 import SafariServices
 
+@available(iOS 14.0, *)
 struct ExpenseDetailPopupView: View {
     let expense: Expense
     @Binding var isPresented: Bool
@@ -32,7 +33,7 @@ struct ExpenseDetailPopupView: View {
             ZStack {
                 // Semi-transparent background
                 Color.black.opacity(0.4)
-                    .ignoresSafeArea()
+                    .compatibleIgnoresSafeArea()
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isPresented = false
@@ -44,7 +45,7 @@ struct ExpenseDetailPopupView: View {
                     // Header
                     HStack {
                         Text("Expense Detail")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .bold))
                             .fontWeight(.semibold)
                         Spacer()
                         Button {
@@ -54,7 +55,7 @@ struct ExpenseDetailPopupView: View {
                         } label: {
                             Image(systemName: "xmark")
                                 .foregroundColor(.gray)
-                                .font(.title3)
+                                .font(.system(size: 20, weight: .medium))
                         }
                     }
                     .padding()
@@ -141,7 +142,12 @@ struct ExpenseDetailPopupView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Add Remark:")
                                         .font(.body)
-                                    TextEditor(text: $reviewerNote)
+                                    if #available(iOS 14.0, *) {
+                                        TextEditor(text: $reviewerNote)
+                                    } else {
+                                        TextField("Add a note...", text: $reviewerNote)
+                                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    }
                                         .frame(height: 100)
                                         .padding(8)
                                         .background(Color(UIColor.systemGray6))
@@ -153,7 +159,14 @@ struct ExpenseDetailPopupView: View {
                                     Button(action: {
                                         onApprove?(reviewerNote)
                                     }) {
-                                        Label("Approve", systemImage: "checkmark")
+                                        if #available(iOS 14.0, *) {
+                                            Label("Approve", systemImage: "checkmark")
+                                        } else {
+                                            HStack {
+                                                Image(systemName: "checkmark")
+                                                Text("Approve")
+                                            }
+                                        }
                                             .font(.headline)
                                             .foregroundColor(.white)
                                             .frame(maxWidth: .infinity)

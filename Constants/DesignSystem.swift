@@ -62,25 +62,25 @@ struct DesignSystem {
         static let slow: Double = 0.35
         static let interactive: Double = 0.1
         
-        static let fastSpring = SwiftUI.Animation.spring(duration: fast)
-        static let standardSpring = SwiftUI.Animation.spring(duration: standard)
-        static let slowSpring = SwiftUI.Animation.spring(duration: slow)
-        static let interactiveSpring = SwiftUI.Animation.spring(duration: interactive)
+        static let fastSpring = SwiftUI.Animation.easeInOut(duration: fast)
+        static let standardSpring = SwiftUI.Animation.easeInOut(duration: standard)
+        static let slowSpring = SwiftUI.Animation.easeInOut(duration: slow)
+        static let interactiveSpring = SwiftUI.Animation.easeInOut(duration: interactive)
     }
     
     // MARK: - Typography Scale (Apple's Type System)
     struct Typography {
-        static let largeTitle = Font.largeTitle.weight(.bold)
-        static let title1 = Font.title.weight(.semibold)
-        static let title2 = Font.title2.weight(.semibold)
-        static let title3 = Font.title3.weight(.medium)
-        static let headline = Font.headline.weight(.semibold)
+        static let largeTitle = Font.compatibleLargeTitle.weight(.bold)
+        static let title1 = Font.compatibleTitle.weight(.semibold)
+        static let title2 = Font.compatibleTitle2.weight(.semibold)
+        static let title3 = Font.compatibleTitle3.weight(.medium)
+        static let headline = Font.compatibleHeadline.weight(.semibold)
         static let body = Font.body
-        static let callout = Font.callout
-        static let subheadline = Font.subheadline
-        static let footnote = Font.footnote
-        static let caption1 = Font.caption
-        static let caption2 = Font.caption2
+        static let callout = Font.compatibleCallout
+        static let subheadline = Font.compatibleSubheadline
+        static let footnote = Font.compatibleFootnote
+        static let caption1 = Font.compatibleCaption
+        static let caption2 = Font.compatibleCaption2
     }
 }
 
@@ -172,7 +172,7 @@ struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(DesignSystem.Typography.callout)
-            .fontWeight(.medium)
+            .font(.system(size: 16, weight: .medium))
             .foregroundColor(.accentColor)
             .padding(.vertical, DesignSystem.Spacing.small)
             .padding(.horizontal, DesignSystem.Spacing.medium)
@@ -197,8 +197,8 @@ struct SectionHeaderStyle: ViewModifier {
         content
             .font(DesignSystem.Typography.headline)
             .foregroundColor(.secondary)
-            .textCase(.uppercase)
-            .tracking(0.5)
+            // .textCase(.uppercase) // iOS 14+ only
+            // .tracking(0.5) // iOS 16+ only
     }
 }
 

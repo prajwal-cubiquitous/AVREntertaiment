@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 struct AddExpenseView: View {
     let project: Project
     @StateObject private var viewModel: AddExpenseViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     init(project: Project) {
         self.project = project
@@ -307,7 +307,7 @@ struct AddExpenseView: View {
 
 // MARK: - Document Picker
 struct DocumentPicker: UIViewControllerRepresentable {
-    let allowedTypes: [UTType]
+    let allowedTypes: [Any]
     let onDocumentPicked: (Result<[URL], Error>) -> Void
     
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {

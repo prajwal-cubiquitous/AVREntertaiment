@@ -9,7 +9,7 @@ import SwiftUI
 import FirebaseFirestore
 
 struct DelegateView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @StateObject private var viewModel = DelegateViewModel()
     
     var project: Project
@@ -26,15 +26,18 @@ struct DelegateView: View {
         NavigationView {
             ZStack {
                 Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+                    .compatibleIgnoresSafeArea()
                 
                 if viewModel.isLoading {
-                    ProgressView("Loading delegate details...")
+                    VStack {
+                        CompatibleProgressView()
+                        Text("Loading delegate details...")
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color(.systemBackground))
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 24) {
+                        VStack(spacing: 24) {
                             // Header Card
                             headerCard
                             
@@ -55,42 +58,37 @@ struct DelegateView: View {
                     }
                 }
             }
-            .navigationTitle("Delegate Management")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.blue)
+            .navigationBarTitle("Delegate Management", displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    dismiss()
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if viewModel.tempApprover != nil {
-                        Button("Save") {
-                            saveDelegateDetails()
-                        }
-                        .foregroundColor(.blue)
-                        .fontWeight(.semibold)
-                        .disabled(viewModel.isSaving)
-                    }
+                .foregroundColor(.blue),
+                trailing: viewModel.tempApprover != nil ? Button("Save") {
+                    saveDelegateDetails()
                 }
-            }
+                .foregroundColor(.blue)
+                .disabled(viewModel.isSaving) : nil
+            )
         }
         .onAppear {
             viewModel.loadDelegateDetails(for: project)
         }
-        .alert("Success", isPresented: $showingSuccessAlert) {
-            Button("OK") {
-                dismiss()
-            }
-        } message: {
-            Text("Delegate details updated successfully!")
+        .alert(isPresented: $showingSuccessAlert) {
+            Alert(
+                title: Text("Success"),
+                message: Text("Delegate details updated successfully!"),
+                dismissButton: .default(Text("OK")) {
+                    dismiss()
+                }
+            )
         }
-        .alert("Error", isPresented: $showingErrorAlert) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
+        .alert(isPresented: $showingErrorAlert) {
+            Alert(
+                title: Text("Error"),
+                message: Text(errorMessage),
+                dismissButton: .cancel(Text("OK"))
+            )
         }
         .sheet(isPresented: $showingDatePicker) {
             DatePickerSheet(
@@ -116,12 +114,12 @@ struct DelegateView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Image(systemName: "person.badge.clock.fill")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.blue)
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Delegate Management")
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
                     
@@ -157,7 +155,7 @@ struct DelegateView: View {
             // Header
             HStack {
                 Image(systemName: "person.circle.fill")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.blue)
                 
                 Text("Delegate Information")
@@ -329,7 +327,7 @@ struct DelegateView: View {
             
             if viewModel.isSaving {
                 HStack {
-                    ProgressView()
+                    CompatibleProgressView()
                         .scaleEffect(0.8)
                     Text("Saving changes...")
                         .font(.subheadline)
@@ -389,7 +387,7 @@ struct DelegateInfoRow: View {
                 Text(title)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .textCase(.uppercase)
+                    // .textCase(.uppercase) // iOS 14+ only
                 
                 Text(value)
                     .font(.subheadline)
@@ -428,9 +426,9 @@ struct DateRow: View {
                     Text(title)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .textCase(.uppercase)
+                        // .textCase(.uppercase) // iOS 14+ only
                     
-                    Text(date, formatter: dateTimeFormatter)
+                    Text(dateTimeFormatter.string(from: date))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -507,7 +505,7 @@ struct StatusBadge: View {
 struct DatePickerSheet: View {
     @Binding var selectedDate: Date
     let dateType: DateType
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -527,21 +525,15 @@ struct DatePickerSheet: View {
                 
                 Spacer()
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
+            .navigationBarTitle("Select Date", displayMode: .inline)
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    dismiss()
+                },
+                trailing: Button("Done") {
+                    dismiss()
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
+            )
         }
     }
 }

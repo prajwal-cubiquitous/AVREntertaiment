@@ -8,11 +8,12 @@
 
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct LoginView: View {
     
     @StateObject private var viewModel = TestingLoginViewModel()
     @State private var showAlert = false
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     
     var body: some View {
@@ -27,7 +28,7 @@ struct LoginView: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .ignoresSafeArea()
+                .compatibleIgnoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: DesignSystem.Spacing.extraLarge) {
@@ -46,8 +47,8 @@ struct LoginView: View {
         .onAppear {
             viewModel.setAuthService(authService)
         }
-        .fullScreenCover(isPresented: $viewModel.isAuthenticated) {
-            NavigationStack {
+        .sheet(isPresented: $viewModel.isAuthenticated) {
+            NavigationView {
                 ProjectListView(phoneNumber: viewModel.phoneNumber.replacingOccurrences(of: "+91", with: ""))
             }
         }
@@ -81,14 +82,14 @@ struct LoginView: View {
             // App logo/icon
             ZStack {
                 Circle()
-                    .fill(Color.accentColor.gradient)
+                    .fill(Color.accentColor)
                     .frame(width: 80, height: 80)
                     .shadow(color: .accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
                 
                 Image(systemName: "message.fill")
                     .font(.system(size: 36, weight: .medium))
                     .foregroundColor(.white)
-                    .symbolRenderingMode(.hierarchical)
+                    // .compatibleSymbolRenderingMode(.hierarchical) // iOS 15+ only
             }
             
             VStack(spacing: DesignSystem.Spacing.small) {
@@ -99,7 +100,7 @@ struct LoginView: View {
                 Text("AVR Entertainment")
                     .font(DesignSystem.Typography.title3)
                     .foregroundColor(.accentColor)
-                    .fontWeight(.medium)
+                    .font(.system(size: 16, weight: .medium))
                 
                 Text("Enter your phone number to continue")
                     .font(DesignSystem.Typography.callout)
@@ -126,7 +127,7 @@ struct LoginView: View {
                         
                         Text("+91")
                             .font(DesignSystem.Typography.callout)
-                            .fontWeight(.medium)
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.primary)
                     }
                     .padding(.horizontal, DesignSystem.Spacing.small)
@@ -164,7 +165,7 @@ struct LoginView: View {
                 Image(systemName: "message.badge.filled.fill")
                     .font(.system(size: 48))
                     .foregroundColor(.green)
-                    .symbolRenderingMode(.hierarchical)
+                    // .compatibleSymbolRenderingMode(.hierarchical) // iOS 15+ only
                 
                 VStack(spacing: DesignSystem.Spacing.small) {
                     Text("Verification Code Sent")
@@ -191,7 +192,7 @@ struct LoginView: View {
                 TextField("Enter 6-digit code", text: $viewModel.otpCode)
                     .keyboardType(.numberPad)
                     .font(DesignSystem.Typography.title3)
-                    .fontWeight(.medium)
+                    .font(.system(size: 16, weight: .medium))
                     .multilineTextAlignment(.center)
                     .fieldStyle()
                 
@@ -204,7 +205,7 @@ struct LoginView: View {
                             .font(DesignSystem.Typography.footnote)
                             .foregroundColor(.secondary)
                         Text(testOtp)
-                            .font(DesignSystem.Typography.footnote.monospaced())
+                            .font(DesignSystem.Typography.footnote)
                             .fontWeight(.bold)
                             .foregroundColor(.orange)
                     }

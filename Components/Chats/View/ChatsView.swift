@@ -13,7 +13,7 @@ struct ChatsView: View {
     let currentUserRole: UserRole
     
     @StateObject private var viewModel: ChatsViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var selectedParticipant: ChatParticipant?
     @State private var showingGroupChat = false
     @State private var isRefreshing = false
@@ -26,7 +26,7 @@ struct ChatsView: View {
     }
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             VStack(spacing: 0) {
                 // Header
                 headerView
@@ -40,49 +40,44 @@ struct ChatsView: View {
                     participantsListView
                 }
             }
-            .navigationTitle("Chats")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+            .compatibleNavigationTitle("Chats")
+            // .navigationBarTitleDisplayMode(.large) // iOS 14+ only
+            .navigationBarItems(
+                leading: Button(action: {
+                    showingGroupChat = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 16))
+                        Text("Group")
+                            .font(.subheadline)
+                    }
+                    .foregroundColor(.blue)
+                },
+                trailing: HStack(spacing: 16) {
                     Button(action: {
-                        showingGroupChat = true
+                        Task {
+                            await refreshData()
+                        }
                     }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "person.3.fill")
-                                .font(.system(size: 16))
-                            Text("Group")
-                                .font(.subheadline)
-                        }
-                        .foregroundColor(.blue)
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16))
+                            .foregroundColor(.blue)
+                            .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                            .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isRefreshing)
                     }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            Task {
-                                await refreshData()
-                            }
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16))
-                                .foregroundColor(.blue)
-                                .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                                .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isRefreshing)
-                        }
-                        .disabled(isRefreshing)
-                        
-                        Button("Done") {
-                            dismiss()
-                        }
-                        .foregroundColor(.blue)
+                    .disabled(isRefreshing)
+                    
+                    Button("Done") {
+                        dismiss()
                     }
+                    .foregroundColor(.blue)
                 }
-            }
-            .task {
+            )
+            .compatibleTask {
                 await loadDataIfNeeded()
             }
-            .refreshable {
+            .compatibleRefreshable {
                 await refreshData()
             }
             .sheet(isPresented: $showingGroupChat) {
@@ -91,7 +86,7 @@ struct ChatsView: View {
                     currentUserPhone: currentUserPhone,
                     role: currentUserRole
                 )
-                .presentationDetents([.large])
+                // .presentationDetents([.large]) // iOS 16+ only
             }
         }
     }
@@ -124,7 +119,7 @@ struct ChatsView: View {
     // MARK: - Loading View
     private var loadingView: some View {
         VStack(spacing: DesignSystem.Spacing.large) {
-            ProgressView()
+            CompatibleProgressView()
                 .scaleEffect(1.2)
             
             Text("Loading chat participants...")
@@ -141,11 +136,11 @@ struct ChatsView: View {
             Image(systemName: "message.circle")
                 .font(.system(size: 64))
                 .foregroundColor(.secondary)
-                .symbolRenderingMode(.hierarchical)
+                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
             
             VStack(spacing: 8) {
                 Text("No Team Members")
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
                 
@@ -163,7 +158,7 @@ struct ChatsView: View {
     // MARK: - Participants List View
     private var participantsListView: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            VStack(spacing: 8) {
                 ForEach(viewModel.participants) { participant in
                     NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: currentUserPhone)
                         .onAppear {
@@ -307,7 +302,7 @@ struct ChatParticipantRow: View {
     // MARK: - Unread Badge
     private var unreadBadge: some View {
         Text("\(participant.unreadCount)")
-            .font(.caption2)
+            .font(DesignSystem.Typography.caption2)
             .fontWeight(.bold)
             .foregroundColor(.white)
             .padding(.horizontal, 6)

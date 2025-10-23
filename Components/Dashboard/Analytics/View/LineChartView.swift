@@ -18,62 +18,73 @@ struct LineChartView: View {
                 .bold()
                 .padding(.bottom, 8)
             
-            Chart {
-                // Budget Line (Blue)
-                ForEach(data) { item in
-                    LineMark(
-                        x: .value("Month", item.month),
-                        y: .value("Amount", item.budget),
-                        series: .value("Type", "Budget")
-                    )
-                    .foregroundStyle(.blue)
-                }
-                
-                // Actual Line (Purple)
-                ForEach(data) { item in
-                    if let actualPoint = item.actual{
+            if #available(iOS 16.0, *) {
+                Chart {
+                    // Budget Line (Blue)
+                    ForEach(data) { item in
                         LineMark(
                             x: .value("Month", item.month),
-                            y: .value("Amount", actualPoint),
-                            series: .value("Type", "Actual")
+                            y: .value("Amount", item.budget),
+                            series: .value("Type", "Budget")
                         )
-                        .foregroundStyle(.purple)
+                        .foregroundStyle(.blue)
+                    }
+                    
+                    // Actual Line (Purple)
+                    ForEach(data) { item in
+                        if let actualPoint = item.actual{
+                            LineMark(
+                                x: .value("Month", item.month),
+                                y: .value("Amount", actualPoint),
+                                series: .value("Type", "Actual")
+                            )
+                            .foregroundStyle(.purple)
+                        }
+                    }
+                    
+                    // Forecast Line (Green)
+                    ForEach(data) { item in
+                        if let ForecastPoint = item.forecast{
+                            LineMark(
+                                x: .value("Month", item.month),
+                                y: .value("Amount", ForecastPoint),
+                                series: .value("Type", "Forecast")
+                            )
+                            .foregroundStyle(.green)
+                        }
                     }
                 }
-                
-                // Forecast Line (Green)
-                ForEach(data) { item in
-                    if let ForecastPoint = item.forecast{
-                        LineMark(
-                            x: .value("Month", item.month),
-                            y: .value("Amount", ForecastPoint),
-                            series: .value("Type", "Forecast")
-                        )
-                        .foregroundStyle(.green)
-                    }
-                }
+                .frame(height: 300)
+                .chartYAxisLabel("Amount", position: .leading)
+                .chartXAxisLabel("Months")
+                .chartForegroundStyleScale([
+                    "Budget": .blue,
+                    "Forecast": .green,
+                    "Actual": .purple
+                ])
+                .chartLegend(position: .bottom)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(16)
+                .shadow(radius: 4)
+            }else{
+                Text("Charts are available on iOS 16 and later.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(height: 300)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(16)
+                    .shadow(radius: 4)
             }
-            .frame(height: 300)
-            .chartYAxisLabel("Amount", position: .leading)
-            .chartXAxisLabel("Months")
-            .chartForegroundStyleScale([
-                "Budget": .blue,
-                "Forecast": .green,
-                "Actual": .purple
-            ])
-            .chartLegend(position: .bottom)
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(16)
-            .shadow(radius: 4)
         }
-        .padding()
+            .padding()
+        }
     }
-}
-
-// MARK: - Preview
-#Preview {
-    LineChartView(data: MonthlyData.sampleData)
-}
-
-
+    
+    // MARK: - Preview
+    #Preview {
+        LineChartView(data: MonthlyData.sampleData)
+    }
+    
+    

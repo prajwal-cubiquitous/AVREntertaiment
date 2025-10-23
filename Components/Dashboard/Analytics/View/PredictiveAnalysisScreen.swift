@@ -775,7 +775,7 @@ struct PredictiveAnalysisScreen: View {
     }
     
     func colorForCategory(_ cat: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
+        let colors: [Color] = [.blue, .purple, .green, .orange, .red, .blue, .blue, .purple, .pink, .orange]
         let hash = cat.hashValue
         return colors[abs(hash) % colors.count]
     }
@@ -785,7 +785,7 @@ struct PredictiveAnalysisScreen: View {
 struct PieChartView: View {
     let data: [(category: String, percent: Double)]
     var total: Double { data.reduce(0) { $0 + $1.percent } }
-    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
+    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .blue, .blue, .purple, .pink, .orange]
     
     struct Slice {
         let startAngle: Angle
@@ -870,7 +870,7 @@ struct InteractivePieChartView: View {
     @Binding var showingDetail: Bool
     
     var total: Double { data.reduce(0) { $0 + $1.percent } }
-    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .mint, .teal, .indigo, .pink, .brown]
+    var colors: [Color] = [.blue, .purple, .green, .orange, .red, .blue, .blue, .purple, .pink, .orange]
     
     struct Slice {
         let startAngle: Angle

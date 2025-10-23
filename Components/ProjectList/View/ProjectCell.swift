@@ -8,6 +8,7 @@
 
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct ProjectCell: View {
     let project: Project
     let role: UserRole?
@@ -78,9 +79,9 @@ struct ProjectCell: View {
                     if role == .ADMIN {
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
-                                .font(.title3)
+                                .font(.system(size: 20, weight: .medium))
                                 .foregroundColor(.blue)
-                                .symbolRenderingMode(.hierarchical)
+                                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
                         }
                         .buttonStyle(.plain)
                     }
@@ -205,7 +206,7 @@ struct TempApproverStatusView: View {
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.extraSmall) {
             Image(systemName: statusIcon)
-                .font(.caption2)
+                .font(.system(size: 11, weight: .medium))
                 .foregroundColor(statusColor)
             
             Text(statusText)
@@ -268,7 +269,7 @@ struct InfoRow: View {
                 .font(DesignSystem.Typography.footnote)
                 .foregroundColor(color)
                 .frame(width: 16, alignment: .center)
-                .symbolRenderingMode(.hierarchical)
+                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
             
             Text(text)
                 .font(DesignSystem.Typography.footnote)
@@ -302,13 +303,17 @@ extension ProjectStatus {
 // Custom extension for a darker color
 extension Color {
     func darker(by percentage: Double = 30.0) -> Color {
-        guard let components = UIColor(self).cgColor.components, components.count >= 3 else {
+        if #available(iOS 14.0, *) {
+            guard let components = UIColor(self).cgColor.components, components.count >= 3 else {
+                return self
+            }
+            let r = components[0] - (percentage / 100)
+            let g = components[1] - (percentage / 100)
+            let b = components[2] - (percentage / 100)
+            return Color(red: r, green: g, blue: b)
+        } else {
             return self
         }
-        let r = components[0] - (percentage / 100)
-        let g = components[1] - (percentage / 100)
-        let b = components[2] - (percentage / 100)
-        return Color(red: r, green: g, blue: b)
     }
 }
 

@@ -207,7 +207,7 @@ struct ProjectListView: View {
                 Image(systemName: role == .ADMIN ? "folder.badge.plus" : "folder.badge.questionmark")
                     .font(.system(size: 60))
                     .foregroundColor(.secondary.opacity(0.6))
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
                 
                 Text(role == .ADMIN ? "No Projects Yet" : "No Projects Assigned")
                     .font(DesignSystem.Typography.title2)
@@ -376,7 +376,7 @@ struct ProjectListView: View {
                 Image(systemName: "person.badge.clock.fill")
                     .font(.system(size: 60))
                     .foregroundColor(.orange)
-                    .symbolRenderingMode(.hierarchical)
+                    .applysymbolRenderingModeIfAvailable
                 
                 VStack(spacing: DesignSystem.Spacing.medium) {
                     Text("Temporary Approver Role")
@@ -425,7 +425,7 @@ struct ProjectListView: View {
                     Image(systemName: "person.badge.clock.fill")
                         .font(.system(size: 50))
                         .foregroundColor(.red)
-                        .symbolRenderingMode(.hierarchical)
+                        .applysymbolRenderingModeIfAvailable
                     
                     Text("Reject Temporary Approver Role")
                         .font(.title2)
@@ -481,173 +481,6 @@ struct ProjectListView: View {
     }
 }
 
-// MARK: - Menu Sheet View
-struct MenuSheetView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var showingLogoutAlert = false
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header with X button
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Menu")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                    
-                    Text("Settings & Account")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Button {
-                    HapticManager.selection()
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.secondary)
-                        .symbolRenderingMode(.hierarchical)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
-            
-            // Content
-            VStack(spacing: DesignSystem.Spacing.medium) {
-                MenuItemView(
-                    icon: "info.circle.fill",
-                    title: "About",
-                    subtitle: "App information & version",
-                    action: {
-                        HapticManager.selection()
-                        // Handle about action
-                    }
-                )
-                
-                MenuItemView(
-                    icon: "gear.circle.fill",
-                    title: "Settings",
-                    subtitle: "Preferences & configuration",
-                    action: {
-                        HapticManager.selection()
-                        // Handle settings action
-                    }
-                )
-                
-                // Divider
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(height: 1)
-                    .padding(.vertical, 8)
-                
-                // Logout Button
-                Button {
-                    HapticManager.impact(.medium)
-                    showingLogoutAlert = true
-                } label: {
-                    HStack(spacing: 16) {
-                        Image(systemName: "rectangle.portrait.and.arrow.right.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.red)
-                            .frame(width: 28)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Sign Out")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(.red)
-                            
-                            Text("Logout from your account")
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.red.opacity(0.7))
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.red.opacity(0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(.red.opacity(0.2), lineWidth: 1)
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 24)
-            
-            Spacer()
-        }
-        .background(Color(.systemGroupedBackground))
-        .alert("Sign Out", isPresented: $showingLogoutAlert) {
-            Button("Cancel", role: .cancel) {
-                HapticManager.selection()
-            }
-            Button("Sign Out", role: .destructive) {
-                HapticManager.notification(.success)
-                dismiss()
-                NotificationCenter.default.post(name: NSNotification.Name("UserDidLogout"), object: nil)
-            }
-        } message: {
-            Text("Are you sure you want to sign out of your account?")
-        }
-    }
-}
-
-// MARK: - Menu Item View
-struct MenuItemView: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.system(size: 20))
-                    .foregroundColor(.accentColor)
-                    .symbolRenderingMode(.hierarchical)
-                    .frame(width: 28)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.primary)
-                    
-                    Text(subtitle)
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.04), radius: 1, x: 0, y: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-}
 
 struct NotificationPreviewItem: View {
     let expense: Expense

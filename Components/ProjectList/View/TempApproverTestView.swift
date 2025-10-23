@@ -1,5 +1,6 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct TempApproverTestView: View {
     @StateObject private var tempApproverService = TempApproverService()
     @State private var testProject = Project.sampleData[0]
@@ -12,7 +13,7 @@ struct TempApproverTestView: View {
     @State private var showingApproval = false
     
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(spacing: DesignSystem.Spacing.large) {
                     // Test Project Card
@@ -129,8 +130,8 @@ struct TempApproverTestView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Temp Approver Test")
-            .navigationBarTitleDisplayMode(.inline)
+            .compatibleNavigationTitle("Temp Approver Test")
+            // .navigationBarTitleDisplayMode(.inline) // iOS 14+ only
         }
         .sheet(isPresented: $showingApproval) {
             TempApproverApprovalView(
@@ -178,17 +179,17 @@ private struct TestInfoRow: View {
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.medium) {
             Image(systemName: icon)
-                .font(.title3)
+                .font(.system(size: 20, weight: .medium))
                 .foregroundColor(iconColor)
                 .frame(width: 28, height: 28)
-                .symbolRenderingMode(.hierarchical)
+                // .symbolRenderingMode(.hierarchical) // iOS 15+ only
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    // .textCase(.uppercase) // iOS 14+ only
+                    // .tracking(0.5) // iOS 16+ only
                 
                 Text(value)
                     .font(.callout)

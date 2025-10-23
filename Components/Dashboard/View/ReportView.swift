@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import Combine
 
+@available(iOS 14.0, *)
 struct ReportView: View {
     @StateObject private var viewModel = ReportViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     var projectId : String?
     
     var body: some View {
@@ -17,7 +19,7 @@ struct ReportView: View {
             ZStack {
                 // Scrollable Content
                 ScrollView {
-                    LazyVStack(spacing: DesignSystem.Spacing.large) {
+                    VStack(spacing: DesignSystem.Spacing.large) {
                         // Filters Section
                         filtersSection
                         
@@ -39,7 +41,7 @@ struct ReportView: View {
                             }
                         }
                     }
-                    .onChange(of: viewModel.selectedDepartment) {
+                    .onReceive(Just(viewModel.selectedDepartment)) { _ in
                         Task {
                             if let projectId = projectId {
                                 await viewModel.loadApprovedExpenses(projectId: projectId)
@@ -54,25 +56,16 @@ struct ReportView: View {
                     floatingExportButtons
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        HapticManager.selection()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                ToolbarItem(placement: .principal) {
-                    Text("Reports")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-            }
+            // .navigationBarTitleDisplayMode(.inline) // iOS 14+ only
+            .navigationBarTitle("Reports", displayMode: .inline)
+            .navigationBarItems(leading: Button {
+                HapticManager.selection()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(Color.secondary)
+            })
             .background(Color(.systemGroupedBackground))
         }
     }
@@ -83,7 +76,7 @@ struct ReportView: View {
             HStack {
                 Text("Filters")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(Color.primary)
                 
                 Spacer()
                 
@@ -93,7 +86,7 @@ struct ReportView: View {
                     viewModel.selectedDepartment = "All"
                 }
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.blue)
+                .foregroundColor(.blue)
             }
             
             HStack(spacing: DesignSystem.Spacing.medium) {
@@ -124,28 +117,28 @@ struct ReportView: View {
             HStack {
                 Text("Expense Categories")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(Color.primary)
                 
                 Spacer()
                 
                 Image(systemName: "chart.bar.fill")
-                    .font(.title3)
-                    .foregroundStyle(.blue.gradient)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.blue)
             }
             
             if viewModel.expenseCategories.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.system(size: 40))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.secondary)
                     
                     Text("No Expenses Found")
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.primary)
                     
                     Text("No expenses found for the selected period and filters")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.vertical, 40)
@@ -173,28 +166,28 @@ struct ReportView: View {
             HStack {
                 Text("Department Budget Summary")
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(Color.primary)
                 
                 Spacer()
                 
                 Image(systemName: "building.columns.fill")
-                    .font(.title3)
-                    .foregroundStyle(.purple.gradient)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.purple)
             }
             
             if viewModel.departmentBudgets.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "building.2")
                         .font(.system(size: 40))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.secondary)
                     
                     Text("No Department Data")
                         .font(.headline)
-                        .foregroundColor(.primary)
+                        .foregroundColor(Color.primary)
                     
                     Text("Department budgets will appear here once data is loaded")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Color.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.vertical, 40)
@@ -204,22 +197,22 @@ struct ReportView: View {
                     HStack {
                         Text("Department")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(Color.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
                         Text("Budget")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(Color.secondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                         
                         Text("Spent")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(Color.secondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                         
                         Text("Remaining")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(Color.secondary)
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .padding(.horizontal)
@@ -296,42 +289,72 @@ struct FilterCard<T: Hashable>: View where T: CustomStringConvertible {
     let icon: String
     
     var body: some View {
-        Menu {
-            ForEach(options, id: \.self) { option in
-                Button {
-                    HapticManager.selection()
-                    selection = option
-                } label: {
-                    HStack {
-                        Text(option.description)
-                        if option == selection {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.blue)
+        if #available(iOS 14.0, *) {
+            Menu {
+                ForEach(options, id: \.self) { option in
+                    Button {
+                        HapticManager.selection()
+                        selection = option
+                    } label: {
+                        HStack {
+                            Text(option.description)
+                            if option == selection {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.blue)
+                            }
                         }
                     }
                 }
+            } label: {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                    Text(title)
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(Color.secondary)
+                    
+                    HStack {
+                        Image(systemName: icon)
+                            .font(.subheadline)
+                            .foregroundColor(.blue)
+                        
+                        Text(selection.description)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(Color.primary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption)
+                            .foregroundColor(Color.gray)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.tertiarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             }
-        } label: {
+        } else {
+            // Fallback for iOS 13
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
                 Text(title)
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(Color.secondary)
                 
                 HStack {
                     Image(systemName: icon)
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundColor(.blue)
                     
                     Text(selection.description)
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundColor(Color.primary)
                         .lineLimit(1)
                     
                     Spacer()
                     
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundColor(Color.gray)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -355,7 +378,7 @@ struct ChartBar: View {
         VStack(spacing: DesignSystem.Spacing.small) {
             Text(category.formattedAmount)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundColor(Color.secondary)
             
             RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small)
                 .fill(LinearGradient(
@@ -368,7 +391,7 @@ struct ChartBar: View {
             
             Text(category.name)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
+                .foregroundColor(Color.primary)
                 .fixedSize()
                 .rotationEffect(.degrees(-45))
                 .offset(y: 15)
@@ -377,6 +400,7 @@ struct ChartBar: View {
     }
 }
 
+@available(iOS 14.0, *)
 struct BudgetRow: View {
     let budget: DepartmentBudget
     let isLast: Bool
@@ -412,22 +436,22 @@ struct BudgetRow: View {
             HStack {
                 Text(budget.department)
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(Color.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
-                Text("₹\(Int(budget.totalBudget).formatted())")
+                Text("₹\(Int(budget.totalBudget).formattedWithSeparator())")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundColor(Color.primary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 
-                Text("₹\(Int(budget.approvedBudget).formatted())")
+                Text("₹\(Int(budget.approvedBudget).formattedWithSeparator())")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(spentPercentage > 0.8 ? .orange : .primary)
+                    .foregroundColor(spentPercentage > 0.8 ? .orange : .primary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 
-                Text("₹\(Int(displayAmount).formatted())")
+                Text("₹\(Int(displayAmount).formattedWithSeparator())")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(displayColor)
+                    .foregroundColor(displayColor)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(.horizontal)
@@ -442,6 +466,7 @@ struct BudgetRow: View {
     }
 }
 
+@available(iOS 14.0, *)
 struct ExportButton: View {
     let title: String
     let icon: String
@@ -460,10 +485,10 @@ struct ExportButton: View {
                 Text(title)
                     .font(.subheadline.weight(.medium))
             }
-            .foregroundStyle(.white)
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
-            .background(color.gradient)
+            .background(LinearGradient(gradient: Gradient(colors: [color, color.opacity(0.8)]), startPoint: .topLeading, endPoint: .bottomTrailing))
             .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
         }

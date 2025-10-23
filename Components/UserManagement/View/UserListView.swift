@@ -1,9 +1,10 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct UserListView: View {
     @StateObject private var viewModel = UserListViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     
     var body: some View {
@@ -15,20 +16,19 @@ struct UserListView: View {
                     userList
                 }
             }
-            .navigationTitle("All Users")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") {
-                        dismiss()
-                    }
+            .navigationBarTitle("All Users", displayMode: .large)
+            .navigationBarItems(leading:
+                Button("Done") {
+                    dismiss()
                 }
-            }
+            )
         }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.errorMessage ?? "Unknown error occurred")
+        .alert(isPresented: $viewModel.showError) {
+            Alert(
+                title: Text("Error"),
+                message: Text(viewModel.errorMessage ?? "Unknown error occurred"),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .onAppear {
             Task {
@@ -47,23 +47,33 @@ struct UserListView: View {
                 }
             }
         }
-        .refreshable {
+        .onAppear {
             Task {
                 await viewModel.fetchUsers()
             }
         }
-        .overlay {
-            if viewModel.users.isEmpty {
-                ContentUnavailableView(
-                    "No Users",
-                    systemImage: "person.slash",
-                    description: Text("No users have been added yet")
-                )
-            }
+        .overlay(
+            Group {
+                if viewModel.users.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.slash")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary)
+                        Text("No Users")
+                            .font(.system(size: 22, weight: .bold))
+                        Text("No users have been added yet")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        }
+                        .padding()
+                    }
+                }
+            )
         }
     }
-}
 
+@available(iOS 14.0, *)
 struct UserRow: View {
     let user: User
     let onToggle: () -> Void
@@ -96,8 +106,8 @@ struct UserRow: View {
             Spacer()
             
             Toggle("", isOn: $isActive)
-                .tint(.accentColor)
-                .onChange(of: isActive) { oldValue, newValue in
+                .accentColor(.accentColor)
+                .onChange(of: isActive) { _ in
                     onToggle()
                 }
         }

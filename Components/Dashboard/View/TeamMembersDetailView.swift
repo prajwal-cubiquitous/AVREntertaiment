@@ -8,10 +8,11 @@
 import SwiftUI
 import FirebaseFirestore
 
+@available(iOS 14.0, *)
 struct TeamMembersDetailView: View {
     let project: Project
     @StateObject private var viewModel = TeamMembersDetailViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var searchText = ""
     private var filteredMembers: [User] {
         var members = viewModel.teamMembers
@@ -60,14 +61,14 @@ struct TeamMembersDetailView: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "arrow.left")
                         .foregroundColor(.white)
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                 }
                 
                 Spacer()
                 
                 VStack(spacing: 2) {
                     Text("TEAM MEMBERS")
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                     
@@ -81,7 +82,7 @@ struct TeamMembersDetailView: View {
                 Button(action: { viewModel.refreshData() }) {
                     Image(systemName: "arrow.clockwise")
                         .foregroundColor(.white)
-                        .font(.title2)
+                        .font(.system(size: 22, weight: .bold))
                 }
             }
             .padding(.horizontal)
@@ -128,9 +129,8 @@ struct TeamMembersDetailView: View {
     private var loadingView: some View {
         VStack {
             Spacer()
-            ProgressView()
+            CompatibleProgressView()
                 .scaleEffect(1.5)
-                .tint(.blue)
             
             Text("Loading team members...")
                 .font(.headline)
@@ -167,7 +167,7 @@ struct TeamMembersDetailView: View {
     // MARK: - Members List View
     private var membersListView: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            VStack(spacing: 12) {
                 ForEach(filteredMembers) { member in
                     TeamMemberRowView(member: member)
                 }
@@ -190,7 +190,7 @@ struct TeamMemberRowView: View {
                     .frame(width: 50, height: 50)
                 
                 Text(member.name.prefix(1).uppercased())
-                    .font(.title2)
+                    .font(.system(size: 22, weight: .bold))
                     .fontWeight(.bold)
                     .foregroundColor(member.role.color)
             }

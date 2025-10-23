@@ -7,6 +7,7 @@
 
 import Foundation
 
+@available(iOS 14.0, *)
 struct ExpenseChat: Identifiable, Codable {
     let id: String // Document ID
     let textMessage: String

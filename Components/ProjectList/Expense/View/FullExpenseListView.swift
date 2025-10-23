@@ -1,8 +1,9 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct FullExpenseListView: View {
     @ObservedObject var viewModel: ExpenseListViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var selectedExpense: Expense?
     @State private var showingExpenseChat = false
     @State private var selectedExpenseForChat: Expense?
@@ -20,29 +21,30 @@ struct FullExpenseListView: View {
                     expensesList
                 }
             }
-            .navigationTitle("All Expenses")
-            .navigationBarTitleDisplayMode(.inline)
+            .compatibleNavigationTitle("All Expenses")
             .navigationBarBackButtonHidden(true)
             .navigationBarItems(leading: Button("Close") {
                 dismiss()
             })
         }
-        .presentationDetents([.large, .fraction(0.90)])
+        // .presentationDetents([.large, .fraction(0.90)]) // iOS 16+ only
         .onAppear {
             viewModel.fetchAllExpenses()
         }
-        .overlay {
-            if let expense = selectedExpense {
-                ExpenseDetailPopupView(
-                    expense: expense,
-                    isPresented: Binding(
-                        get: { selectedExpense != nil },
-                        set: { if !$0 { selectedExpense = nil } }
-                    ),
-                    isPendingApproval: false
-                )
+        .overlay(
+            Group {
+                if let expense = selectedExpense {
+                    ExpenseDetailPopupView(
+                        expense: expense,
+                        isPresented: Binding(
+                            get: { selectedExpense != nil },
+                            set: { if !$0 { selectedExpense = nil } }
+                        ),
+                        isPendingApproval: false
+                    )
+                }
             }
-        }
+        )
         .sheet(isPresented: $showingExpenseChat) {
             if let expense = selectedExpenseForChat {
                 ExpenseChatView(
@@ -58,7 +60,7 @@ struct FullExpenseListView: View {
     // MARK: - Loading State
     private var loadingView: some View {
         VStack(spacing: 10) {
-            ProgressView()
+            CompatibleProgressView()
                 .scaleEffect(0.8)
             Text("Loading expenses...")
                 .font(.caption)
@@ -106,7 +108,7 @@ struct FullExpenseListView: View {
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(GroupedListStyle())
         .background(Color(UIColor.systemGroupedBackground))
     }
 } 

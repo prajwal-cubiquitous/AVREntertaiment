@@ -1,7 +1,8 @@
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct RoleManagementView: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     
     var body: some View {
@@ -46,21 +47,72 @@ struct RoleManagementView: View {
                     Text("Roles define the access level and permissions for users in the system")
                 }
             }
-            .navigationTitle("Role Management")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") {
-                        dismiss()
+                    .compatibleNavigationTitle("Role Management")
+                    // .navigationBarTitleDisplayMode(.large) // iOS 14+ only
+                    .compatibleToolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Done") {
+                                dismiss()
+                            }
+                        }
                     }
-                }
-            }
         }
     }
     
     private func roleCard(role: UserRole, description: String, permissions: [String]) -> some View {
-        DisclosureGroup {
+        if #available(iOS 14.0, *) {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Permissions")
+                        .font(.headline)
+                        .padding(.top, 4)
+                    
+                    ForEach(permissions, id: \.self) { permission in
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text(permission)
+                                .font(.subheadline)
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+            } label: {
+                HStack {
+                    Text(role.displayName)
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Text(role.rawValue)
+                        .font(.caption)
+                        .padding(4)
+                        .background(roleColor(for: role).opacity(0.2))
+                        .foregroundColor(roleColor(for: role))
+                        .cornerRadius(4)
+                }
+            }
+        } else {
+            // Fallback for iOS 13
             VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(role.displayName)
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Text(role.rawValue)
+                        .font(.caption)
+                        .padding(4)
+                        .background(roleColor(for: role).opacity(0.2))
+                        .foregroundColor(roleColor(for: role))
+                        .cornerRadius(4)
+                }
+                
                 Text(description)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -78,22 +130,10 @@ struct RoleManagementView: View {
                     }
                 }
             }
-            .padding(.vertical, 8)
-        } label: {
-            HStack {
-                Text(role.displayName)
-                    .font(.headline)
-                
-                Spacer()
-                
-                Text(role.rawValue)
-                    .font(.caption)
-                    .padding(4)
-                    .background(roleColor(for: role).opacity(0.2))
-                    .foregroundColor(roleColor(for: role))
-                    .cornerRadius(4)
-            }
         }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
     
     private func roleColor(for role: UserRole) -> Color {

@@ -32,7 +32,7 @@ struct IndividualChatView: View {
     let currentUserPhoneNumber: String?
     
     @StateObject private var viewModel : IndividualChatViewModel
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @EnvironmentObject private var authService: FirebaseAuthService
     @State private var messageText = ""
     @State private var showingImagePicker = false
@@ -627,7 +627,7 @@ struct ImageMessageView: View {
 // MARK: - Image Viewer
 struct ImageViewer: View {
     let url: URL
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
@@ -686,7 +686,7 @@ struct ImageViewer: View {
 // MARK: - Document Viewer
 struct DocumentViewer: View {
     let url: URL
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var showingShareSheet = false
     @State private var documentData: Data?
     
@@ -809,7 +809,7 @@ struct DocumentViewer: View {
 // MARK: - Video Player View
 struct VideoPlayerView: View {
     let url: URL
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.compatibleDismiss) private var dismiss
     @State private var player: AVPlayer?
     
     var body: some View {
@@ -1118,7 +1118,7 @@ struct DocumentView: View {
         case "txt", "rtf":
             return .gray
         case "zip", "rar", "7z":
-            return .brown
+            return .orange
         default:
             return .blue
         }
