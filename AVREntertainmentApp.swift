@@ -46,7 +46,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
         didReceiveRemoteNotification notification: [AnyHashable : Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-//        if let messageID = userInfo[gcmMessageIDKey] {
+//        if let messageID = userInfo[gcmMessageIDKey] {sign 
 //                print("Message ID: \(messageID)")
 //              }
 //
@@ -83,8 +83,11 @@ struct AVREntertainmentApp: App {
 
 extension AppDelegate: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        let deviceToken: [String: String] = ["token": fcmToken ?? ""]
-        print("Device token: ", deviceToken)
+        print("FCM token received: \(fcmToken ?? "nil")")
+        // Save to Firestore under current user
+        if let token = fcmToken {
+            FirestoreManager.shared.saveToken(token: token)
+        }
     }
 }
 

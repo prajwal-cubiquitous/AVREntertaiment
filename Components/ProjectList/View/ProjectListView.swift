@@ -595,6 +595,7 @@ struct MenuSheetView: View {
                 HapticManager.selection()
             }
             Button("Sign Out", role: .destructive) {
+                FirestoreManager.shared.removeToken()
                 HapticManager.notification(.success)
                 dismiss()
                 NotificationCenter.default.post(name: NSNotification.Name("UserDidLogout"), object: nil)

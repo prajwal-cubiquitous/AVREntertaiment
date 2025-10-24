@@ -507,6 +507,7 @@ struct AuthenticationView: View {
         let success = await authService.verifyOTP(code: otpCode)
         
         if success {
+            
             HapticManager.notification(.success)
         } else {
             HapticManager.notification(.error)
