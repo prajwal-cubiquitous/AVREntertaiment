@@ -1,4 +1,7 @@
 import SwiftUI
+import FirebaseCore
+import FirebaseAuth
+import UserNotifications
 
 struct AuthenticationView: View {
     @EnvironmentObject var authService: FirebaseAuthService
@@ -372,9 +375,6 @@ struct AuthenticationView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.primary)
                 }
-                VStack{
-                    Text("\(authService.testingLoginVM.PhoneOtp[phoneNumber])")
-                }
             }
             
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -632,3 +632,42 @@ struct AuthenticationView_Previews: PreviewProvider {
         AuthenticationView()
     }
 } 
+
+//
+//final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+//    
+//    
+//    func application(_ application: UIApplication,
+//                         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+//            FirebaseApp.configure()
+////            UNUserNotificationCenter.current().delegate = self
+////            requestPushAuthorization()
+////            Messaging.messaging().delegate = self
+////            UIApplication.shared.registerForRemoteNotifications()
+//            return true
+//    }
+//    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+//        // Pass device token to auth
+//        Auth.auth().setAPNSToken(deviceToken, type: .unknown)
+//        print("Device token received: \(deviceToken.map { String(format: "%02x", $0) }.joined())")
+//
+//    }
+//    
+//    func application(_ application: UIApplication,
+//        didReceiveRemoteNotification notification: [AnyHashable : Any],
+//        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+//      if Auth.auth().canHandleNotification(notification) {
+//        completionHandler(.noData)
+//        return
+//      }
+//      // This notification is not auth related; it should be handled separately.
+//    }
+//    
+//    func application(_ application: UIApplication, open url: URL,
+//        options: [UIApplicationOpenURLOptionsKey : Any]) -> Bool {
+//      if Auth.auth().canHandle(url) {
+//        return true
+//      }
+//      // URL not auth related; it should be handled separately.
+//    }
+//}

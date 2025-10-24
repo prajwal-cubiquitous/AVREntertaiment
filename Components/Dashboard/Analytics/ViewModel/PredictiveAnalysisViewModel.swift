@@ -36,7 +36,11 @@ class PredictiveAnalysisViewModel: ObservableObject {
     }
     
     func fetchData() async{
-        guard let projectId = project.id else { return }
+        guard let projectId = project.id else { 
+            print("❌ Project ID is nil, cannot fetch data")
+            isLoading = false
+            return 
+        }
         
         isLoading = true
         await fetchExpenses(for: projectId)
@@ -48,17 +52,19 @@ class PredictiveAnalysisViewModel: ObservableObject {
     func fetchExpenses(for projectId: String) async {
         let currentDate = Date()
         let calendar = Calendar.current
-        let defaultStartDate = calendar.date(byAdding: .month, value: -3, to: currentDate)
-        let defaultEndDate = calendar.date(byAdding: .month, value: 3, to: currentDate)
-        print("👉 Default date window:", defaultStartDate!, "to", defaultEndDate!)
+        let defaultStartDate = calendar.date(byAdding: .month, value: -3, to: currentDate) ?? currentDate
+        let defaultEndDate = calendar.date(byAdding: .month, value: 3, to: currentDate) ?? currentDate
+        print("👉 Default date window:", defaultStartDate, "to", defaultEndDate)
 
-        let (startDate, endDate) = await fetchStartDate(projectId: projectId) ?? (defaultStartDate, defaultEndDate)
-        print("✅ Using date window:", startDate!, "to", endDate!)
+        let fetchedDates = await fetchStartDate(projectId: projectId)
+        let startDate = fetchedDates?.0 ?? defaultStartDate
+        let endDate = fetchedDates?.1 ?? defaultEndDate
+        print("✅ Using date window:", startDate, "to", endDate)
 
         let todayDate = Date()
         let todayMonthName = DateFormatter.monthFormatter.string(from: todayDate)
-        let startMonthName = DateFormatter.monthFormatter.string(from: startDate!)
-        let endMonthName = DateFormatter.monthFormatter.string(from: endDate!)
+        let startMonthName = DateFormatter.monthFormatter.string(from: startDate)
+        let endMonthName = DateFormatter.monthFormatter.string(from: endDate)
 
         // Helper: produce all months within window (handles wrap if needed)
         func generateMonthRange(from start: String, to end: String, monthsOfYear: [String]) -> [String] {
@@ -91,12 +97,10 @@ class PredictiveAnalysisViewModel: ObservableObject {
                     continue
                 }
                 let expenseDate = timestamp.dateValue()
-                if let startDate = startDate, let endDate = endDate {
-                    if expenseDate >= startDate && expenseDate <= endDate {
-                        let monthName = DateFormatter.monthFormatter.string(from: expenseDate)
-                        monthlySums[monthName, default: 0] += amount
-                        print("➕ Added ₹\(amount) to \(monthName)")
-                    }
+                if expenseDate >= startDate && expenseDate <= endDate {
+                    let monthName = DateFormatter.monthFormatter.string(from: expenseDate)
+                    monthlySums[monthName, default: 0] += amount
+                    print("➕ Added ₹\(amount) to \(monthName)")
                 }
             }
             print("📊 Monthly Sums before filling:", monthlySums)
@@ -760,13 +764,15 @@ extension DateFormatter {
 
 fileprivate extension Calendar {
     func startOfMonth(for date: Date) -> Date {
-        self.date(from: self.dateComponents([.year, .month], from: date))!
+        self.date(from: self.dateComponents([.year, .month], from: date)) ?? date
     }
 }
 
 // returns ordered first-of-month dates from (centerDate - monthsBefore) to (centerDate + monthsAfter)
 func monthsRange(centerDate: Date = Date(), monthsBefore: Int, monthsAfter: Int, calendar: Calendar = .current) -> [Date] {
-    let start = calendar.date(byAdding: .month, value: -monthsBefore, to: centerDate)!
+    guard let start = calendar.date(byAdding: .month, value: -monthsBefore, to: centerDate) else {
+        return []
+    }
     let startMonth = calendar.startOfMonth(for: start)
     let total = monthsBefore + monthsAfter + 1
     return (0..<total).compactMap { calendar.date(byAdding: .month, value: $0, to: startMonth) }

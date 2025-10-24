@@ -14,18 +14,7 @@ class FirebaseAuthService: ObservableObject {
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
-    let testingLoginVM = TestingLoginViewModel()
-    
-    #if DEBUG
-    var isTestingMode = true
-    var testOTP: String? {
-        // Get the OTP for the current phone number if it exists
-        let phone = testingLoginVM.phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return testingLoginVM.PhoneOtp[phone]
-    }
-    #else
-    var isTestingMode = false
-    #endif
+    @Published var verificationID: String?
     
     init() {
         // Check if user is already authenticated
@@ -41,10 +30,7 @@ class FirebaseAuthService: ObservableObject {
                 if let user = user {
                     await self?.loadCurrentUser(firebaseUser: user)
                 } else {
-                    // In test mode, don't reset auth state if there's no Firebase user
-                    if !(self?.isTestingMode ?? false) {
-                        self?.resetAuthState()
-                    }
+                    self?.resetAuthState()
                 }
             }
         }
@@ -130,65 +116,75 @@ class FirebaseAuthService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        // Clean phone number of any potential prefixes
+        // Clean phone number and add country code
         let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
         
-        if isTestingMode {
-            // Use TestingLoginViewModel for OTP
-            testingLoginVM.phoneNumber = cleanPhoneNumber
-            testingLoginVM.sendOTP()
+        // Validate phone number format
+        guard cleanPhoneNumber.count == 10, cleanPhoneNumber.allSatisfy({ $0.isNumber }) else {
+            errorMessage = "Please enter a valid 10-digit phone number"
             isLoading = false
-            let result = testingLoginVM.errorMessage == nil
-            return result
-        } else {
-            do {
-                let verificationID = try await PhoneAuthProvider.provider().verifyPhoneNumber(cleanPhoneNumber, uiDelegate: nil)
-                UserDefaults.standard.set(verificationID, forKey: "authVerificationID")
-                isLoading = false
-                return true
-            } catch {
-                errorMessage = error.localizedDescription
+            return false
+        }
+        
+        let fullPhoneNumber = "+91\(cleanPhoneNumber)"
+        print("📱 Sending OTP to: \(fullPhoneNumber)")
+        
+        // First check if user exists in Firestore
+        do {
+            let document = try await db.collection(FirebaseCollections.users).document(cleanPhoneNumber).getDocument()
+            if !document.exists {
+                errorMessage = "Mobile Number not registered, please contact admin"
                 isLoading = false
                 return false
             }
+        } catch {
+            errorMessage = "Failed to verify user: \(error.localizedDescription)"
+            isLoading = false
+            return false
         }
+        
+        do{
+//            Auth.auth().settings.isAppVerificationDisabledForTesting = true
+            PhoneAuthProvider.provider()
+              .verifyPhoneNumber(fullPhoneNumber, uiDelegate: nil) { verificationID, error in
+                            if let error = error {
+                                self.errorMessage = "Error: \(error.localizedDescription)"
+                                return
+                            }
+                            self.verificationID = verificationID
+                            self.isLoading = false
+                            self.errorMessage = nil
+                        }
+            return true
+        } catch {
+            print("❌ OTP Send Error: \(error.localizedDescription)")
+            errorMessage = "Failed to send OTP: \(error.localizedDescription)"
+            isLoading = false
+            return false
+        }
+
     }
     
     func verifyOTP(code: String) async -> Bool {
         isLoading = true
         errorMessage = nil
         
-        if isTestingMode {
-            // Use TestingLoginViewModel for OTP verification
-            testingLoginVM.otpCode = code
-            let isVerified = testingLoginVM.verifyOTP()
-            if isVerified {
-                // Clean phone number
-                let cleanPhoneNumber = testingLoginVM.phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-                // Load the user after successful verification
-                await loadOTPUser(phoneNumber: cleanPhoneNumber)
-                // Return true only if both verification and user loading succeeded
-                isLoading = false
-                return isAuthenticated
-            }
+        guard let verificationID = verificationID ?? UserDefaults.standard.string(forKey: "authVerificationID") else {
+            errorMessage = "Verification ID not found. Please request a new OTP."
             isLoading = false
             return false
-        } else {
-            guard let verificationID = UserDefaults.standard.string(forKey: "authVerificationID") else {
-                errorMessage = "Verification ID not found"
-                isLoading = false
-                return false
-            }
-            
-            do {
-                let credential = PhoneAuthProvider.provider().credential(withVerificationID: verificationID, verificationCode: code)
-                let result = try await auth.signIn(with: credential)
-                return true
-            } catch {
-                errorMessage = error.localizedDescription
-                isLoading = false
-                return false
-            }
+        }
+        
+        do {
+            let credential = PhoneAuthProvider.provider().credential(withVerificationID: verificationID, verificationCode: code)
+            let result = try await auth.signIn(with: credential)
+            // User will be loaded automatically through auth state listener
+            isLoading = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return false
         }
     }
     
@@ -286,6 +282,7 @@ class FirebaseAuthService: ObservableObject {
         do {
             try auth.signOut()
             resetAuthState()
+            verificationID = nil
             UserDefaults.standard.removeObject(forKey: "authVerificationID")
         } catch {
             errorMessage = error.localizedDescription
