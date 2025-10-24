@@ -12,6 +12,7 @@ struct PredictiveAnalysisScreen: View {
    
     let project: Project
     @StateObject private var vm: PredictiveAnalysisViewModel
+    @Environment(\.dismiss) private var dismiss
 
     init(project: Project) {
         self.project = project
@@ -53,7 +54,16 @@ struct PredictiveAnalysisScreen: View {
                 .padding(.bottom, 20)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationBarHidden(true)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                    .fontWeight(.semibold)
+                }
+            }
         }
         .task {
             await vm.fetchData()
