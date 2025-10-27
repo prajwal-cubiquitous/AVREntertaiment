@@ -24,6 +24,7 @@ struct DashboardView: View {
     @State private var selectedDepartmentForDetail: String? = nil
     @State private var showingTeamMembersDetail = false
     @State private var showingAnonymousExpensesDetail = false
+    @State private var scrollToDepartmentSection = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -69,15 +70,17 @@ struct DashboardView: View {
                 )
                 .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: DesignSystem.Spacing.large) {
-                        // Project Overview Section
-                        if let project = project {
-                            projectOverviewSection
-                        }
-                        
-                        // Department Budget Cards - Enhanced
-                        departmentBudgetSection
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: DesignSystem.Spacing.large) {
+                            // Project Overview Section
+                            if let project = project {
+                                projectOverviewSection
+                            }
+                            
+                            // Department Budget Cards - Enhanced
+                            departmentBudgetSection
+                                .id("departmentBudgetSection")
                         
                         // Enhanced Charts Section
                         chartsSection
@@ -85,6 +88,15 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                     .padding(.bottom, DesignSystem.Spacing.extraLarge)
+                    }
+                    .onChange(of: scrollToDepartmentSection) { newValue in
+                        if newValue {
+                            withAnimation(.easeInOut(duration: 0.6)) {
+                                proxy.scrollTo("departmentBudgetSection", anchor: UnitPoint.top)
+                            }
+                            scrollToDepartmentSection = false
+                        }
+                    }
                 }
                 
                 // Floating Action Buttons - Using Overlay for True Independence
@@ -458,12 +470,18 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
                 
-                ProjectStatsCard(
-                    title: "Departments",
-                    value: "\(project?.departments.count ?? 0)",
-                    icon: "folder.fill",
-                    color: .purple
-                )
+                Button(action: {
+                    scrollToDepartmentSection = true
+                    HapticManager.selection()
+                }) {
+                    ProjectStatsCard(
+                        title: "Departments",
+                        value: "\(project?.departments.count ?? 0)",
+                        icon: "folder.fill",
+                        color: .purple
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -479,7 +497,7 @@ struct DashboardView: View {
                 
                 Spacer()
                 
-                Text("Across All Projects")
+                Text("Across Project")
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
