@@ -105,45 +105,59 @@ struct DepartmentBudgetDetailView: View {
     private var headerView: some View {
         VStack(spacing: 16) {
             // Department stats
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Total Budget")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    // Total Budget
+                    VStack(spacing: 4) {
+                        Text("Total Budget")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text(viewModel.totalBudgetFormatted)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(width: geometry.size.width / 3, alignment: .leading)
                     
-                    Text(viewModel.totalBudgetFormatted)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Spent")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    // Spent
+                    VStack(spacing: 4) {
+                        Text("Spent")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text(viewModel.totalSpentFormatted)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(width: geometry.size.width / 3, alignment: .center)
                     
-                    Text(viewModel.totalSpentFormatted)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.green)
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("Remaining")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text(viewModel.remainingBudgetFormatted)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
+                    // Remaining
+                    VStack(spacing: 4) {
+                        Text("Remaining")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text(viewModel.remainingBudgetFormatted)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .frame(width: geometry.size.width / 3, alignment: .trailing)
                 }
             }
-            .padding(.horizontal, 20)
+            .frame(height: 80)
+            .padding(.horizontal, 12)
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 16)

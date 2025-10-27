@@ -116,6 +116,9 @@ struct AddExpenseView: View {
                 )
             }
         }
+        .onAppear{
+            UserServices.shared.currentUserPhone
+        }
     }
     
     // MARK: - Department Picker
