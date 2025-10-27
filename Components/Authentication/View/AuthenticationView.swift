@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseCore
 import FirebaseAuth
 import UserNotifications
+import FirebaseMessaging
 
 struct AuthenticationView: View {
     @EnvironmentObject var authService: FirebaseAuthService
@@ -414,7 +415,7 @@ struct AuthenticationView: View {
                         )
                 )
                 
-
+                
             }
             
             VStack(spacing: DesignSystem.Spacing.medium) {
@@ -505,10 +506,30 @@ struct AuthenticationView: View {
         errorMessage = nil
         
         let success = await authService.verifyOTP(code: otpCode)
+        print("going to save fcm token")
         
         if success {
             
-            HapticManager.notification(.success)
+            // --- START OF CHANGES ---
+            do {
+                // 1. Await the FCM token directly.
+                let token = try await Messaging.messaging().token()
+                print("FCM token at login: \(token)")
+                
+                // 2. Await your new async saveToken function.
+                await FirestoreManager.shared.saveToken(token: token)
+                
+                // 3. Now that everything is finished, play the success haptic.
+                HapticManager.notification(.success)
+                
+            } catch {
+                // If fetching or saving the token fails
+                print("Error fetching/saving FCM token: \(error)")
+                HapticManager.notification(.error)
+                errorMessage = "Login successful, but couldn't save notification token."
+            }
+            // --- END OF CHANGES ---
+            
         } else {
             HapticManager.notification(.error)
             if let authError = authService.errorMessage {
@@ -516,6 +537,7 @@ struct AuthenticationView: View {
             }
         }
         
+        // This will now correctly run AFTER everything (including the token save) is done.
         isLoading = false
     }
     
@@ -586,18 +608,18 @@ struct ModernTextField: View {
 //// MARK: - Supporting Views
 //struct ErrorMessageView: View {
 //    let message: String
-//    
+//
 //    var body: some View {
 //        HStack(spacing: DesignSystem.Spacing.small) {
 //            Image(systemName: "exclamationmark.triangle.fill")
 //                .foregroundColor(.red)
 //                .font(.system(size: 16, weight: .medium))
-//            
+//
 //            Text(message)
 //                .font(.system(size: 14, weight: .medium))
 //                .foregroundColor(.red)
 //                .multilineTextAlignment(.leading)
-//            
+//
 //            Spacer(minLength: 0)
 //        }
 //        .padding(DesignSystem.Spacing.medium)
@@ -618,7 +640,7 @@ struct ModernTextField: View {
 //            ProgressView()
 //                .progressViewStyle(CircularProgressViewStyle(tint: .black))
 //                .scaleEffect(0.8)
-//            
+//
 //            Text("Processing...")
 //                .font(.system(size: 16, weight: .medium))
 //                .foregroundColor(.secondary)
@@ -632,12 +654,12 @@ struct AuthenticationView_Previews: PreviewProvider {
     static var previews: some View {
         AuthenticationView()
     }
-} 
+}
 
 //
 //final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
-//    
-//    
+//
+//
 //    func application(_ application: UIApplication,
 //                         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
 //            FirebaseApp.configure()
@@ -653,7 +675,7 @@ struct AuthenticationView_Previews: PreviewProvider {
 //        print("Device token received: \(deviceToken.map { String(format: "%02x", $0) }.joined())")
 //
 //    }
-//    
+//
 //    func application(_ application: UIApplication,
 //        didReceiveRemoteNotification notification: [AnyHashable : Any],
 //        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
@@ -663,7 +685,7 @@ struct AuthenticationView_Previews: PreviewProvider {
 //      }
 //      // This notification is not auth related; it should be handled separately.
 //    }
-//    
+//
 //    func application(_ application: UIApplication, open url: URL,
 //        options: [UIApplicationOpenURLOptionsKey : Any]) -> Bool {
 //      if Auth.auth().canHandle(url) {

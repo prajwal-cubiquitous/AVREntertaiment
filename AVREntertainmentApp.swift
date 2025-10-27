@@ -86,7 +86,9 @@ extension AppDelegate: MessagingDelegate {
         print("FCM token received: \(fcmToken ?? "nil")")
         // Save to Firestore under current user
         if let token = fcmToken {
-            FirestoreManager.shared.saveToken(token: token)
+            Task{
+                await FirestoreManager.shared.saveToken(token: token)
+            }
         }
     }
 }

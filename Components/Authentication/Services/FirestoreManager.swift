@@ -13,17 +13,25 @@ class FirestoreManager {
     static let shared = FirestoreManager()
     private init() {}
 
-    func saveToken(token: String) {
+    func saveToken(token: String) async {
         guard let userPhoneNumber = Auth.auth().currentUser?.phoneNumber else { return }
         let cleanPhoneNumber = userPhoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let docRef = Firestore.firestore().collection("users_ios").document(cleanPhoneNumber)
-        docRef.setData(["fcmToken": token], merge: true) { error in
-            if let error = error {
-                print("Error saving FCM token: \(error.localizedDescription)")
-            } else {
-                print("FCM token saved to Firestore")
+//        let docRef = Firestore.firestore().collection("users_ios").document(cleanPhoneNumber)
+//        docRef.setData(["fcmToken": token], merge: true) { error in
+//            if let error = error {
+//                print("Error saving FCM token: \(error.localizedDescription)")
+//            } else {
+//                print("FCM token saved to Firestore")
+//            }
+//        }
+        
+        do {
+                // Use try await instead of a completion handler
+                try await Firestore.firestore().collection("users_ios").document(cleanPhoneNumber).updateData(["fcmToken": token])
+                print("Token saved successfully!")
+            } catch {
+                print("Error saving token: \(error)")
             }
-        }
     }
     
     func removeToken() {
