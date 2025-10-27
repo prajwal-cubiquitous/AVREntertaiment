@@ -6,6 +6,7 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case ACTIVE
     case INACTIVE
     case COMPLETED
+    case HANDOVER
 }
 
 struct Project: Identifiable, Codable, Equatable, Hashable {

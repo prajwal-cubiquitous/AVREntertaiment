@@ -13,6 +13,8 @@ struct TeamMembersDetailView: View {
     @StateObject private var viewModel = TeamMembersDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
+    @State private var selectedMember: User?
+    @State private var showingMemberExpenses = false
     private var filteredMembers: [User] {
         var members = viewModel.teamMembers
         
@@ -50,6 +52,12 @@ struct TeamMembersDetailView: View {
         }
         .onAppear {
             viewModel.loadTeamMembers(for: project)
+        }
+        .sheet(isPresented: $showingMemberExpenses) {
+            if let member = selectedMember {
+                MemberExpensesView(member: member, project: project)
+                    .presentationDetents([.large])
+            }
         }
     }
     
@@ -169,7 +177,11 @@ struct TeamMembersDetailView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(filteredMembers) { member in
-                    TeamMemberRowView(member: member)
+                    TeamMemberRowView(member: member) {
+                        selectedMember = member
+                        showingMemberExpenses = true
+                        HapticManager.selection()
+                    }
                 }
             }
             .padding()
@@ -180,9 +192,11 @@ struct TeamMembersDetailView: View {
 // MARK: - Team Member Row View
 struct TeamMemberRowView: View {
     let member: User
+    let action: () -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
+        Button(action: action) {
+            HStack(spacing: 12) {
             // Avatar
             ZStack {
                 Circle()
@@ -240,11 +254,13 @@ struct TeamMemberRowView: View {
                     Spacer()
                 }
             }
+            }
+            .padding()
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .buttonStyle(.plain)
     }
 }
 
@@ -338,6 +354,374 @@ extension UserRole {
             return .orange
         case .USER:
             return .blue
+        }
+    }
+}
+
+// MARK: - Member Expenses View
+struct MemberExpensesView: View {
+    let member: User
+    let project: Project
+    @StateObject private var viewModel = MemberExpensesViewModel()
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedFilter: ExpenseFilter = .all
+    
+    enum ExpenseFilter: String, CaseIterable {
+        case all = "All"
+        case pending = "Pending"
+        case approved = "Approved"
+        case rejected = "Rejected"
+    }
+    
+    private var filteredExpenses: [Expense] {
+        var expenses = viewModel.expenses
+        
+        switch selectedFilter {
+        case .pending:
+            expenses = expenses.filter { $0.status == .pending }
+        case .approved:
+            expenses = expenses.filter { $0.status == .approved }
+        case .rejected:
+            expenses = expenses.filter { $0.status == .rejected }
+        case .all:
+            break
+        }
+        
+        return expenses
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // Header
+                headerView
+                
+                // Filter Buttons
+                filterButtonsView
+                
+                // Content
+                if viewModel.isLoading {
+                    loadingView
+                } else if viewModel.expenses.isEmpty {
+                    emptyView
+                } else if filteredExpenses.isEmpty {
+                    emptyFilterView
+                } else {
+                    expensesListView
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            viewModel.loadExpenses(for: project, memberId: member.id ?? "")
+        }
+    }
+    
+    // MARK: - Header View
+    private var headerView: some View {
+        VStack(spacing: 12) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(member.role.color.opacity(0.2))
+                    .frame(width: 70, height: 70)
+                
+                Text(member.name.prefix(1).uppercased())
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(member.role.color)
+            }
+            
+            // Name
+            Text(member.name)
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            // Summary Stats
+            HStack(spacing: 24) {
+                VStack(spacing: 4) {
+                    Text("\(viewModel.totalExpenses)")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    Text("Total")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                VStack(spacing: 4) {
+                    Text(viewModel.totalAmount)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    Text("Total Amount")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .background(
+            LinearGradient(
+                colors: [
+                    member.role.color.opacity(0.1),
+                    Color(.systemBackground)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+    
+    // MARK: - Filter Buttons View
+    private var filterButtonsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(ExpenseFilter.allCases, id: \.self) { filter in
+                    Button(action: {
+                        selectedFilter = filter
+                        HapticManager.selection()
+                    }) {
+                        Text(filter.rawValue)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(selectedFilter == filter ? .white : .primary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                selectedFilter == filter
+                                    ? member.role.color
+                                    : Color(.systemGray6)
+                            )
+                            .cornerRadius(20)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.vertical, 12)
+        .background(Color(.systemBackground))
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack {
+            Spacer()
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(member.role.color)
+            Text("Loading expenses...")
+                .font(.headline)
+                .foregroundColor(.gray)
+                .padding(.top)
+            Spacer()
+        }
+    }
+    
+    // MARK: - Empty View
+    private var emptyView: some View {
+        VStack {
+            Spacer()
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 60))
+                .foregroundColor(.gray.opacity(0.5))
+            Text("No Expenses")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+                .padding(.top)
+            Text("\(member.name) hasn't submitted any expenses yet.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Spacer()
+        }
+    }
+    
+    // MARK: - Empty Filter View
+    private var emptyFilterView: some View {
+        VStack {
+            Spacer()
+            Image(systemName: "tray")
+                .font(.system(size: 60))
+                .foregroundColor(.gray.opacity(0.5))
+            Text("No \(selectedFilter.rawValue) Expenses")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+                .padding(.top)
+            Text("No expenses match the selected filter.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            Spacer()
+        }
+    }
+    
+    // MARK: - Expenses List View
+    private var expensesListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(filteredExpenses, id: \.id) { expense in
+                    MemberExpenseRowView(expense: expense)
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+// MARK: - Member Expenses View Model
+@MainActor
+class MemberExpensesViewModel: ObservableObject {
+    @Published var expenses: [Expense] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let db = Firestore.firestore()
+    
+    var totalExpenses: Int {
+        expenses.count
+    }
+    
+    var totalAmount: String {
+        let total = expenses.reduce(0) { $0 + $1.amount }
+        return "\(Int(total).formattedCurrency)"
+    }
+    
+    func loadExpenses(for project: Project, memberId: String) {
+        guard let projectId = project.id else { return }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let snapshot = try await db
+                    .collection("projects_ios")
+                    .document(projectId)
+                    .collection("expenses")
+                    .whereField("submittedBy", isEqualTo: memberId)
+                    .order(by: "createdAt", descending: true)
+                    .getDocuments()
+                
+                var loadedExpenses: [Expense] = []
+                for document in snapshot.documents {
+                    if let expense = try? document.data(as: Expense.self) {
+                        loadedExpenses.append(expense)
+                    }
+                }
+                
+                await MainActor.run {
+                    self.expenses = loadedExpenses
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to load expenses: \(error.localizedDescription)"
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Member Expense Row View
+struct MemberExpenseRowView: View {
+    let expense: Expense
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header
+            HStack {
+                // Status Badge
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
+                    Text(expense.status.rawValue.capitalized)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(statusColor)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(statusColor.opacity(0.1))
+                .cornerRadius(8)
+                
+                Spacer()
+                
+                Text(expense.amountFormatted)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+            }
+            
+            // Description
+            Text(expense.description)
+                .font(.body)
+                .foregroundColor(.primary)
+                .lineLimit(2)
+            
+            // Details
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: "folder.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(expense.department)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack {
+                    Image(systemName: "calendar")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(expense.createdAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: expense.modeOfPayment == .cash ? "dollarsign.circle.fill" : "creditcard.fill")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Text(expense.modeOfPayment.rawValue)
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(statusColor.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+    
+    private var statusColor: Color {
+        switch expense.status {
+        case .approved:
+            return .green
+        case .rejected:
+            return .red
+        case .pending:
+            return .orange
         }
     }
 }

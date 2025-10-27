@@ -287,6 +287,7 @@ extension ProjectStatus {
         case .ACTIVE: return .green
         case .INACTIVE: return .gray
         case .COMPLETED: return .blue
+        case .HANDOVER: return .yellow
         }
     }
     
@@ -295,6 +296,7 @@ extension ProjectStatus {
         case .ACTIVE: return "Active"
         case .INACTIVE: return "Inactive"
         case .COMPLETED: return "Completed"
+        case .HANDOVER: return "Handover"
         }
     }
 }

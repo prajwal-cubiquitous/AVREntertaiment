@@ -331,7 +331,6 @@ class ProjectListViewModel: ObservableObject {
             approverId: cleanPhone
         ) {
             
-            print("DEBUG 1 : TempApprover role accepted")
             // Determine the actual status based on dates
             let updatedTempApprover = TempApprover(
                 approverId: tempApprover.approverId,

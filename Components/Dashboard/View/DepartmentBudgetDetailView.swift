@@ -82,7 +82,6 @@ struct DepartmentBudgetDetailView: View {
         }
         .onAppear {
             viewModel.loadExpenses(for: department, projectId: projectId)
-            print("DEBUG 1 : pritniting role :\(role)")
         }
         .sheet(isPresented: $showingExpenseChat) {
             if let expense = selectedExpenseForChat {
@@ -523,7 +522,6 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                         .getDocument()
                     
                 let loadedProject = try projectSnapshot.data(as: Project.self)
-                    print("Loaded project: \(loadedProject)")
                 
 
                 // Load expenses for the department
