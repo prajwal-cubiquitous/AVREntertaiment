@@ -15,6 +15,7 @@ class ExpenseChatViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var approveName: String?
+    @Published var isSendingMessage = false
     private let db = Firestore.firestore()
     private var listener: ListenerRegistration?
     
@@ -69,9 +70,11 @@ class ExpenseChatViewModel: ObservableObject {
     
     func sendMessage(_ message: ExpenseChat) {
         guard let ExpenseId = expense.id else {
-            self.isLoading = false
             return
         }
+        
+        // Set sending state to true
+        isSendingMessage = true
         
         let chatData = message
         
@@ -79,11 +82,19 @@ class ExpenseChatViewModel: ObservableObject {
                             .collection("expenses").document(ExpenseId)
                             .collection("expenseChats").document() // Let Firestore generate the ID
 
-            // 3. Use the modern async call to write the data
-        do{
-            try docRef.setData(from: chatData)
-        }catch{
-            print("error")
+        // Use the modern async call to write the data
+        Task {
+            do {
+                try await docRef.setData(from: chatData)
+                await MainActor.run {
+                    self.isSendingMessage = false
+                }
+            } catch {
+                await MainActor.run {
+                    print("Error sending message: \(error)")
+                    self.isSendingMessage = false
+                }
+            }
         }
     }
     

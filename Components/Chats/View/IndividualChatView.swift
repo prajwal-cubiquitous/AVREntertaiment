@@ -262,7 +262,7 @@ struct IndividualChatView: View {
                     } else {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(messageText.isEmpty && selectedImage == nil && selectedDocument == nil && selectedVideo == nil ? .gray : .blue)
+                            .foregroundColor(messageText.isEmpty && selectedImage == nil && selectedDocument == nil && selectedVideo == nil || viewModel.isSendingMessage ? .gray : .blue)
                     }
                 }
                 .disabled(messageText.isEmpty && selectedImage == nil && selectedDocument == nil && selectedVideo == nil || viewModel.isSendingMessage)
@@ -275,8 +275,9 @@ struct IndividualChatView: View {
     
     // MARK: - Send Message
     private func sendMessage() {
-        guard !messageText.isEmpty || selectedImage != nil || selectedDocument != nil || selectedVideo != nil else { return }
         
+        guard !messageText.isEmpty || selectedImage != nil || selectedDocument != nil || selectedVideo != nil else { return }
+        viewModel.isSendingMessage = true
         // Determine senderId based on role
         let senderId: String
         if role == .ADMIN {
@@ -314,6 +315,7 @@ struct IndividualChatView: View {
             )
             
             await MainActor.run {
+                viewModel.isSendingMessage = true
                 viewModel.sendMessage(message)
                 
                 // Clear input
@@ -321,7 +323,9 @@ struct IndividualChatView: View {
                 selectedImage = nil
                 selectedDocument = nil
                 selectedVideo = nil
+                viewModel.isSendingMessage = false
             }
+            viewModel.isSendingMessage = false
         }
     }
     

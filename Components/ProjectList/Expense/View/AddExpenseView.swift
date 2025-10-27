@@ -121,6 +121,7 @@ struct AddExpenseView: View {
         }
     }
     
+    
     // MARK: - Department Picker
     private var departmentPickerView: some View {
         VStack(alignment: .leading, spacing: 8) {

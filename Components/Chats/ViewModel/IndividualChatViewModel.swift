@@ -364,7 +364,7 @@ class IndividualChatViewModel: ObservableObject {
             return
         }
         
-        isSendingMessage = true
+        self.isSendingMessage = true
         
         Task {
             do {
@@ -379,14 +379,12 @@ class IndividualChatViewModel: ObservableObject {
                     isGroupMessage: message.isGroupMessage
                 )
                 
-                await MainActor.run {
-                    isSendingMessage = false
-                }
+//                await MainActor.run {
+                    self.isSendingMessage = false
+//                }
             } catch {
-                await MainActor.run {
                     errorMessage = "Failed to send message: \(error.localizedDescription)"
-                    isSendingMessage = false
-                }
+                    self.isSendingMessage = false
             }
         }
     }

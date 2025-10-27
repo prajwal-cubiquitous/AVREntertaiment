@@ -201,10 +201,17 @@ struct ExpenseChatView: View {
                         Button {
                             sendMessage()
                         } label: {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.accentColor)
+                            if viewModel.isSendingMessage || isUploadingImage {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .accentColor))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.accentColor)
+                            }
                         }
+                        .disabled(viewModel.isSendingMessage || isUploadingImage)
                     }
                 }
             }
@@ -307,7 +314,7 @@ struct ExpenseChatView: View {
             }
         }
         
-        // Send message with uploaded image URLs
+        // Send message with uploaded image URLs (this will set isSendingMessage to true)
         if !uploadedURLs.isEmpty {
             let message = ExpenseChat(
                 textMessage: messageText.isEmpty ? "📷 Image" : messageText,
@@ -319,12 +326,15 @@ struct ExpenseChatView: View {
             
             viewModel.sendMessage(message)
             messageText = ""
+            
+            // Clear images after sending
+            selectedImages = []
+            selectedPhotos = []
         }
         
+        // Reset upload state after send completes (via viewModel)
         isUploadingImage = false
         uploadProgress = 0.0
-        selectedImages = []
-        selectedPhotos = []
     }
     
     private func uploadImageToFirebase(data: Data, index: Int) async throws -> String {
