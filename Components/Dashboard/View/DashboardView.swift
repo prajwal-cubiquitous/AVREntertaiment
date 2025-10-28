@@ -41,6 +41,8 @@ struct DashboardView: View {
     
     // Temporary Approver Properties
     @State private var tempApproverName: String?
+    @State private var tempApproverPhoneNumber: String?
+    @State private var tempApproverStatus: TempApproverStatus?
     @State private var tempApproverEndDate: Date?
     
     // Date formatter for temp approver end date
@@ -455,9 +457,11 @@ struct DashboardView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: DesignSystem.Spacing.medium) {
-                if let tempApproverName = tempApproverName, let tempApproverEndDate = tempApproverEndDate {
+                if let tempApproverName = tempApproverName {
                     TempApproverStatsCard(
                         approverName: tempApproverName,
+                        phoneNumber: tempApproverPhoneNumber ?? "",
+                        status: tempApproverStatus,
                         endDate: tempApproverEndDate
                     )
                 } else {
@@ -807,6 +811,8 @@ struct DashboardView: View {
     private func fetchTempApproverData() async {
         guard let project = project, let tempApproverID = project.tempApproverID else {
             tempApproverName = nil
+            tempApproverPhoneNumber = nil
+            tempApproverStatus = nil
             tempApproverEndDate = nil
             return
         }
@@ -822,36 +828,41 @@ struct DashboardView: View {
             
             if userDocument.exists, let user = try? userDocument.data(as: User.self) {
                 tempApproverName = user.name
+                tempApproverPhoneNumber = user.phoneNumber
                 
                 // Always use the temp approver's phone number for the query
                 // This ensures temp approver details show for all users (admin, approver, etc.)
                 let approverPhone = user.phoneNumber
                 
-                // Fetch temp approver end date from subcollection
+                // Fetch latest temp approver record
                 let tempApproverSnapshot = try await db
                     .collection("projects_ios")
                     .document(project.id ?? "")
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: approverPhone)
-                    .whereField("status", isEqualTo: "active")
-                    .whereField("endDate", isGreaterThanOrEqualTo: Timestamp(date: Date()))
-                    .whereField("startDate", isLessThanOrEqualTo: Timestamp(date: Date()))
+                    .order(by: "updatedAt", descending: true)
                     .limit(to: 1)
                     .getDocuments()
                 
                 if let tempApproverDoc = tempApproverSnapshot.documents.first,
                    let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
                     tempApproverEndDate = tempApprover.endDate
+                    tempApproverStatus = tempApprover.status
                 } else {
                     tempApproverEndDate = nil
+                    tempApproverStatus = nil
                 }
             } else {
                 tempApproverName = nil
+                tempApproverPhoneNumber = nil
+                tempApproverStatus = nil
                 tempApproverEndDate = nil
             }
         } catch {
             print("Error fetching temp approver data: \(error)")
             tempApproverName = nil
+            tempApproverPhoneNumber = nil
+            tempApproverStatus = nil
             tempApproverEndDate = nil
         }
     }
@@ -1178,7 +1189,9 @@ struct ProjectStatsCard: View {
 // MARK: - Temp Approver Stats Card
 struct TempApproverStatsCard: View {
     let approverName: String
-    let endDate: Date
+    let phoneNumber: String
+    let status: TempApproverStatus?
+    let endDate: Date?
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -1187,15 +1200,57 @@ struct TempApproverStatsCard: View {
         return formatter
     }
     
+    private var statusColor: Color {
+        switch status {
+        case .accepted, .active:
+            return .green
+        case .pending:
+            return .orange
+        case .rejected:
+            return .red
+        case .expired:
+            return .gray
+        default:
+            return .orange
+        }
+    }
+    
+    private var statusText: String {
+        switch status {
+        case .accepted:
+            return "Accepted"
+        case .pending:
+            return "Pending"
+        case .rejected:
+            return "Rejected"
+        case .active:
+            return "Active"
+        case .expired:
+            return "Expired"
+        default:
+            return "Pending"
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             HStack {
                 Image(systemName: "person.badge.clock.fill")
                     .font(DesignSystem.Typography.title3)
-                    .foregroundColor(.orange)
+                    .foregroundColor(statusColor)
                     .symbolRenderingMode(.hierarchical)
                 
                 Spacer()
+                
+                // Status badge
+                Text(statusText)
+                    .font(DesignSystem.Typography.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(statusColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(statusColor.opacity(0.15))
+                    .cornerRadius(4)
             }
             
             VStack(alignment: .leading, spacing: 2) {
@@ -1203,16 +1258,22 @@ struct TempApproverStatsCard: View {
                     .font(DesignSystem.Typography.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.primary)
-                    .contentTransition(.numericText())
                 
                 Text(approverName)
                     .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Text(phoneNumber)
+                    .font(DesignSystem.Typography.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 
-                Text("Until: \(endDate, formatter: dateFormatter)")
-                    .font(DesignSystem.Typography.caption2)
-                    .foregroundColor(.secondary)
+                if let endDate = endDate, status == .accepted || status == .active {
+                    Text("Until: \(endDate, formatter: dateFormatter)")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
         }
         .padding(DesignSystem.Spacing.medium)
