@@ -58,6 +58,10 @@ class ProjectListViewModel: ObservableObject {
         }
     }
     
+    func project(for id: String) -> Project? {
+            return projects.first { $0.id == id }
+        }
+    
     func setupProjectListener() async {
         // Remove existing listener if any
         projectListener?.remove()

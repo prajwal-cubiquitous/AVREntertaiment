@@ -18,6 +18,7 @@ struct ProjectListView: View {
     @State private var tempApproverData: TempApprover?
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @StateObject var viewModel: ProjectListViewModel
+    @EnvironmentObject var navigationManager: NavigationManager
     let role: UserRole
     
     init(phoneNumber: String = "", role: UserRole = .APPROVER) {
@@ -137,6 +138,23 @@ struct ProjectListView: View {
                 viewModel.fetchProjects()
             }
             .navigationBarHidden(true)
+        }
+        .navigationDestination(item: $navigationManager.activeProjectId) { projectId in
+            if role == .USER{
+                if let project = viewModel.project(for: projectId) {
+                    ProjectDetailView(project: project,
+                                      role: role,
+                                      phoneNumber: viewModel.phoneNumber)
+                } else {
+                    Text("Project not found")
+                }
+            }else{
+                if let project = viewModel.project(for: projectId) {
+                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
+                } else {
+                    Text("Project not found")
+                }
+            }
         }
         .sheet(isPresented: $isShowingCreateSheet) {
             CreateProjectView()
@@ -261,59 +279,59 @@ struct ProjectListView: View {
                 LazyVStack(spacing: DesignSystem.Spacing.small) {
                     // Project cards
                     ForEach(viewModel.filteredProjectsForTempApprover) { project in
-                    if role == .APPROVER {
-                        Button(action: {
-                            Task {
-                                selectedProject = project
-                                let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
-                                if needsApproval {
-                                    // Show temp approver approval view
-                                    if let tempApprover = await viewModel.getTempApproverForProject(project) {
-                                        tempApproverData = tempApprover
-                                        showingTempApproval = true
+                        if role == .APPROVER {
+                            Button(action: {
+                                Task {
+                                    selectedProject = project
+                                    let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
+                                    if needsApproval {
+                                        // Show temp approver approval view
+                                        if let tempApprover = await viewModel.getTempApproverForProject(project) {
+                                            tempApproverData = tempApprover
+                                            showingTempApproval = true
+                                        }
+                                    } else {
+                                        shouldNavigateToDashboard = true
                                     }
-                                } else {
-                                    shouldNavigateToDashboard = true
                                 }
+                            }) {
+                                ProjectCell(
+                                    project: project,
+                                    role: role,
+                                    tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                )
                             }
-                        }) {
-                            ProjectCell(
-                                project: project, 
-                                role: role, 
-                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
-                            )
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded {
+                                HapticManager.selection()
+                            })
+                        } else if role == .ADMIN {
+                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)) {
+                                ProjectCell(
+                                    project: project,
+                                    role: role,
+                                    tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded {
+                                HapticManager.selection()
+                            })
+                        } else {
+                            NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber)) {
+                                ProjectCell(
+                                    project: project,
+                                    role: role,
+                                    tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .simultaneousGesture(TapGesture().onEnded {
+                                HapticManager.selection()
+                            })
                         }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            HapticManager.selection()
-                        })
-                    } else if role == .ADMIN {
-                        NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)) {
-                            ProjectCell(
-                                project: project, 
-                                role: role, 
-                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            HapticManager.selection()
-                        })
-                    } else {
-                        NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber)) {
-                            ProjectCell(
-                                project: project, 
-                                role: role, 
-                                tempApproverStatus: projectTempStatuses[project.id ?? ""]
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            HapticManager.selection()
-                        })
                     }
                 }
-            }
                 .padding(.horizontal, DesignSystem.Spacing.medium)
                 .padding(.top, DesignSystem.Spacing.small)
                 .padding(.bottom, 80) // Space for FAB
@@ -396,7 +414,7 @@ struct ProjectListView: View {
                         Task {
                             await viewModel.acceptTempApproverRole()
                             // Navigate to dashboard after acceptance
-//                            shouldNavigateToDashboard = true
+                            //                            shouldNavigateToDashboard = true
                         }
                     }
                     .primaryButton()

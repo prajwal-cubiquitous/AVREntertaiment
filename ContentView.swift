@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var authService = FirebaseAuthService()
     @State private var isLoading = true
+    @EnvironmentObject var navigationManager: NavigationManager
     
     var body: some View {
         Group {
@@ -57,6 +58,7 @@ struct ContentView: View {
                     if let currentUser = authService.currentUser {
                         ProjectListView(phoneNumber: currentUser.phoneNumber, role: currentUser.role)
                             .environmentObject(authService)
+                            .environmentObject(navigationManager)
                             .transition(.asymmetric(
                                 insertion: .move(edge: .trailing).combined(with: .opacity),
                                 removal: .move(edge: .leading).combined(with: .opacity)
