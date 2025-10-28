@@ -96,7 +96,10 @@ struct AVREntertainmentApp: App {
                             // Ensure project is set first so expense destination can resolve it
                             navigationManager.setProjectId(projectId)
                             navigationManager.setExpenseId(expenseId)
-                        }
+                        }else if screen == "project_detail1",
+                                 let projectId = userInfo["projectId"] as? String {
+                                  navigationManager.setProjectId(projectId)
+                            }
                     }
                 }
         }
@@ -180,6 +183,15 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
                         userInfo: ["screen": screen, "expenseId": expenseId,  "projectId": projectId]
                     )
                     print("💬 Navigate to expense: \(expenseId)")
+                }
+            case "project_detail1":
+                if let projectId = userInfo["projectId"] as? String {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("NavigateFromNotification"),
+                        object: nil,
+                        userInfo: ["screen": screen, "projectId": projectId]
+                    )
+//                    print("🔗 Navigate to project with ID: \(projectId)")
                 }
                 
             default:

@@ -35,15 +35,17 @@ struct ProjectListView: View {
                 
                 VStack {
                     // Common Header with menu button
-                    HStack {
+                    HStack(spacing: 8) {
                         if !viewModel.projects.isEmpty {
                             Text("Your Projects")
-                                .font(DesignSystem.Typography.largeTitle)
+                                .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
                         }
                         
-                        Spacer()
+                        Spacer(minLength: 4)
                         
                         if role == .APPROVER && !viewModel.projects.isEmpty {
                             Button {
@@ -66,7 +68,7 @@ struct ProjectListView: View {
                                     }
                                 }
                             }
-                            .padding(.horizontal, 8)
+                            .padding(.horizontal, 4)
                         }
                         
                         // Status Filter for Admin
@@ -82,13 +84,17 @@ struct ProjectListView: View {
                                     }
                                 }
                             } label: {
-                                HStack {
+                                HStack(spacing: 3) {
                                     Text(viewModel.selectedStatusFilter?.displayText ?? "All")
-                                        .font(.subheadline)
-                                    Image(systemName: "chevron.down")
                                         .font(.caption)
+                                        .fontWeight(.medium)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                        .fixedSize(horizontal: true, vertical: false)
+                                    Image(systemName: "chevron.down")
+                                        .font(.caption2)
                                 }
-                                .padding(.horizontal, 12)
+                                .padding(.horizontal, 6)
                                 .padding(.vertical, 6)
                                 .background(Color(.systemBackground))
                                 .cornerRadius(8)
@@ -103,6 +109,7 @@ struct ProjectListView: View {
                                 .font(.title3)
                                 .foregroundColor(.primary)
                         }
+                        .padding(.leading, 4)
                     }
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                     .padding(.top, DesignSystem.Spacing.medium)
