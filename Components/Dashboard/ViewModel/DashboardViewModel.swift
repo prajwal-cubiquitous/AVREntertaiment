@@ -460,6 +460,16 @@ class DashboardViewModel: ObservableObject {
         
         return currentAndPreviousBudgets / totalBudget
     }
+    func fetchProject(byId projectId: String) async throws -> Project? {
+        let docRef = db.collection("projects_ios").document(projectId)
+        let snapshot = try await docRef.getDocument()
+        
+        guard let project = try? snapshot.data(as: Project.self) else {
+            print("⚠️ Could not decode project with ID: \(projectId)")
+            return nil
+        }
+        return project
+    }
 }
 
 // Extension for Double formatting

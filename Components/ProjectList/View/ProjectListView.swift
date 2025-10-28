@@ -165,19 +165,7 @@ struct ProjectListView: View {
                     viewModel: viewModel
                 )
             }
-            .navigationDestination(item: $navigationManager.activeExpenseId) { _ in
-                // Resolve project from current navigation state
-                if let projectId = navigationManager.activeProjectId?.id,
-                   let project = viewModel.project(for: projectId) {
-                    if role == .APPROVER {
-                        PendingApprovalsView(role: role, project: project, phoneNumber: viewModel.phoneNumber)
-                    } else {
-                        ExpenseListView(project: project, currentUserPhone: viewModel.phoneNumber)
-                    }
-                } else {
-                    Text("Project not found")
-                }
-            }
+
             .onChange(of: navigationManager.activeChatId) { newValue in
                 if let chatItem = newValue {
                     print("💬 Chat navigation trigger detected for chat ID: \(chatItem.id)")

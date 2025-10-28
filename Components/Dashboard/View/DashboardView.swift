@@ -26,8 +26,11 @@ struct DashboardView: View {
     @State private var showingAnonymousExpensesDetail = false
     @State private var scrollToDepartmentSection = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
+    @EnvironmentObject var navigationManager: NavigationManager
+    @State private var showProjectDetail = false
     let role: UserRole?
     let phoneNumber: String
+    @State private var selectedProject: Project?
     
     // Accept a single project as parameter
     var project: Project?
@@ -81,13 +84,13 @@ struct DashboardView: View {
                             // Department Budget Cards - Enhanced
                             departmentBudgetSection
                                 .id("departmentBudgetSection")
-                        
-                        // Enhanced Charts Section
-                        chartsSection
-                        
-                    }
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                    .padding(.bottom, DesignSystem.Spacing.extraLarge)
+                            
+                            // Enhanced Charts Section
+                            chartsSection
+                            
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.bottom, DesignSystem.Spacing.extraLarge)
                     }
                     .onChange(of: scrollToDepartmentSection) { newValue in
                         if newValue {
@@ -201,7 +204,7 @@ struct DashboardView: View {
                     },
                     alignment: .bottom
                 )
-
+                
                 // Notification popup overlay
                 if showingNotifications {
                     Color.black.opacity(0.1)
@@ -313,14 +316,14 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingAnalytics) {
-//            if let projectId = project?.id , let projectBudget = project?.budget{
-////                PredictiveAnalysisView1(projectId: projectId, budget: projectBudget)
-////                    .presentationDetents([.large])
-//                AnalyticsDashboardView(projectId: projectId)
-//                    .presentationDetents([.large])
-//            }
-
-
+            //            if let projectId = project?.id , let projectBudget = project?.budget{
+            ////                PredictiveAnalysisView1(projectId: projectId, budget: projectBudget)
+            ////                    .presentationDetents([.large])
+            //                AnalyticsDashboardView(projectId: projectId)
+            //                    .presentationDetents([.large])
+            //            }
+            
+            
             if let project = project{
                 PredictiveAnalysisScreen(project: project)
             }
@@ -375,6 +378,14 @@ struct DashboardView: View {
                     .presentationDetents([.large])
             }
         }
+        .fullScreenCover(isPresented: $showProjectDetail) {
+            if let project = selectedProject {
+                PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
+            } else {
+                ProgressView("Loading project...")
+            }
+        }
+
         .onAppear {
             if let projectId = project?.id{
                 viewModel.loadDashboardData()
@@ -389,7 +400,36 @@ struct DashboardView: View {
                 await fetchTempApproverData()
             }
         }
+        .onChange(of: navigationManager.activeExpenseId) { newValue in
+            if let expenseItem = newValue {
+                handleExpenseChange(expenseItem.id)
+            }
+        }
+
     }
+    
+    
+
+    func handleExpenseChange(_ expenseId: String?) {
+        Task {
+            do {
+                // Get the current project ID from navigation manager
+                if let projectId = navigationManager.activeProjectId?.id {
+                    if let project = try await viewModel.fetchProject(byId: projectId) {
+                        selectedProject = project
+                        showProjectDetail = true
+                    } else {
+                        print("⚠️ No project found for ID: \(projectId)")
+                    }
+                } else {
+                    print("⚠️ No active project ID found in navigation manager.")
+                }
+            } catch {
+                print("❌ Error fetching project: \(error)")
+            }
+        }
+    }
+
     
     // MARK: - Project Overview Section
     private var projectOverviewSection: some View {
@@ -568,10 +608,10 @@ struct DashboardView: View {
                 departmentDistributionChart
             }
             
-//            // Budget vs Spent Chart
-//            if !viewModel.departmentBudgets.isEmpty {
-//                budgetComparisonChart
-//            }
+            //            // Budget vs Spent Chart
+            //            if !viewModel.departmentBudgets.isEmpty {
+            //                budgetComparisonChart
+            //            }
         }
     }
     
@@ -647,9 +687,9 @@ struct DashboardView: View {
                             .foregroundColor(.primary)
                             .contentTransition(.numericText())
                         
-//                        Text("₹")
-//                            .font(DesignSystem.Typography.caption2)
-//                            .foregroundColor(.secondary)
+                        //                        Text("₹")
+                        //                            .font(DesignSystem.Typography.caption2)
+                        //                            .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -816,48 +856,48 @@ struct DashboardView: View {
         }
     }
     
-//    private func fetchApproverData() async {
-//        guard let project = project else {
-//            return
-//        }
-//        
-//        do {
-//            let db = Firestore.firestore()
-//            
-//            // Fetch user name from users collection
-//            let userDocument = try await db
-//                .collection(FirebaseCollections.users)
-//                .document(project.managerId)
-//                .getDocument()
-//            
-//            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
-//                tempApproverName = user.name
-//                
-//                // Fetch temp approver end date from subcollection
-//                let tempApproverSnapshot = try await db
-//                    .collection("projects_ios")
-//                    .document(project.id ?? "")
-//                    .collection("tempApprover")
-//                    .whereField("approverId", isEqualTo: user.phoneNumber)
-//                    .limit(to: 1)
-//                    .getDocuments()
-//                
-//                if let tempApproverDoc = tempApproverSnapshot.documents.first,
-//                   let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
-//                    tempApproverEndDate = tempApprover.endDate
-//                } else {
-//                    tempApproverEndDate = nil
-//                }
-//            } else {
-//                tempApproverName = nil
-//                tempApproverEndDate = nil
-//            }
-//        } catch {
-//            print("Error fetching temp approver data: \(error)")
-//            tempApproverName = nil
-//            tempApproverEndDate = nil
-//        }
-//    }
+    //    private func fetchApproverData() async {
+    //        guard let project = project else {
+    //            return
+    //        }
+    //
+    //        do {
+    //            let db = Firestore.firestore()
+    //
+    //            // Fetch user name from users collection
+    //            let userDocument = try await db
+    //                .collection(FirebaseCollections.users)
+    //                .document(project.managerId)
+    //                .getDocument()
+    //
+    //            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
+    //                tempApproverName = user.name
+    //
+    //                // Fetch temp approver end date from subcollection
+    //                let tempApproverSnapshot = try await db
+    //                    .collection("projects_ios")
+    //                    .document(project.id ?? "")
+    //                    .collection("tempApprover")
+    //                    .whereField("approverId", isEqualTo: user.phoneNumber)
+    //                    .limit(to: 1)
+    //                    .getDocuments()
+    //
+    //                if let tempApproverDoc = tempApproverSnapshot.documents.first,
+    //                   let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
+    //                    tempApproverEndDate = tempApprover.endDate
+    //                } else {
+    //                    tempApproverEndDate = nil
+    //                }
+    //            } else {
+    //                tempApproverName = nil
+    //                tempApproverEndDate = nil
+    //            }
+    //        } catch {
+    //            print("Error fetching temp approver data: \(error)")
+    //            tempApproverName = nil
+    //            tempApproverEndDate = nil
+    //        }
+    //    }
     
     // MARK: - Budget Comparison Chart
     private var budgetComparisonChart: some View {
@@ -946,7 +986,7 @@ struct EnhancedDepartmentBudgetCard: View {
     let budget: DepartmentBudget
     let isSelected: Bool
     @ObservedObject var viewModel: ProjectDetailViewModel
-
+    
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -996,7 +1036,7 @@ struct EnhancedDepartmentBudgetCard: View {
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(budget.approvedBudget > budget.totalBudget ? .red : .primary)
-
+                    
                 }
                 
                 // Remaining amount (only show if there's an allocated budget)
@@ -1014,21 +1054,21 @@ struct EnhancedDepartmentBudgetCard: View {
                             .foregroundColor(budget.totalBudget - budget.approvedBudget < 0 ? .red : .green)
                     }
                 }
-//                else {
-//                    // For "Other Expenses" department, show a note
-//                    HStack {
-//                        Text("Unallocated Expenses")
-//                            .font(DesignSystem.Typography.caption1)
-//                            .foregroundColor(.secondary)
-//                        
-//                        Spacer()
-//                        
-//                        Text("No Budget")
-//                            .font(DesignSystem.Typography.subheadline)
-//                            .fontWeight(.semibold)
-//                            .foregroundColor(.orange)
-//                    }
-//                }
+                //                else {
+                //                    // For "Other Expenses" department, show a note
+                //                    HStack {
+                //                        Text("Unallocated Expenses")
+                //                            .font(DesignSystem.Typography.caption1)
+                //                            .foregroundColor(.secondary)
+                //
+                //                        Spacer()
+                //
+                //                        Text("No Budget")
+                //                            .font(DesignSystem.Typography.subheadline)
+                //                            .fontWeight(.semibold)
+                //                            .foregroundColor(.orange)
+                //                    }
+                //                }
             }
             
             // Progress bar (only show if there's an allocated budget)
@@ -1268,14 +1308,14 @@ struct TotalBudgetCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-//            HStack {
-//                Image(systemName: "indianrupeesign.circle.fill")
-//                    .font(DesignSystem.Typography.title3)
-//                    .foregroundColor(.orange)
-//                    .symbolRenderingMode(.hierarchical)
-//                
-//                Spacer()
-//            }
+            //            HStack {
+            //                Image(systemName: "indianrupeesign.circle.fill")
+            //                    .font(DesignSystem.Typography.title3)
+            //                    .foregroundColor(.orange)
+            //                    .symbolRenderingMode(.hierarchical)
+            //
+            //                Spacer()
+            //            }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(viewModel.totalProjectBudgetFormatted)
@@ -1511,4 +1551,4 @@ struct AnonymousExpenseCard: View {
 
 #Preview {
     DashboardView(project: Project.sampleData.first, phoneNumber: "1234567890")
-} 
+}
