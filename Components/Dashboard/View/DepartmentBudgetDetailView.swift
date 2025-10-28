@@ -398,7 +398,8 @@ struct DepartmentExpenseRowView: View {
                         }
                     }
                     
-                    if let approver = approverName {
+                    // Show approver text only when the expense is approved
+                    if expense.status == .approved, let approver = approverName {
                         Text("Approved by \(approver)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
