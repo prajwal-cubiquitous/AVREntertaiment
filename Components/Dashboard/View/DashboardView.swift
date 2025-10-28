@@ -1233,10 +1233,11 @@ struct TempApproverStatsCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            HStack {
+        VStack(alignment: .leading, spacing: 6) {
+            // Top row: Icon and Status
+            HStack(spacing: 6) {
                 Image(systemName: "person.badge.clock.fill")
-                    .font(DesignSystem.Typography.title3)
+                    .font(.system(size: 16))
                     .foregroundColor(statusColor)
                     .symbolRenderingMode(.hierarchical)
                 
@@ -1244,39 +1245,42 @@ struct TempApproverStatsCard: View {
                 
                 // Status badge
                 Text(statusText)
-                    .font(DesignSystem.Typography.caption2)
+                    .font(.system(size: 10))
                     .fontWeight(.semibold)
                     .foregroundColor(statusColor)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(statusColor.opacity(0.15))
                     .cornerRadius(4)
             }
             
-            VStack(alignment: .leading, spacing: 2) {
+            // Content
+            VStack(alignment: .leading, spacing: 3) {
                 Text("Temp Approver")
-                    .font(DesignSystem.Typography.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.primary)
                 
                 Text(approverName)
-                    .font(DesignSystem.Typography.caption1)
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 
                 Text(phoneNumber)
-                    .font(DesignSystem.Typography.caption2)
+                    .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 
                 if let endDate = endDate, status == .accepted || status == .active {
                     Text("Until: \(endDate, formatter: dateFormatter)")
-                        .font(DesignSystem.Typography.caption2)
+                        .font(.system(size: 9))
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
         }
-        .padding(DesignSystem.Spacing.medium)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 100)
         .background(Color(.secondarySystemGroupedBackground))
