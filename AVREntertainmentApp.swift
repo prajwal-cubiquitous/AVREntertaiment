@@ -85,9 +85,10 @@ struct AVREntertainmentApp: App {
                         if screen == "project_detail",
                            let projectId = userInfo["projectId"] as? String {
                             navigationManager.setProjectId(projectId)
-                        } else if screen == "chat",
-                                  let chatId = userInfo["chatId"] as? String {
-                            navigationManager.activeChatId = chatId
+                        } else if screen == "chat_detail",
+                                  let chatId = userInfo["chatId"] as? String , let projectId = userInfo["projectId"] as? String{
+                            navigationManager.setChatId(chatId)
+                            navigationManager.setProjectId(projectId)
                         }
                     }
                 }
@@ -155,12 +156,12 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
 //                    print("🔗 Navigate to project with ID: \(projectId)")
                 }
                 
-            case "chat":
-                if let chatId = userInfo["chatId"] as? String {
+            case "chat_detail":
+                if let chatId = userInfo["chatId"] as? String , let projectId = userInfo["projectId"] as? String{
                     NotificationCenter.default.post(
                         name: Notification.Name("NavigateFromNotification"),
                         object: nil,
-                        userInfo: ["screen": screen, "chatId": chatId]
+                        userInfo: ["screen": screen, "chatId": chatId,  "projectId": projectId]
                     )
                     print("💬 Navigate to chat with ID: \(chatId)")
                 }

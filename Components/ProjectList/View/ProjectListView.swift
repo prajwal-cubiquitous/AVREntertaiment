@@ -156,6 +156,26 @@ struct ProjectListView: View {
                     }
                 }
             }
+            .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
+                NavigationDestinationForChat(
+                    chatId: chatNavigationItem.id,
+                    projectId: navigationManager.activeProjectId?.id,
+                    role: role,
+                    phoneNumber: viewModel.phoneNumber,
+                    viewModel: viewModel
+                )
+            }
+            .onChange(of: navigationManager.activeChatId) { newValue in
+                if let chatItem = newValue {
+                    print("💬 Chat navigation trigger detected for chat ID: \(chatItem.id)")
+                    // Fetch projects if needed
+                    Task {
+                        if viewModel.projects.isEmpty {
+                            await viewModel.fetchProjects()
+                        }
+                    }
+                }
+            }
             .onChange(of: navigationManager.activeProjectId) { newValue in
                 if let navigationItem = newValue {
                     let id = navigationItem.id
@@ -330,7 +350,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else if role == .ADMIN {
-                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)) {
+                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -342,7 +362,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else {
-                            NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber)) {
+                            NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -721,6 +741,83 @@ struct NotificationPreviewItem: View {
         .padding(8)
         .background(Color(UIColor.tertiarySystemGroupedBackground))
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Navigation Destination Helper for Chat
+struct NavigationDestinationForChat: View {
+    let chatId: String
+    let projectId: String?
+    let role: UserRole
+    let phoneNumber: String
+    let viewModel: ProjectListViewModel
+    
+    @State private var project: Project?
+    @State private var participant: ChatParticipant?
+    @State private var isLoading = true
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading chat...")
+            } else if let project = project, let participant = participant {
+                IndividualChatView(
+                    participant: participant,
+                    project: project,
+                    role: role,
+                    currentUserPhoneNumber: phoneNumber
+                )
+            } else {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    Text("Chat not found")
+                        .font(.headline)
+                }
+            }
+        }
+        .task {
+            await resolveChatDestination()
+        }
+    }
+    
+    private func resolveChatDestination() async {
+        guard let projectId = projectId else {
+            isLoading = false
+            return
+        }
+        
+        // Find the project
+        if let foundProject = viewModel.project(for: projectId) {
+            self.project = foundProject
+            
+            // Determine current user's identifier
+            let rawCurrent = (role == .ADMIN) ? "Admin" : phoneNumber
+            let current = rawCurrent.hasPrefix("+91") ? String(rawCurrent.dropFirst(3)) : rawCurrent
+            
+            // Extract counterpart id from chatId
+            let parts = chatId.split(separator: "_").map(String.init)
+            let otherId = parts.first { $0 != current } ?? ""
+            
+            if !otherId.isEmpty {
+                // Build participant
+                let participantRole: UserRole = (otherId == "Admin") ? .ADMIN : .USER
+                self.participant = ChatParticipant(
+                    id: otherId,
+                    name: otherId,
+                    phoneNumber: otherId,
+                    role: participantRole,
+                    isOnline: true,
+                    lastSeen: nil,
+                    unreadCount: 0,
+                    lastMessage: nil,
+                    lastMessageTime: nil
+                )
+            }
+        }
+        
+        isLoading = false
     }
 }
 

@@ -17,6 +17,7 @@ struct ChatsView: View {
     @State private var selectedParticipant: ChatParticipant?
     @State private var showingGroupChat = false
     @State private var isRefreshing = false
+    @EnvironmentObject var navigationManager: NavigationManager
     
     init(project: Project, currentUserPhone: String? = nil, currentUserRole: UserRole) {
         self.project = project
@@ -38,6 +39,44 @@ struct ChatsView: View {
                     emptyStateView
                 } else {
                     participantsListView
+                }
+            }
+            .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
+                let chatId = chatNavigationItem.id
+                let projectId = navigationManager.activeProjectId?.id
+                
+                // Find project first
+                if let projectId{                    // Determine current user's identifier used in chatId generation
+                    let rawCurrent = (currentUserRole == .ADMIN) ? "Admin" : viewModel.currentUserPhone
+                    if let rawCurrent{
+                        let current = rawCurrent.hasPrefix("+91") ? String(rawCurrent.dropFirst(3)) : rawCurrent
+                        
+                        // Extract counterpart id from chatId
+                        let parts = chatId.split(separator: "_").map(String.init)
+                        let otherId = parts.first { $0 != current } ?? ""
+                        
+                        // Build minimal participant; if Admin use admin role
+                        let participantRole: UserRole = (otherId == "Admin") ? .ADMIN : .USER
+                        let participant = ChatParticipant(
+                            id: otherId,
+                            name: otherId,
+                            phoneNumber: otherId,
+                            role: participantRole,
+                            isOnline: true,
+                            lastSeen: nil,
+                            unreadCount: 0,
+                            lastMessage: nil,
+                            lastMessageTime: nil
+                        )
+                        IndividualChatView(
+                            participant: participant,
+                            project: project,
+                            role: currentUserRole,
+                            currentUserPhoneNumber: viewModel.currentUserPhone
+                        )
+                    }
+                } else {
+                    Text("Chat or Project not found")
                 }
             }
             .navigationTitle("Chats")
@@ -167,6 +206,7 @@ struct ChatsView: View {
                 ForEach(viewModel.participants) { participant in
                     NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: currentUserPhone)
                         .onAppear {
+                            print("Debug 111 what is it : \(participant)")
                             // Mark as read in background without blocking UI
                             Task.detached(priority: .background) {
                                 await viewModel.markMessagesAsRead(for: participant.phoneNumber)

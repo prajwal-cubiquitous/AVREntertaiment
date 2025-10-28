@@ -18,6 +18,8 @@ struct ProjectDetailView: View {
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
+    @EnvironmentObject var navigationManager: NavigationManager
+
 
     init(project: Project, role: UserRole? = nil, phoneNumber: String = ""){
         self.project = project
@@ -113,6 +115,7 @@ struct ProjectDetailView: View {
                     currentUserRole: .ADMIN
                 )
                 .presentationDetents([.large])
+                .environmentObject(navigationManager)
             } else {
                 ChatsView(
                     project: project,
@@ -120,6 +123,7 @@ struct ProjectDetailView: View {
                     currentUserRole: role ?? .USER
                 )
                 .presentationDetents([.large])
+                .environmentObject(navigationManager)
             }
         }
     }

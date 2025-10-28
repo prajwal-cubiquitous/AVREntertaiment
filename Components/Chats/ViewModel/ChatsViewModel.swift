@@ -70,7 +70,7 @@ class ChatsViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private let db = Firestore.firestore()
-    private let currentUserPhone: String?
+    let currentUserPhone: String?
     private let currentUserRole: UserRole
     private let project: Project
     
@@ -122,6 +122,9 @@ class ChatsViewModel: ObservableObject {
         // Load detailed data in background
         await loadDetailedParticipants()
     }
+    
+
+
     
     private func loadDetailedParticipants() async {
         do {

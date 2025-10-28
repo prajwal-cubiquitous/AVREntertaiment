@@ -42,6 +42,7 @@ struct ContentView: View {
                     // ADMIN: Email-based login, goes to AdminMainView
                     AdminMainView()
                         .environmentObject(authService)
+                        .environmentObject(navigationManager)
                         .transition(.asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .move(edge: .leading).combined(with: .opacity)
