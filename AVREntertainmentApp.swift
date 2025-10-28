@@ -84,7 +84,10 @@ struct AVREntertainmentApp: App {
                         
                         if screen == "project_detail",
                            let projectId = userInfo["projectId"] as? String {
-                            navigationManager.activeProjectId = projectId
+                            navigationManager.setProjectId(projectId)
+                        } else if screen == "chat",
+                                  let chatId = userInfo["chatId"] as? String {
+                            navigationManager.activeChatId = chatId
                         }
                     }
                 }

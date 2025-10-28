@@ -138,21 +138,45 @@ struct ProjectListView: View {
                 viewModel.fetchProjects()
             }
             .navigationBarHidden(true)
-        }
-        .navigationDestination(item: $navigationManager.activeProjectId) { projectId in
-            if role == .USER{
-                if let project = viewModel.project(for: projectId) {
-                    ProjectDetailView(project: project,
-                                      role: role,
-                                      phoneNumber: viewModel.phoneNumber)
-                } else {
-                    Text("Project not found")
+            .navigationDestination(item: $navigationManager.activeProjectId) { projectNavigationItem in
+                let projectId = projectNavigationItem.id
+                if role == .USER{
+                    if let project = viewModel.project(for: projectId) {
+                        ProjectDetailView(project: project,
+                                          role: role,
+                                          phoneNumber: viewModel.phoneNumber)
+                    } else {
+                        Text("Project not found")
+                    }
+                }else{
+                    if let project = viewModel.project(for: projectId) {
+                        DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
+                    } else {
+                        Text("Project not found")
+                    }
                 }
-            }else{
-                if let project = viewModel.project(for: projectId) {
-                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
-                } else {
-                    Text("Project not found")
+            }
+            .onChange(of: navigationManager.activeProjectId) { newValue in
+                if let navigationItem = newValue {
+                    let id = navigationItem.id
+                    print("🔄 Navigation trigger detected for project ID: \(id)")
+                    Task {
+                        if viewModel.projects.isEmpty {
+                            await viewModel.fetchProjects()
+                        }
+
+                        // Ensure UI updates happen on main thread
+                        await MainActor.run {
+                            if let project = viewModel.project(for: id) {
+                                print("✅ Project found for navigation: \(project.name)")
+                                // Navigation will be handled by navigationDestination
+                            } else {
+                                print("⚠️ Project not found yet for ID: \(id)")
+                                // Clear the navigation if project not found
+                                navigationManager.setProjectId(nil)
+                            }
+                        }
+                    }
                 }
             }
         }

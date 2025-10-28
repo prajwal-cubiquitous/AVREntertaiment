@@ -6,11 +6,25 @@
 //
 import Foundation
 
+struct ProjectNavigationItem: Identifiable, Hashable {
+    let id: String
+}
+
 class NavigationManager: ObservableObject {
-    @Published var activeProjectId: String?
+    @Published var activeProjectId: ProjectNavigationItem?
+    @Published var activeChatId: String?
     
     init(){
-        print("activte project id \(activeProjectId)")
-
+        print("active project id \(activeProjectId?.id ?? "nil")")
+        print("active chat id \(activeChatId ?? "nil")")
+    }
+    
+    func clearNavigation() {
+        activeProjectId = nil
+        activeChatId = nil
+    }
+    
+    func setProjectId(_ id: String?) {
+        activeProjectId = id.map { ProjectNavigationItem(id: $0) }
     }
 }
