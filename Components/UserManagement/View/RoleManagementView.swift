@@ -10,7 +10,8 @@ struct RoleManagementView: View {
                 Section {
                     roleCard(
                         role: .ADMIN,
-                        description: "Full access to all features including user management and project creation",
+                        title: "Administrator",
+                        description: "System administrator with complete control over the application",
                         permissions: [
                             "Create and manage projects",
                             "Manage users and roles",
@@ -27,6 +28,19 @@ struct RoleManagementView: View {
                             "Approve/reject requests",
                             "View project details",
                             "Generate reports"
+                        ]
+                    )
+                    
+                    // Information card: Production Head (maps to admin-level permissions)
+                    roleCard(
+                        role: .ADMIN,
+                        title: "Production Head",
+                        description: "Full administrative access to manage projects, users, and approvals",
+                        permissions: [
+                            "Oversee all projects and budgets",
+                            "Manage users and roles",
+                            "Review and approve expenses",
+                            "Access all reports and analytics"
                         ]
                     )
                     
@@ -58,7 +72,7 @@ struct RoleManagementView: View {
         }
     }
     
-    private func roleCard(role: UserRole, description: String, permissions: [String]) -> some View {
+    private func roleCard(role: UserRole, title: String? = nil, description: String, permissions: [String]) -> some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 12) {
                 Text(description)
@@ -81,7 +95,7 @@ struct RoleManagementView: View {
             .padding(.vertical, 8)
         } label: {
             HStack {
-                Text(role.displayName)
+                Text(title ?? role.displayName)
                     .font(.headline)
                 
                 Spacer()

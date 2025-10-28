@@ -87,8 +87,15 @@ struct AVREntertainmentApp: App {
                             navigationManager.setProjectId(projectId)
                         } else if screen == "chat_detail",
                                   let chatId = userInfo["chatId"] as? String , let projectId = userInfo["projectId"] as? String{
-                            navigationManager.setChatId(chatId)
+                            // Ensure project is set first so chat destination can resolve it
                             navigationManager.setProjectId(projectId)
+                            navigationManager.setChatId(chatId)
+                        } else if (screen == "expert_detail" || screen == "expense_detail"),
+                                  let expenseId = userInfo["expenseId"] as? String,
+                                  let projectId = userInfo["projectId"] as? String {
+                            // Ensure project is set first so expense destination can resolve it
+                            navigationManager.setProjectId(projectId)
+                            navigationManager.setExpenseId(expenseId)
                         }
                     }
                 }
@@ -164,6 +171,15 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
                         userInfo: ["screen": screen, "chatId": chatId,  "projectId": projectId]
                     )
                     print("💬 Navigate to chat with ID: \(chatId)")
+                }
+            case "expense_detail":
+                if let expenseId = userInfo["expenseId"] as? String , let projectId = userInfo["projectId"] as? String{
+                    NotificationCenter.default.post(
+                        name: Notification.Name("NavigateFromNotification"),
+                        object: nil,
+                        userInfo: ["screen": screen, "expenseId": expenseId,  "projectId": projectId]
+                    )
+                    print("💬 Navigate to expense: \(expenseId)")
                 }
                 
             default:
