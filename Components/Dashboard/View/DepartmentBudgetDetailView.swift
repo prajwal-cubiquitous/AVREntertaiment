@@ -8,6 +8,24 @@
 import SwiftUI
 import FirebaseFirestore
 
+enum SortOption: String, CaseIterable {
+    case dateDescending = "Date (Newest First)"
+    case dateAscending = "Date (Oldest First)"
+    case amountDescending = "Amount (High to Low)"
+    case amountAscending = "Amount (Low to High)"
+    case status = "Status"
+    
+    var icon: String {
+        switch self {
+        case .dateDescending: return "calendar.badge.clock"
+        case .dateAscending: return "calendar.badge.clock"
+        case .amountDescending: return "arrow.down.circle"
+        case .amountAscending: return "arrow.up.circle"
+        case .status: return "tag"
+        }
+    }
+}
+
 struct DepartmentBudgetDetailView: View {
     let department: String
     let projectId: String
@@ -21,6 +39,12 @@ struct DepartmentBudgetDetailView: View {
     @State private var selectedExpenseForChat: Expense?
     @State private var showingExpenseDetail = false
     @State private var selectedExpenseForDetail: Expense?
+    @State private var showingDateRangePicker = false
+    @State private var startDate = Date()
+    @State private var endDate = Date()
+    @State private var isDateRangeActive = false
+    @State private var sortOption: SortOption = .dateDescending
+    @State private var showingSortOptions = false
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -30,6 +54,14 @@ struct DepartmentBudgetDetailView: View {
             expenses = expenses.filter { $0.status == status }
         }
         
+        // Filter by date range
+        if isDateRangeActive {
+            expenses = expenses.filter { expense in
+                let expenseDate = expense.createdAt.dateValue()
+                return expenseDate >= startDate && expenseDate <= endDate
+            }
+        }
+        
         // Filter by search text
         if !searchText.isEmpty {
             expenses = expenses.filter { expense in
@@ -37,6 +69,20 @@ struct DepartmentBudgetDetailView: View {
                 expense.categoriesString.localizedCaseInsensitiveContains(searchText) ||
                 expense.submittedBy.contains(searchText)
             }
+        }
+        
+        // Sort expenses
+        switch sortOption {
+        case .dateDescending:
+            expenses = expenses.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
+        case .dateAscending:
+            expenses = expenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
+        case .amountDescending:
+            expenses = expenses.sorted { $0.amount > $1.amount }
+        case .amountAscending:
+            expenses = expenses.sorted { $0.amount < $1.amount }
+        case .status:
+            expenses = expenses.sorted { $0.status.rawValue < $1.status.rawValue }
         }
         
         return expenses
@@ -101,6 +147,28 @@ struct DepartmentBudgetDetailView: View {
                     ExpenseDetailView(expense: expense, role: role)
                 } else {
                     ExpenseDetailReadOnlyView(expense: expense)
+                }
+            }
+        }
+        .sheet(isPresented: $showingDateRangePicker) {
+            DateRangePickerSheet(
+                startDate: $startDate,
+                endDate: $endDate,
+                isActive: $isDateRangeActive
+            )
+        }
+        .confirmationDialog("Sort Options", isPresented: $showingSortOptions) {
+            ForEach(SortOption.allCases, id: \.self) { option in
+                Button(action: {
+                    sortOption = option
+                }) {
+                    HStack {
+                        Text(option.rawValue)
+                        if sortOption == option {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
                 }
             }
         }
@@ -238,33 +306,97 @@ struct DepartmentBudgetDetailView: View {
             .padding(.vertical, 8)
             .background(Color(.secondarySystemGroupedBackground))
             .cornerRadius(10)
-            
-            // Status filter chips
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    DepartmentFilterChip(
-                        title: "All",
-                        isSelected: selectedFilter == nil,
-                        color: .blue
-                    ) {
-                        selectedFilter = nil
-                    }
-                    
-                    ForEach(ExpenseStatus.allCases, id: \.self) { status in
-                        DepartmentFilterChip(
-                            title: status.rawValue.capitalized,
-                            isSelected: selectedFilter == status,
-                            color: status.color
-                        ) {
-                            selectedFilter = selectedFilter == status ? nil : status
+
+            // Unified Filter & Sort Menu
+            HStack {
+                Menu {
+                    // Status Picker
+                    Picker("Status", selection: Binding(
+                        get: { selectedFilter ?? .pending },
+                        set: { newValue in
+                            selectedFilter = newValue
+                        }
+                    )) {
+                        Text("All").tag(Optional<ExpenseStatus>.none)
+                        ForEach(ExpenseStatus.allCases, id: \.self) { status in
+                            Text(status.rawValue.capitalized)
+                                .tag(Optional(status))
                         }
                     }
+                    .pickerStyle(.menu)
+
+                    // Sort Picker
+                    Picker("Sort by", selection: $sortOption) {
+                        ForEach(SortOption.allCases, id: \.self) { option in
+                            Label(option.rawValue, systemImage: option.icon)
+                                .tag(option)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    // Date Range Controls
+                    Toggle(isOn: $isDateRangeActive) {
+                        Label("Enable Date Range", systemImage: "calendar")
+                    }
+                    Button {
+                        showingDateRangePicker = true
+                    } label: {
+                        Label("Set Date Range…", systemImage: "calendar.badge.plus")
+                    }
+
+                    // Clear section
+                    if selectedFilter != nil || isDateRangeActive || searchText.isEmpty == false || sortOption != .dateDescending {
+                        Button("Clear All Filters", role: .destructive) {
+                            selectedFilter = nil
+                            isDateRangeActive = false
+                            searchText = ""
+                            sortOption = .dateDescending
+                        }
+                    }
+                } label: {
+                    Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
+                        .font(.subheadline)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                .padding(.horizontal, 16)
+
+                Spacer()
+
+                // Totals Summary
+                totalsSummary
             }
+            
+            // Removed legacy status chips (now consolidated in unified menu)
         }
         .padding(.vertical, 12)
         .background(Color(.systemBackground))
+    }
+
+    // MARK: - Totals Summary View
+    private var totalsSummary: some View {
+        let approved = viewModel.expenses.filter { $0.status == .approved }.reduce(0.0) { $0 + $1.amount }
+        let pending = viewModel.expenses.filter { $0.status == .pending }.reduce(0.0) { $0 + $1.amount }
+        let rejected = viewModel.expenses.filter { $0.status == .rejected }.reduce(0.0) { $0 + $1.amount }
+        return HStack(spacing: 8) {
+            amountBadge(title: "Approved", amount: approved, color: .green)
+            amountBadge(title: "Pending", amount: pending, color: .orange)
+            amountBadge(title: "Rejected", amount: rejected, color: .red)
+        }
+    }
+
+    private func amountBadge(title: String, amount: Double, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text("\(title): \(Int(amount).formattedCurrency)")
+                .font(.caption2)
+                .foregroundColor(.primary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
     
     // MARK: - Loading View
@@ -372,15 +504,19 @@ struct DepartmentExpenseRowView: View {
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
-                        
-                        Text(expense.dateFormatted)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
                     }
                     
                     Spacer()
                     
                     VStack(alignment: .trailing, spacing: 4) {
+                        // Date at top-right
+                        HStack {
+                            Spacer()
+                            Text(expense.dateFormatted)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
                         HStack(spacing: 8) {
                             // Status badge with enhanced design
                             HStack(spacing: 4) {
@@ -648,4 +784,127 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         role: .APPROVER,
         phoneNumber: "9876543218"
     )
+}
+
+// MARK: - Date Range Picker Sheet
+struct DateRangePickerSheet: View {
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+    @Binding var isActive: Bool
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Select Date Range")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Choose start and end dates to filter expenses")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 20)
+                
+                // Date Pickers
+                VStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Start Date")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        DatePicker(
+                            "Start Date",
+                            selection: $startDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("End Date")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        DatePicker(
+                            "End Date",
+                            selection: $endDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                // Validation Message
+                if endDate < startDate {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("End date must be after start date")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                
+                Spacer()
+                
+                // Action Buttons
+                VStack(spacing: 12) {
+                    Button(action: {
+                        isActive = true
+                        dismiss()
+                    }) {
+                        Text("Apply Filter")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(endDate < startDate ? Color.gray : Color.blue)
+                            )
+                    }
+                    .disabled(endDate < startDate)
+                    
+                    Button(action: {
+                        isActive = false
+                        dismiss()
+                    }) {
+                        Text("Clear Filter")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red, lineWidth: 1)
+                            )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+        }
+    }
 }

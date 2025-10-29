@@ -365,6 +365,11 @@ struct MemberExpensesView: View {
     @StateObject private var viewModel = MemberExpensesViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var selectedFilter: ExpenseFilter = .all
+    @State private var sortOption: SortOption = .dateDescending
+    @State private var showingDateRangePicker = false
+    @State private var startDate = Date()
+    @State private var endDate = Date()
+    @State private var isDateRangeActive = false
     
     enum ExpenseFilter: String, CaseIterable {
         case all = "All"
@@ -376,6 +381,7 @@ struct MemberExpensesView: View {
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
         
+        // Status filter
         switch selectedFilter {
         case .pending:
             expenses = expenses.filter { $0.status == .pending }
@@ -387,6 +393,28 @@ struct MemberExpensesView: View {
             break
         }
         
+        // Date range filter
+        if isDateRangeActive {
+            expenses = expenses.filter { exp in
+                let d = exp.createdAt.dateValue()
+                return d >= startDate && d <= endDate
+            }
+        }
+        
+        // Sort
+        switch sortOption {
+        case .dateDescending:
+            expenses = expenses.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
+        case .dateAscending:
+            expenses = expenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
+        case .amountDescending:
+            expenses = expenses.sorted { $0.amount > $1.amount }
+        case .amountAscending:
+            expenses = expenses.sorted { $0.amount < $1.amount }
+        case .status:
+            expenses = expenses.sorted { $0.status.rawValue < $1.status.rawValue }
+        }
+        
         return expenses
     }
     
@@ -396,8 +424,8 @@ struct MemberExpensesView: View {
                 // Header
                 headerView
                 
-                // Filter Buttons
-                filterButtonsView
+                // Unified Filter & Sort
+                unifiedFilterMenu
                 
                 // Content
                 if viewModel.isLoading {
@@ -421,6 +449,13 @@ struct MemberExpensesView: View {
         }
         .onAppear {
             viewModel.loadExpenses(for: project, memberId: member.id ?? "")
+        }
+        .sheet(isPresented: $showingDateRangePicker) {
+            DateRangePickerSheet(
+                startDate: $startDate,
+                endDate: $endDate,
+                isActive: $isDateRangeActive
+            )
         }
     }
     
@@ -482,34 +517,83 @@ struct MemberExpensesView: View {
         )
     }
     
-    // MARK: - Filter Buttons View
-    private var filterButtonsView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(ExpenseFilter.allCases, id: \.self) { filter in
-                    Button(action: {
-                        selectedFilter = filter
-                        HapticManager.selection()
-                    }) {
-                        Text(filter.rawValue)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(selectedFilter == filter ? .white : .primary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                selectedFilter == filter
-                                    ? member.role.color
-                                    : Color(.systemGray6)
-                            )
-                            .cornerRadius(20)
+    // MARK: - Unified Filter Menu
+    private var unifiedFilterMenu: some View {
+        HStack {
+            Menu {
+                // Status Picker
+                Picker("Status", selection: $selectedFilter) {
+                    ForEach(ExpenseFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
                     }
                 }
+                .pickerStyle(.menu)
+
+                // Sort Picker
+                Picker("Sort by", selection: $sortOption) {
+                    ForEach(SortOption.allCases, id: \.self) { option in
+                        Label(option.rawValue, systemImage: option.icon).tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                // Date Range
+                Toggle(isOn: $isDateRangeActive) {
+                    Label("Enable Date Range", systemImage: "calendar")
+                }
+                Button { showingDateRangePicker = true } label: {
+                    Label("Set Date Range…", systemImage: "calendar.badge.plus")
+                }
+
+                // Clear
+                if selectedFilter != .all || isDateRangeActive || sortOption != .dateDescending {
+                    Button("Clear All Filters", role: .destructive) {
+                        selectedFilter = .all
+                        isDateRangeActive = false
+                        sortOption = .dateDescending
+                    }
+                }
+            } label: {
+                Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
+                    .font(.subheadline)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(member.role.color.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-            .padding(.horizontal)
+
+            Spacer()
+
+            // Totals Summary
+            memberTotalsSummary
         }
+        .padding(.horizontal)
         .padding(.vertical, 12)
         .background(Color(.systemBackground))
+    }
+
+    private var memberTotalsSummary: some View {
+        let approved = viewModel.expenses.filter { $0.status == .approved }.reduce(0.0) { $0 + $1.amount }
+        let pending = viewModel.expenses.filter { $0.status == .pending }.reduce(0.0) { $0 + $1.amount }
+        let rejected = viewModel.expenses.filter { $0.status == .rejected }.reduce(0.0) { $0 + $1.amount }
+        return HStack(spacing: 8) {
+            amountBadge(title: "Approved", amount: approved, color: .green)
+            amountBadge(title: "Pending", amount: pending, color: .orange)
+            amountBadge(title: "Rejected", amount: rejected, color: .red)
+        }
+    }
+
+    private func amountBadge(title: String, amount: Double, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text("\(title): \(Int(amount).formattedCurrency)")
+                .font(.caption2)
+                .foregroundColor(.primary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
     
     // MARK: - Loading View
