@@ -688,7 +688,6 @@ class DelegateViewModel: ObservableObject {
     
     func loadAllApprovers() async {
         do {
-            print("Going ino the firebase")
             let query = try await db.collection("users_ios")
                 .whereField("role", isEqualTo: "APPROVER")
                 .getDocuments()
@@ -700,7 +699,6 @@ class DelegateViewModel: ObservableObject {
             await MainActor.run {
                 self.allApprovers = approvers
             }
-            print("printing all approevr \(self.allApprovers)")
         } catch {
             print("Error loading approvers: \(error)")
         }
