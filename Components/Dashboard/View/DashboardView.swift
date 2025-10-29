@@ -11,6 +11,7 @@ import FirebaseFirestore
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: DashboardViewModel
+    @StateObject private var notificationViewModel = NotificationViewModel()
     @State private var showingNotifications = false
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
@@ -78,6 +79,24 @@ struct DashboardView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: DesignSystem.Spacing.large) {
+                            // Notifications Section
+                            if let project = project, role == .APPROVER {
+                                NotificationSummaryView(
+                                    viewModel: notificationViewModel,
+                                    onPendingApprovalsTap: {
+                                        showingPendingApprovals = true
+                                    },
+                                    onMessagesTap: {
+                                        showingChats = true
+                                    },
+                                    onExpenseChatsTap: {
+                                        // Handle expense chat tap
+                                        HapticManager.selection()
+                                    }
+                                )
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                            }
+                            
                             // Project Overview Section
                             if let project = project {
                                 projectOverviewSection
@@ -396,6 +415,14 @@ struct DashboardView: View {
             }
             Task {
                 await fetchTempApproverData()
+                // Load notifications
+                if let projectId = project?.id {
+                    await notificationViewModel.fetchProjectNotifications(
+                        projectId: projectId,
+                        currentUserPhone: phoneNumber,
+                        currentUserRole: role ?? .USER
+                    )
+                }
             }
         }
         .onChange(of: project) { _ in

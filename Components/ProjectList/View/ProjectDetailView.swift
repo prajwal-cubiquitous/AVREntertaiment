@@ -13,8 +13,10 @@ import FirebaseFirestore
 struct ProjectDetailView: View {
     // The view takes a single project object as input.
     var project: Project
+    @StateObject private var notificationViewModel = NotificationViewModel()
     @State private var showingAddExpense = false
     @State private var showingChats = false
+    @State private var showingNotifications = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -70,11 +72,20 @@ struct ProjectDetailView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button {
                     HapticManager.selection()
-                    // Placeholder for notifications action
+                    showingNotifications = true
                 } label: {
-                    Image(systemName: "bell")
-                        .font(.title3)
-                        .foregroundColor(.primary)
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "bell")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                        
+                        if notificationViewModel.hasNotifications {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 10, height: 10)
+                                .offset(x: 8, y: -8)
+                        }
+                    }
                 }
 
                 Button {
@@ -93,6 +104,28 @@ struct ProjectDetailView: View {
         }
         .onAppear {
             viewModel.fetchApprovedExpenses()
+            
+            // Load notifications
+            Task {
+                if let projectId = project.id {
+                    await notificationViewModel.fetchProjectNotifications(
+                        projectId: projectId,
+                        currentUserPhone: phoneNumber,
+                        currentUserRole: role ?? .USER
+                    )
+                }
+            }
+        }
+        .overlay {
+            if showingNotifications {
+                NotificationPopupView(
+                    notificationViewModel: notificationViewModel,
+                    project: project,
+                    role: role,
+                    phoneNumber: phoneNumber,
+                    isPresented: $showingNotifications
+                )
+            }
         }
         .refreshable {
             viewModel.fetchApprovedExpenses()
