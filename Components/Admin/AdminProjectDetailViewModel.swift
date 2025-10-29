@@ -64,7 +64,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoading = false
     
-    private let project: Project
+    let project: Project
     private let db = Firestore.firestore()
     
     init(project: Project) {

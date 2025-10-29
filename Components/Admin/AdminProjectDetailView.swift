@@ -367,6 +367,7 @@ struct AdminProjectDetailView: View {
        .sheet(isPresented: $viewModel.showingTempApproverSheet) {
            TempApproverSheet(
                allApprovers: viewModel.allApprovers,
+               isInitialAssignment: viewModel.project.tempApproverID == nil,
                onSet: viewModel.setTempApprover
            )
        }
@@ -1178,6 +1179,7 @@ struct EmptyStateCard: View {
 
 struct TempApproverSheet: View {
     let allApprovers: [User]
+    let isInitialAssignment: Bool
     let onSet: (TempApprover) -> Void
     
     @Environment(\.dismiss) private var dismiss
@@ -1203,7 +1205,7 @@ struct TempApproverSheet: View {
                 VStack(spacing: 0) {
                     // Header Section
                     VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-                        Text("Select Approver")
+                        Text(isInitialAssignment ? "Assign Temp Approver" : "Change Temp Approver")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
@@ -1266,15 +1268,15 @@ struct TempApproverSheet: View {
                         } else {
                             // Initial State
                             VStack(spacing: DesignSystem.Spacing.medium) {
-                                Image(systemName: "person.2.fill")
+                                Image(systemName: isInitialAssignment ? "person.badge.plus" : "person.badge.clock")
                                     .font(.system(size: 50))
                                     .foregroundColor(.accentColor)
                                 
-                                Text("Select an Approver")
+                                Text(isInitialAssignment ? "Assign an Approver" : "Select an Approver")
                                     .font(.headline)
                                     .foregroundColor(.primary)
                                 
-                                Text("Choose from the list below to assign temporary approval")
+                                Text(isInitialAssignment ? "Choose from the list below to assign temporary approval responsibilities" : "Choose from the list below to change temporary approval")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
                                     .multilineTextAlignment(.center)
@@ -1342,7 +1344,7 @@ struct TempApproverSheet: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if selectedApprover != nil {
-                        Button("Set") {
+                        Button(isInitialAssignment ? "Assign" : "Change") {
                             let tempApprover = TempApprover(
                                 approverId: selectedApprover!.phoneNumber,
                                 startDate: startDate,

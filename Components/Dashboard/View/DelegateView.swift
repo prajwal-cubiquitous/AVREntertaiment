@@ -77,6 +77,9 @@ struct DelegateView: View {
                 }
             }
         }
+        .task{
+            await viewModel.loadAllApprovers()
+        }
         .onAppear {
             viewModel.loadDelegateDetails(for: project)
         }
@@ -101,9 +104,14 @@ struct DelegateView: View {
         .sheet(isPresented: $showingTempApproverSheet) {
             TempApproverSheet(
                 allApprovers: viewModel.allApprovers,
+                isInitialAssignment: viewModel.tempApprover == nil,
                 onSet: { newTempApprover in
                     Task {
-                        await viewModel.updateTempApprover(newTempApprover, for: project)
+                        if viewModel.tempApprover == nil {
+                            await viewModel.createTempApprover(newTempApprover, for: project)
+                        } else {
+                            await viewModel.updateTempApprover(newTempApprover, for: project)
+                        }
                         showingDelegate = false
                     }
                 }
@@ -261,20 +269,71 @@ struct DelegateView: View {
     
     // MARK: - No Delegate Card
     private var noDelegateCard: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.badge.clock")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
+        VStack(spacing: 24) {
+            // Icon and Text
+            VStack(spacing: 16) {
+                Image(systemName: "person.badge.clock")
+                    .font(.system(size: 48))
+                    .foregroundColor(.blue.opacity(0.6))
+                    .symbolRenderingMode(.hierarchical)
+                
+                VStack(spacing: 8) {
+                    Text("No Delegate Assigned")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text("This project doesn't have a temporary approver assigned yet. Assign one to delegate approval responsibilities.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                }
+            }
             
-            Text("No Delegate Assigned")
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
+            // Action Button
+            Button(action: {
+                HapticManager.selection()
+                showingTempApproverSheet = true
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 18, weight: .semibold))
+                    
+                    Text("Assign Temp Approver")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .blue.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                )
+            }
+            .disabled(viewModel.isSaving)
             
-            Text("This project doesn't have a temporary approver assigned yet.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            // Loading indicator if saving
+            if viewModel.isSaving {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                        .tint(.blue)
+                    
+                    Text("Assigning approver...")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 8)
+            }
         }
         .padding(32)
         .background(
@@ -629,6 +688,7 @@ class DelegateViewModel: ObservableObject {
     
     func loadAllApprovers() async {
         do {
+            print("Going ino the firebase")
             let query = try await db.collection("users_ios")
                 .whereField("role", isEqualTo: "APPROVER")
                 .getDocuments()
@@ -640,8 +700,51 @@ class DelegateViewModel: ObservableObject {
             await MainActor.run {
                 self.allApprovers = approvers
             }
+            print("printing all approevr \(self.allApprovers)")
         } catch {
             print("Error loading approvers: \(error)")
+        }
+    }
+    
+    func createTempApprover(_ newTempApprover: TempApprover, for project: Project) async {
+        guard let projectId = project.id else { return }
+        
+        await MainActor.run {
+            isSaving = true
+        }
+        
+        do {
+            // Update the project's tempApproverID
+            try await db.collection("projects_ios")
+                .document(projectId)
+                .updateData([
+                    "tempApproverID": newTempApprover.approverId
+                ])
+            
+            // Create new temp approver document
+            let docRef = try await db.collection("projects_ios")
+                .document(projectId)
+                .collection("tempApprover")
+                .addDocument(data: [
+                    "approvedExpense": [],
+                    "approverId": newTempApprover.approverId,
+                    "startDate": newTempApprover.startDate,
+                    "endDate": newTempApprover.endDate,
+                    "status": "pending",
+                    "updatedAt": Date()
+                ])
+            
+            await MainActor.run {
+                isSaving = false
+                tempDocumentId = docRef.documentID
+                // Reload delegate details
+                loadDelegateDetails(for: project)
+            }
+        } catch {
+            await MainActor.run {
+                isSaving = false
+            }
+            print("Error creating temp approver: \(error)")
         }
     }
     
