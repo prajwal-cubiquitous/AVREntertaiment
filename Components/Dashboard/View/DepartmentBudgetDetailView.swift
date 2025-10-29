@@ -19,6 +19,8 @@ struct DepartmentBudgetDetailView: View {
     @State private var searchText = ""
     @State private var showingExpenseChat = false
     @State private var selectedExpenseForChat: Expense?
+    @State private var showingExpenseDetail = false
+    @State private var selectedExpenseForDetail: Expense?
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -85,18 +87,21 @@ struct DepartmentBudgetDetailView: View {
         }
         .sheet(isPresented: $showingExpenseChat) {
             if let expense = selectedExpenseForChat {
-//                ExpenseChatView(
-//                    expense: expense,
-//                    userPhoneNumber: viewModel.getCurrentUserPhoneNumber(),
-//                    projectId: projectId,
-//                    role: role ?? .USER
-//                )
-//                
                 ExpenseChatView(
                     expense: expense,
-                    userPhoneNumber: phoneNumber, projectId: projectId, role: role ?? .USER
+                    userPhoneNumber: phoneNumber, 
+                    projectId: projectId, 
+                    role: role ?? .USER
                 )
-
+            }
+        }
+        .sheet(isPresented: $showingExpenseDetail) {
+            if let expense = selectedExpenseForDetail {
+                if expense.status == .pending {
+                    ExpenseDetailView(expense: expense, role: role)
+                } else {
+                    ExpenseDetailReadOnlyView(expense: expense)
+                }
             }
         }
     }
@@ -309,6 +314,10 @@ struct DepartmentBudgetDetailView: View {
                         onChatTapped: {
                             selectedExpenseForChat = expense
                             showingExpenseChat = true
+                        },
+                        onExpenseTapped: {
+                            selectedExpenseForDetail = expense
+                            showingExpenseDetail = true
                         }
                     )
                 }
@@ -348,139 +357,157 @@ struct DepartmentExpenseRowView: View {
     let expense: Expense
     let approverName: String?
     let onChatTapped: () -> Void
+    let onExpenseTapped: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header with amount and status
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(expense.amountFormatted)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    Text(expense.dateFormatted)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                VStack(alignment: .trailing, spacing: 4) {
-                    HStack(spacing: 8) {
-                        // Status badge
-                        HStack(spacing: 4) {
-                            Image(systemName: expense.status.icon)
-                                .font(.caption)
-                                .foregroundColor(expense.status.color)
-                            
-                            Text(expense.status.rawValue.capitalized)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(expense.status.color)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(expense.status.color.opacity(0.1))
-                        .cornerRadius(8)
+        Button(action: {
+            HapticManager.selection()
+            onExpenseTapped()
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header with amount and status
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.amountFormatted)
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
                         
-                        // Chat button - only show for pending expenses
-                        if expense.status == .pending {
-                            Button {
-                                HapticManager.selection()
-                                onChatTapped()
-                            } label: {
-                                Image(systemName: "message")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundColor(.primary)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        Text(expense.dateFormatted)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
-                    // Show approver text only when the expense is approved
-                    if expense.status == .approved, let approver = approverName {
-                        Text("Approved by \(approver)")
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 8) {
+                            // Status badge with enhanced design
+                            HStack(spacing: 4) {
+                                Image(systemName: expense.status.icon)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                
+                                Text(expense.status.rawValue.capitalized)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(expense.status.color)
+                                    .shadow(color: expense.status.color.opacity(0.3), radius: 2, x: 0, y: 1)
+                            )
+                            
+                            // Chat button - only show for pending expenses
+                            if expense.status == .pending {
+                                Button {
+                                    HapticManager.selection()
+                                    onChatTapped()
+                                } label: {
+                                    Image(systemName: "message.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.blue)
+                                        .padding(6)
+                                        .background(
+                                            Circle()
+                                                .fill(Color.blue.opacity(0.1))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        
+                        // Show approver text only when the expense is approved
+                        if expense.status == .approved, let approver = approverName {
+                            Text("Approved by \(approver)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                // Description
+                Text(expense.description)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                
+                // Categories and payment mode
+                HStack {
+                    // Categories
+                    HStack(spacing: 4) {
+                        Image(systemName: "tag.fill")
                             .font(.caption2)
+                            .foregroundColor(.blue)
+                        
+                        Text(expense.categoriesString)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    Spacer()
+                    
+                    // Payment mode
+                    HStack(spacing: 4) {
+                        Image(systemName: expense.modeOfPayment.icon)
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                        
+                        Text(expense.modeOfPayment.rawValue)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-            }
-            
-            // Description
-            Text(expense.description)
-                .font(.subheadline)
-                .foregroundColor(.primary)
-                .lineLimit(2)
-            
-            // Categories and payment mode
-            HStack {
-                // Categories
-                HStack(spacing: 4) {
-                    Image(systemName: "tag.fill")
+                
+                // Submitted by
+                HStack {
+                    Image(systemName: "person.circle.fill")
                         .font(.caption2)
-                        .foregroundColor(.blue)
+                        .foregroundColor(.orange)
                     
-                    Text(expense.categoriesString)
+                    Text("Submitted by: \(expense.submittedBy)")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                
-                Spacer()
-                
-                // Payment mode
-                HStack(spacing: 4) {
-                    Image(systemName: expense.modeOfPayment.icon)
-                        .font(.caption2)
-                        .foregroundColor(.green)
                     
-                    Text(expense.modeOfPayment.rawValue)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                
+                // Remark if available
+                if let remark = expense.remark, !remark.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Remark:")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.secondary)
+                        
+                        Text(remark)
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            )
+                    }
                 }
             }
-            
-            // Submitted by
-            HStack {
-                Image(systemName: "person.circle.fill")
-                    .font(.caption2)
-                    .foregroundColor(.orange)
-                
-                Text("Submitted by: \(expense.submittedBy)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-            }
-            
-            // Remark if available
-            if let remark = expense.remark, !remark.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Remark:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-                    
-                    Text(remark)
-                        .font(.caption)
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .cornerRadius(6)
-                }
-            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.systemGray5), lineWidth: 0.5)
+                    )
+            )
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemGroupedBackground))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray5), lineWidth: 0.5)
-                )
-        )
+        .buttonStyle(.plain)
     }
 }
 

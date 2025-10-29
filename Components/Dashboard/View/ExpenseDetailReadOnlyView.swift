@@ -1,0 +1,361 @@
+//
+//  ExpenseDetailReadOnlyView.swift
+//  AVREntertainment
+//
+//  Created by Prajwal S S Reddy on 10/1/25.
+//
+
+import SwiftUI
+import FirebaseFirestore
+
+struct ExpenseDetailReadOnlyView: View {
+    let expense: Expense
+    @Environment(\.dismiss) private var dismiss
+    @State private var approverName: String?
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: DesignSystem.Spacing.large) {
+                        // Header Card
+                        headerCard
+                        
+                        // Expense Details Card
+                        expenseDetailsCard
+                        
+                        // Payment Information Card
+                        paymentInfoCard
+                        
+                        // Attachment Card (if exists)
+                        if expense.attachmentURL != nil {
+                            attachmentCard
+                        }
+                        
+                        // Approval Information Card
+                        approvalInfoCard
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.bottom, DesignSystem.Spacing.extraLarge)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Expense Details")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.medium)
+                }
+            }
+        }
+        .task {
+            await loadApproverName()
+        }
+    }
+    
+    // MARK: - Header Card
+    private var headerCard: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            // Amount and Status
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Amount")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(expense.amountFormatted)
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer()
+                
+                // Status Badge with enhanced styling
+                HStack(spacing: 6) {
+                    Image(systemName: expense.status.icon)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    
+                    Text(expense.status.rawValue.capitalized)
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(expense.status.color)
+                        .shadow(color: expense.status.color.opacity(0.3), radius: 4, x: 0, y: 2)
+                )
+            }
+            
+            // Department and Categories
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Department:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text(expense.department)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                }
+                
+                HStack {
+                    Text("Categories:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Text(expense.categoriesString)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                    
+                    Spacer()
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Expense Details Card
+    private var expenseDetailsCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Expense Details")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            VStack(spacing: DesignSystem.Spacing.small) {
+                DetailRow(title: "Date", value: expense.dateFormatted)
+                DetailRow(title: "Submitted By", value: expense.submittedBy.formatPhoneNumber)
+                DetailRow(title: "Description", value: expense.description)
+                
+                if let existingRemark = expense.remark, !existingRemark.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Remark:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Text(existingRemark)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            )
+                    }
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Payment Information Card
+    private var paymentInfoCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Payment Information")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 16) {
+                Image(systemName: expense.modeOfPayment.icon)
+                    .font(.title2)
+                    .foregroundColor(.accentColor)
+                    .frame(width: 30)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Payment Mode")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text(expense.modeOfPayment.rawValue)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer()
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Attachment Card
+    private var attachmentCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Attachment")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 16) {
+                Image(systemName: "doc.fill")
+                    .font(.title2)
+                    .foregroundColor(.accentColor)
+                    .frame(width: 30)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(expense.attachmentName ?? "Document")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text("Tap to view")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Button("View") {
+                    // Handle attachment view
+                }
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.accentColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.accentColor.opacity(0.1))
+                )
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Approval Information Card
+    private var approvalInfoCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Approval Information")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            VStack(spacing: DesignSystem.Spacing.small) {
+                // Show updated timestamp if available
+                DetailRow(title: "Last Updated", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                
+                // For approved/rejected expenses, we can show who submitted it
+                DetailRow(title: "Submitted By", value: approverName ?? expense.submittedBy.formatPhoneNumber)
+                
+                // Show status-specific information
+                if expense.status == .approved {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text("This expense has been approved and processed")
+                            .font(.subheadline)
+                            .foregroundColor(.green)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.green.opacity(0.1))
+                    )
+                } else if expense.status == .rejected {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                        Text("This expense has been rejected")
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red.opacity(0.1))
+                    )
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
+    // MARK: - Helper Methods
+    private func loadApproverName() async {
+        // For approved/rejected expenses, we'll show the submitter's name
+        // In a real implementation, you might want to track who approved/rejected
+        
+        do {
+            let db = Firestore.firestore()
+            let userDoc = try await db
+                .collection(FirebaseCollections.users)
+                .whereField("phoneNumber", isEqualTo: expense.submittedBy)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let userData = userDoc.documents.first?.data(),
+               let name = userData["name"] as? String {
+                await MainActor.run {
+                    self.approverName = name
+                }
+            }
+        } catch {
+            print("Error loading submitter name: \(error)")
+        }
+    }
+}
+
+// MARK: - Date Formatter Extension
+extension DateFormatter {
+    static let displayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+#Preview {
+    ExpenseDetailReadOnlyView(expense: Expense.sampleData[0])
+}
