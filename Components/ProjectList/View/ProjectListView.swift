@@ -47,7 +47,7 @@ struct ProjectListView: View {
                         
                         Spacer(minLength: 4)
                         
-                        if role == .APPROVER && !viewModel.projects.isEmpty {
+                        if role != .ADMIN && !viewModel.projects.isEmpty {
                             Button {
                                 HapticManager.selection()
                                 viewModel.showingFullNotifications = true

@@ -67,7 +67,16 @@ struct ProjectDetailView: View {
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    HapticManager.selection()
+                    // Placeholder for notifications action
+                } label: {
+                    Image(systemName: "bell")
+                        .font(.title3)
+                        .foregroundColor(.primary)
+                }
+
                 Button {
                     HapticManager.impact(.light)
                     showingChats = true

@@ -274,27 +274,29 @@ struct DashboardView: View {
                     }
                     
                     // Notification Button
-                    Button {
-                        HapticManager.impact(.light)
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            showingNotifications.toggle()
-                        }
-                    } label: {
-                        ZStack {
-                            Image(systemName: "bell.fill")
-                                .foregroundColor(.primary)
-                            
-                            if viewModel.pendingNotifications > 0 {
-                                Circle()
-                                    .fill(.red)
-                                    .frame(width: 14, height: 14)
-                                    .overlay(
-                                        Text("\(viewModel.pendingNotifications)")
-                                            .font(.system(size: 10))
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                    )
-                                    .offset(x: 10, y: -10)
+                    if role != .ADMIN{
+                        Button {
+                            HapticManager.impact(.light)
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                showingNotifications.toggle()
+                            }
+                        } label: {
+                            ZStack {
+                                Image(systemName: "bell.fill")
+                                    .foregroundColor(.primary)
+                                
+                                if viewModel.pendingNotifications > 0 {
+                                    Circle()
+                                        .fill(.red)
+                                        .frame(width: 14, height: 14)
+                                        .overlay(
+                                            Text("\(viewModel.pendingNotifications)")
+                                                .font(.system(size: 10))
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                        )
+                                        .offset(x: 10, y: -10)
+                                }
                             }
                         }
                     }
