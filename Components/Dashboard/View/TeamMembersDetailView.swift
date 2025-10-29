@@ -585,14 +585,21 @@ struct MemberExpensesView: View {
     }
 
     private func amountBadge(title: String, amount: Double, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            Text("\(title): \(Int(amount).formattedCurrency)")
-                .font(.caption2)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text(title)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+            }
+            Text(Int(amount).formattedCurrency)
+                .font(.footnote)
+                .fontWeight(.semibold)
                 .foregroundColor(.primary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(color.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
