@@ -72,7 +72,12 @@ struct ChatsView: View {
                             participant: participant,
                             project: project,
                             role: currentUserRole,
-                            currentUserPhoneNumber: viewModel.currentUserPhone
+                            currentUserPhoneNumber: viewModel.currentUserPhone,
+                            onMessagesRead: {
+                                Task {
+                                    await viewModel.updateUnreadCountForParticipant(participant.phoneNumber)
+                                }
+                            }
                         )
                     }
                 } else {
@@ -123,6 +128,11 @@ struct ChatsView: View {
             }
             .refreshable {
                 await refreshData()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                Task {
+                    await refreshData()
+                }
             }
             .sheet(isPresented: $showingGroupChat) {
                 GroupChatView(
@@ -204,15 +214,17 @@ struct ChatsView: View {
         ScrollView {
             LazyVStack(spacing: 8) {
                 ForEach(viewModel.participants) { participant in
-                    NavigationLink(destination: IndividualChatView(participant: participant, project: project, role: currentUserRole, currentUserPhoneNumber: currentUserPhone)
-                        .onAppear {
-                            print("Debug 111 what is it : \(participant)")
-                            // Mark as read in background without blocking UI
-                            Task.detached(priority: .background) {
-                                await viewModel.markMessagesAsRead(for: participant.phoneNumber)
+                    NavigationLink(destination: IndividualChatView(
+                        participant: participant, 
+                        project: project, 
+                        role: currentUserRole, 
+                        currentUserPhoneNumber: currentUserPhone,
+                        onMessagesRead: {
+                            Task {
+                                await viewModel.updateUnreadCountForParticipant(participant.phoneNumber)
                             }
                         }
-                    ) {
+                    )) {
                         ChatParticipantRow(participant: participant)
                     }
                     .buttonStyle(PlainButtonStyle())

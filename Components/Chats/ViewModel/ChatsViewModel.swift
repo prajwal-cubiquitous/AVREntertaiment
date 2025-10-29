@@ -328,9 +328,9 @@ class ChatsViewModel: ObservableObject {
                 try await document.reference.updateData(["isRead": true])
             }
             
-            // Update cached participant data
+            // Update both cached and published participant data
             if let index = cachedParticipants.firstIndex(where: { $0.phoneNumber == participantId }) {
-                cachedParticipants[index] = ChatParticipant(
+                let updatedParticipant = ChatParticipant(
                     id: cachedParticipants[index].id,
                     name: cachedParticipants[index].name,
                     phoneNumber: cachedParticipants[index].phoneNumber,
@@ -341,7 +341,17 @@ class ChatsViewModel: ObservableObject {
                     lastMessage: cachedParticipants[index].lastMessage,
                     lastMessageTime: cachedParticipants[index].lastMessageTime
                 )
+                
+                // Update cached data
+                cachedParticipants[index] = updatedParticipant
+                
+                // Update published data to refresh UI
+                if let publishedIndex = self.participants.firstIndex(where: { $0.phoneNumber == participantId }) {
+                    self.participants[publishedIndex] = updatedParticipant
+                }
             }
+            
+            print("✅ Marked messages as read for participant: \(participantId)")
         } catch {
             print("❌ Error marking messages as read: \(error)")
         }
@@ -357,6 +367,46 @@ class ChatsViewModel: ObservableObject {
     func refreshData() async {
         clearCache()
         await loadChatParticipants()
+    }
+    
+    // MARK: - Update Unread Count for Specific Participant
+    
+    func updateUnreadCountForParticipant(_ participantId: String) async {
+        guard let projectId = project.id else { return }
+        
+        let currentUserPhone = currentUserPhone ?? "Admin"
+        let participants = [currentUserPhone, participantId].sorted()
+        let chatId = participants.joined(separator: "_")
+        
+        do {
+            // Get updated unread count
+            let unreadCount = try await countUnreadMessages(projectId: projectId, chatId: chatId, currentUserPhone: currentUserPhone)
+            
+            // Update both cached and published participant data
+            if let index = cachedParticipants.firstIndex(where: { $0.phoneNumber == participantId }) {
+                let updatedParticipant = ChatParticipant(
+                    id: cachedParticipants[index].id,
+                    name: cachedParticipants[index].name,
+                    phoneNumber: cachedParticipants[index].phoneNumber,
+                    role: cachedParticipants[index].role,
+                    isOnline: cachedParticipants[index].isOnline,
+                    lastSeen: cachedParticipants[index].lastSeen,
+                    unreadCount: unreadCount,
+                    lastMessage: cachedParticipants[index].lastMessage,
+                    lastMessageTime: cachedParticipants[index].lastMessageTime
+                )
+                
+                // Update cached data
+                cachedParticipants[index] = updatedParticipant
+                
+                // Update published data to refresh UI
+                if let publishedIndex = self.participants.firstIndex(where: { $0.phoneNumber == participantId }) {
+                    self.participants[publishedIndex] = updatedParticipant
+                }
+            }
+        } catch {
+            print("❌ Error updating unread count for participant \(participantId): \(error)")
+        }
     }
     
     

@@ -10,6 +10,7 @@ import PhotosUI
 import UniformTypeIdentifiers
 import AVFoundation
 import AVKit
+import FirebaseFirestore
 
 // MARK: - Global Helper Functions
 func loadDataAsync(from url: URL) async throws -> Data {
@@ -30,6 +31,7 @@ struct IndividualChatView: View {
     let project: Project
     let role: UserRole
     let currentUserPhoneNumber: String?
+    let onMessagesRead: (() -> Void)?
     
     @StateObject private var viewModel : IndividualChatViewModel
     @Environment(\.dismiss) private var dismiss
@@ -43,11 +45,12 @@ struct IndividualChatView: View {
     @State private var selectedVideo: URL?
     @State private var showingAttachmentOptions = false
     
-    init(participant: ChatParticipant, project: Project, role: UserRole, currentUserPhoneNumber: String?){
+    init(participant: ChatParticipant, project: Project, role: UserRole, currentUserPhoneNumber: String?, onMessagesRead: (() -> Void)? = nil){
         self.participant = participant
         self.project = project
         self.role = role
         self.currentUserPhoneNumber = currentUserPhoneNumber
+        self.onMessagesRead = onMessagesRead
         self._viewModel = StateObject(wrappedValue: IndividualChatViewModel(currentUserPhone: currentUserPhoneNumber, role: role))
     }
     
@@ -116,6 +119,9 @@ struct IndividualChatView: View {
                 
                 Task {
                     await viewModel.loadMessages(for: participant, project: project)
+                    
+                    // Mark messages as read when chat is opened
+                    await markMessagesAsRead()
                 }
             }
             .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
@@ -399,6 +405,44 @@ struct IndividualChatView: View {
         }
         
         return mediaUrls.isEmpty ? nil : mediaUrls
+    }
+    
+    // MARK: - Mark Messages as Read
+    private func markMessagesAsRead() async {
+        guard let projectId = project.id else { return }
+        
+        // Determine current user identifier
+        let currentUserPhone = (role == .ADMIN) ? "Admin" : currentUserPhoneNumber
+        
+        guard let currentUser = currentUserPhone else { return }
+        
+        // Create chat ID based on participants
+        let participants = [currentUser, participant.phoneNumber].sorted()
+        let chatId = participants.joined(separator: "_")
+        
+        do {
+            // Update all unread messages from this participant
+            let messagesSnapshot = try await Firestore.firestore()
+                .collection("projects_ios")
+                .document(projectId)
+                .collection("chats")
+                .document(chatId)
+                .collection("messages")
+                .whereField("senderId", isNotEqualTo: currentUser)
+                .whereField("isRead", isEqualTo: false)
+                .getDocuments()
+            
+            for document in messagesSnapshot.documents {
+                try await document.reference.updateData(["isRead": true])
+            }
+            
+            print("✅ Marked messages as read for participant: \(participant.phoneNumber)")
+            
+            // Notify parent view that messages were marked as read
+            onMessagesRead?()
+        } catch {
+            print("❌ Error marking messages as read: \(error)")
+        }
     }
     
 }
@@ -1195,6 +1239,7 @@ struct DocumentView: View {
         ),
         project: Project.sampleData[0],
         role: .ADMIN,
-        currentUserPhoneNumber: nil
+        currentUserPhoneNumber: nil,
+        onMessagesRead: nil
     )
 }
