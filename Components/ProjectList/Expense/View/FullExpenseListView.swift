@@ -6,8 +6,11 @@ struct FullExpenseListView: View {
     @State private var selectedExpense: Expense?
     @State private var showingExpenseChat = false
     @State private var selectedExpenseForChat: Expense?
+    @State private var showingEditExpense = false
+    @State private var selectedExpenseForEdit: Expense?
     let currentUserPhone: String
     let projectId: String
+    let project: Project
     
     var body: some View {
         NavigationView {
@@ -51,6 +54,11 @@ struct FullExpenseListView: View {
                     projectId: projectId,
                     role: .USER // You might want to get this from user context
                 )
+            }
+        }
+        .sheet(isPresented: $showingEditExpense) {
+            if let expense = selectedExpenseForEdit {
+                EditExpenseView(expense: expense, project: project)
             }
         }
     }
@@ -97,6 +105,10 @@ struct FullExpenseListView: View {
                     onChatTapped: {
                         selectedExpenseForChat = expense
                         showingExpenseChat = true
+                    },
+                    onEditTapped: {
+                        selectedExpenseForEdit = expense
+                        showingEditExpense = true
                     }
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))

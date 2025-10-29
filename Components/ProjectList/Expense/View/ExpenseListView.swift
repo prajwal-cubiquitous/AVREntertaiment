@@ -7,6 +7,8 @@ struct ExpenseListView: View {
     let currentUserPhone: String
     @State private var showingExpenseChat = false
     @State private var selectedExpenseForChat: Expense?
+    @State private var showingEditExpense = false
+    @State private var selectedExpenseForEdit: Expense?
     
     init(project: Project, currentUserPhone: String) {
         self.project = project
@@ -36,7 +38,8 @@ struct ExpenseListView: View {
             FullExpenseListView(
                 viewModel: viewModel,
                 currentUserPhone: currentUserPhone,
-                projectId: project.id ?? ""
+                projectId: project.id ?? "",
+                project: project
             )
         }
         .sheet(isPresented: $showingExpenseChat) {
@@ -47,6 +50,11 @@ struct ExpenseListView: View {
                     projectId: project.id ?? "",
                     role: .USER // You might want to get this from user context
                 )
+            }
+        }
+        .sheet(isPresented: $showingEditExpense) {
+            if let expense = selectedExpenseForEdit {
+                EditExpenseView(expense: expense, project: project)
             }
         }
     }
@@ -96,6 +104,10 @@ struct ExpenseListView: View {
                     onChatTapped: {
                         selectedExpenseForChat = expense
                         showingExpenseChat = true
+                    },
+                    onEditTapped: {
+                        selectedExpenseForEdit = expense
+                        showingEditExpense = true
                     }
                 )
             }
@@ -114,6 +126,7 @@ struct ExpenseListView: View {
 struct ExpenseRowView: View {
     let expense: Expense
     let onChatTapped: () -> Void
+    let onEditTapped: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
@@ -156,7 +169,17 @@ struct ExpenseRowView: View {
                 }
             }
             
-            if expense.status == .pending{
+            if expense.status == .pending {
+                // Edit Button
+                Button {
+                    onEditTapped()
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.orange)
+                }
+                .buttonStyle(.plain)
+                
                 // Message Button
                 Button {
                     onChatTapped()

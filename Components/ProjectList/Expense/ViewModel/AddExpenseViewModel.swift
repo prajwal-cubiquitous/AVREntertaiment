@@ -212,6 +212,60 @@ class AddExpenseViewModel: ObservableObject {
             }
     }
     
+    // MARK: - Update Expense
+    func updateExpense(expenseId: String) {
+        guard isFormValid else {
+            alertMessage = "Please fill in all required fields correctly."
+            showAlert = true
+            return
+        }
+        
+        guard let projectId = project.id else {
+            alertMessage = "Project ID not found."
+            showAlert = true
+            return
+        }
+        
+        isLoading = true
+        
+        var updateData: [String: Any] = [
+            "date": formatDate(expenseDate),
+            "amount": amountValue,
+            "department": selectedDepartment,
+            "categories": nonEmptyCategories,
+            "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
+            "modeOfPayment": selectedPaymentMode.rawValue,
+            "updatedAt": Timestamp()
+        ]
+        
+        // Only update attachment if it has changed
+        if let url = attachmentURL {
+            updateData["attachmentURL"] = url
+        }
+        if let name = attachmentName {
+            updateData["attachmentName"] = name
+        }
+        
+        // Update document in Firestore
+        db.collection("projects_ios")
+            .document(projectId)
+            .collection("expenses")
+            .document(expenseId)
+            .updateData(updateData) { [weak self] error in
+                
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    
+                    if let error = error {
+                        self?.alertMessage = "Error updating expense: \(error.localizedDescription)"
+                    } else {
+                        self?.alertMessage = "Expense updated successfully!"
+                    }
+                    self?.showAlert = true
+                }
+            }
+    }
+    
     // MARK: - Helper Methods
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
