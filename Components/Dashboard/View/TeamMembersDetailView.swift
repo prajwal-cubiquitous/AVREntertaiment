@@ -440,7 +440,7 @@ struct MemberExpensesView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
@@ -450,12 +450,15 @@ struct MemberExpensesView: View {
         .onAppear {
             viewModel.loadExpenses(for: project, memberId: member.id ?? "")
         }
-        .sheet(isPresented: $showingDateRangePicker) {
-            DateRangePickerSheet(
+        .popover(isPresented: $showingDateRangePicker) {
+            InlineDateRangePopover(
                 startDate: $startDate,
                 endDate: $endDate,
-                isActive: $isDateRangeActive
+                isActive: $isDateRangeActive,
+                onClose: { showingDateRangePicker = false }
             )
+            .frame(maxWidth: 380)
+            .padding(16)
         }
     }
     

@@ -150,12 +150,15 @@ struct DepartmentBudgetDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingDateRangePicker) {
-            DateRangePickerSheet(
+        .popover(isPresented: $showingDateRangePicker) {
+            InlineDateRangePopover(
                 startDate: $startDate,
                 endDate: $endDate,
-                isActive: $isDateRangeActive
+                isActive: $isDateRangeActive,
+                onClose: { showingDateRangePicker = false }
             )
+            .frame(maxWidth: 380)
+            .padding(16)
         }
         .confirmationDialog("Sort Options", isPresented: $showingSortOptions) {
             ForEach(SortOption.allCases, id: \.self) { option in
@@ -310,20 +313,23 @@ struct DepartmentBudgetDetailView: View {
             // Unified Filter & Sort Menu
             HStack {
                 Menu {
-                    // Status Picker
-                    Picker("Status", selection: Binding(
-                        get: { selectedFilter ?? .pending },
-                        set: { newValue in
-                            selectedFilter = newValue
+                    // Status Section
+                    Section("Status") {
+                        Button(action: { selectedFilter = nil }) {
+                            HStack {
+                                Text("All")
+                                if selectedFilter == nil { Spacer(); Image(systemName: "checkmark") }
+                            }
                         }
-                    )) {
-                        Text("All").tag(Optional<ExpenseStatus>.none)
                         ForEach(ExpenseStatus.allCases, id: \.self) { status in
-                            Text(status.rawValue.capitalized)
-                                .tag(Optional(status))
+                            Button(action: { selectedFilter = status }) {
+                                HStack {
+                                    Text(status.rawValue.capitalized)
+                                    if selectedFilter == status { Spacer(); Image(systemName: "checkmark") }
+                                }
+                            }
                         }
                     }
-                    .pickerStyle(.menu)
 
                     // Sort Picker
                     Picker("Sort by", selection: $sortOption) {
@@ -613,25 +619,7 @@ struct DepartmentExpenseRowView: View {
                     Spacer()
                 }
                 
-                // Remark if available
-                if let remark = expense.remark, !remark.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Remark:")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.secondary)
-                        
-                        Text(remark)
-                            .font(.caption)
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(.secondarySystemGroupedBackground))
-                            )
-                    }
-                }
+                // Remark intentionally omitted in list view; shown in detail view
             }
             .padding(16)
             .background(
@@ -786,125 +774,63 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     )
 }
 
-// MARK: - Date Range Picker Sheet
-struct DateRangePickerSheet: View {
+// MARK: - Inline Date Range Popover
+struct InlineDateRangePopover: View {
     @Binding var startDate: Date
     @Binding var endDate: Date
     @Binding var isActive: Bool
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
     
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
-                // Header
-                VStack(spacing: 8) {
-                    Text("Select Date Range")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    Text("Choose start and end dates to filter expenses")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.top, 20)
-                
-                // Date Pickers
-                VStack(spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Start Date")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        DatePicker(
-                            "Start Date",
-                            selection: $startDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("End Date")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        DatePicker(
-                            "End Date",
-                            selection: $endDate,
-                            displayedComponents: [.date]
-                        )
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-                    }
-                }
-                .padding(.horizontal, 20)
-                
-                // Validation Message
-                if endDate < startDate {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("End date must be after start date")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                    .padding(.horizontal, 20)
-                }
-                
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Date Range")
+                    .font(.headline)
+                    .fontWeight(.semibold)
                 Spacer()
-                
-                // Action Buttons
-                VStack(spacing: 12) {
-                    Button(action: {
-                        isActive = true
-                        dismiss()
-                    }) {
-                        Text("Apply Filter")
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(endDate < startDate ? Color.gray : Color.blue)
-                            )
-                    }
-                    .disabled(endDate < startDate)
-                    
-                    Button(action: {
-                        isActive = false
-                        dismiss()
-                    }) {
-                        Text("Clear Filter")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.red, lineWidth: 1)
-                            )
-                    }
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.blue)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Start Date").font(.caption).foregroundColor(.secondary)
+                DatePicker("Start", selection: $startDate, displayedComponents: [.date])
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                
+                Text("End Date").font(.caption).foregroundColor(.secondary)
+                DatePicker("End", selection: $endDate, displayedComponents: [.date])
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+            }
+            
+            if endDate < startDate {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange)
+                    Text("End date must be after start date").font(.caption).foregroundColor(.orange)
                 }
+            }
+            
+            HStack(spacing: 12) {
+                Button {
+                    isActive = false
+                    onClose()
+                } label: {
+                    Text("Clear").foregroundColor(.red)
+                }
+                Spacer()
+                Button {
+                    guard endDate >= startDate else { return }
+                    isActive = true
+                    onClose()
+                } label: {
+                    Text("Apply").fontWeight(.semibold)
+                }
+                .disabled(endDate < startDate)
             }
         }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemBackground)))
     }
 }
