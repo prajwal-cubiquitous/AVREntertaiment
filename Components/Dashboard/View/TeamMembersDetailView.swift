@@ -450,15 +450,12 @@ struct MemberExpensesView: View {
         .onAppear {
             viewModel.loadExpenses(for: project, memberId: member.id ?? "")
         }
-        .popover(isPresented: $showingDateRangePicker) {
-            InlineDateRangePopover(
+        .sheet(isPresented: $showingDateRangePicker) {
+            AppleDateRangePickerSheet(
                 startDate: $startDate,
                 endDate: $endDate,
-                isActive: $isDateRangeActive,
-                onClose: { showingDateRangePicker = false }
+                isActive: $isDateRangeActive
             )
-            .frame(maxWidth: 380)
-            .padding(16)
         }
     }
     
@@ -573,6 +570,7 @@ struct MemberExpensesView: View {
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(Color(.systemBackground))
+            // Date range now uses native Apple sheet
     }
 
     private var memberTotalsSummary: some View {
@@ -809,6 +807,129 @@ struct MemberExpenseRowView: View {
             return .red
         case .pending:
             return .orange
+        }
+    }
+}
+
+// MARK: - Apple Date Range Picker Sheet
+struct AppleDateRangePickerSheet: View {
+    @Binding var startDate: Date
+    @Binding var endDate: Date
+    @Binding var isActive: Bool
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Select Date Range")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Choose start and end dates to filter expenses")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top, 20)
+                
+                // Date Pickers using Apple's native style
+                VStack(spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Start Date")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        DatePicker(
+                            "Start Date",
+                            selection: $startDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("End Date")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        DatePicker(
+                            "End Date",
+                            selection: $endDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.wheel)
+                        .labelsHidden()
+                    }
+                }
+                .padding(.horizontal, 20)
+                
+                // Validation Message
+                if endDate < startDate {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("End date must be after start date")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                
+                Spacer()
+                
+                // Action Buttons
+                VStack(spacing: 12) {
+                    Button(action: {
+                        isActive = true
+                        dismiss()
+                    }) {
+                        Text("Apply Filter")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(endDate < startDate ? Color.gray : Color.blue)
+                            )
+                    }
+                    .disabled(endDate < startDate)
+                    
+                    Button(action: {
+                        isActive = false
+                        dismiss()
+                    }) {
+                        Text("Clear Filter")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red, lineWidth: 1)
+                            )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
         }
     }
 }

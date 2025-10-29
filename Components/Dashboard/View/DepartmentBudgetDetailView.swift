@@ -150,16 +150,7 @@ struct DepartmentBudgetDetailView: View {
                 }
             }
         }
-        .popover(isPresented: $showingDateRangePicker) {
-            InlineDateRangePopover(
-                startDate: $startDate,
-                endDate: $endDate,
-                isActive: $isDateRangeActive,
-                onClose: { showingDateRangePicker = false }
-            )
-            .frame(maxWidth: 380)
-            .padding(16)
-        }
+        // date-range panel is rendered inline inside filterSection overlay
         .confirmationDialog("Sort Options", isPresented: $showingSortOptions) {
             ForEach(SortOption.allCases, id: \.self) { option in
                 Button(action: {
@@ -378,6 +369,88 @@ struct DepartmentBudgetDetailView: View {
         }
         .padding(.vertical, 12)
         .background(Color(.systemBackground))
+        .overlay(alignment: .topLeading) {
+            if showingDateRangePicker {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Date Range")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Button(action: { showingDateRangePicker = false }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Start").font(.caption2).foregroundColor(.secondary)
+                            DatePicker("Start", selection: $startDate, displayedComponents: [.date])
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                                .scaleEffect(0.8)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("End").font(.caption2).foregroundColor(.secondary)
+                            DatePicker("End", selection: $endDate, displayedComponents: [.date])
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                                .scaleEffect(0.8)
+                        }
+                    }
+                    
+                    if endDate < startDate {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                            Text("End date must be after start date")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    HStack(spacing: 8) {
+                        Button {
+                            isDateRangeActive = false
+                            showingDateRangePicker = false
+                        } label: {
+                            Text("Clear")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Spacer()
+                        
+                        Button {
+                            guard endDate >= startDate else { return }
+                            isDateRangeActive = true
+                            showingDateRangePicker = false
+                        } label: {
+                            Text("Apply")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(endDate < startDate)
+                    }
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                )
+                .frame(maxWidth: 280)
+                .padding(.leading, 16)
+                .padding(.top, 100)
+            }
+        }
     }
 
     // MARK: - Totals Summary View
