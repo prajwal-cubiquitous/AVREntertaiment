@@ -228,12 +228,32 @@ class CreateProjectViewModel: ObservableObject {
         phases.append(newPhase)
     }
     
-    func removePhase(at offsets: IndexSet) {
-        phases.remove(atOffsets: offsets)
-        // Renumber phases
-        for (index, _) in phases.enumerated() {
-            phases[index].phaseNumber = index + 1
+    func removePhase(at index: Int) {
+        guard index < phases.count else { return }
+        
+        // Remove the phase
+        phases.remove(at: index)
+        
+        // Renumber remaining phases
+        for i in 0..<phases.count {
+            phases[i].phaseNumber = i + 1
         }
+    }
+
+    func removePhaseById(_ phaseId: UUID) {
+        // Find and remove the phase
+        phases.removeAll(where: { $0.id == phaseId })
+        
+        // Renumber remaining phases
+        for i in 0..<phases.count {
+            phases[i].phaseNumber = i + 1
+        }
+    }
+
+    // REMOVE the IndexSet version completely or update it:
+    func removePhase(at offsets: IndexSet) {
+        guard let index = offsets.first else { return }
+        removePhase(at: index)
     }
     
     // MARK: - Phase Management Helpers
