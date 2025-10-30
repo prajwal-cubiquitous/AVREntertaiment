@@ -25,6 +25,7 @@ struct DashboardView: View {
     @State private var selectedDepartmentForDetail: String? = nil
     @State private var showingTeamMembersDetail = false
     @State private var showingAnonymousExpensesDetail = false
+    @State private var showingAllPhases = false
     @State private var scrollToDepartmentSection = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     @EnvironmentObject var navigationManager: NavigationManager
@@ -35,6 +36,17 @@ struct DashboardView: View {
     
     // Accept a single project as parameter
     var project: Project?
+    
+    // MARK: - Phase Data
+    struct PhaseSummary: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let start: Date?
+        let end: Date?
+        let departments: [String: Double]
+    }
+    
+    @State private var allPhases: [PhaseSummary] = []
     
     // Permanent approver
     
@@ -102,8 +114,8 @@ struct DashboardView: View {
                                 projectOverviewSection
                             }
                             
-                            // Department Budget Cards - Enhanced
-                            departmentBudgetSection
+                            // Current Phases with Departments (Horizontal)
+                            currentPhasesSection
                                 .id("departmentBudgetSection")
                             
                             // Enhanced Charts Section
@@ -414,6 +426,7 @@ struct DashboardView: View {
                 viewModel.loadDashboardData()
             }
             Task {
+                await loadPhases()
                 await fetchTempApproverData()
                 // Load notifications
                 if let projectId = project?.id {
@@ -428,6 +441,7 @@ struct DashboardView: View {
         .onChange(of: project) { _ in
             viewModel.updateProject(project)
             Task {
+                await loadPhases()
                 await fetchTempApproverData()
             }
         }
@@ -549,7 +563,7 @@ struct DashboardView: View {
                 }) {
                     ProjectStatsCard(
                         title: "Departments",
-                        value: "\(viewModel.departmentBudgets.count)",
+                        value: "\(viewModel.departmentBudgets.count)  •  \(allPhases.count) Phases",
                         icon: "folder.fill",
                         color: .purple
                     )
@@ -560,76 +574,78 @@ struct DashboardView: View {
     }
     
     // MARK: - Enhanced Department Budget Section
-    private var departmentBudgetSection: some View {
+    private var currentPhasesSection: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            HStack {
-                Text("Department Budgets")
-                    .font(DesignSystem.Typography.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Text("Across Project")
-                    .font(DesignSystem.Typography.caption1)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(.tertiarySystemFill))
-                    .cornerRadius(8)
-            }
-            
-            if viewModel.departmentBudgets.isEmpty {
-                // Empty state for departments
+            if filteredCurrentPhases.isEmpty {
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    Image(systemName: "chart.bar.doc.horizontal")
+                    Image(systemName: "clock.badge.exclamationmark")
                         .font(.system(size: 40))
                         .foregroundColor(.secondary.opacity(0.6))
                         .symbolRenderingMode(.hierarchical)
-                    
-                    Text("No Department Data")
+                    Text("No phases to show")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
-                    
-                    Text("Department budgets will appear here once projects with department breakdowns are added.")
-                        .font(DesignSystem.Typography.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(DesignSystem.Spacing.large)
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(DesignSystem.CornerRadius.medium)
             } else {
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: DesignSystem.Spacing.medium) {
-                    ForEach(viewModel.departmentBudgets, id: \.department) { budget in
-                        EnhancedDepartmentBudgetCard(
-                            budget: budget,
-                            isSelected: selectedDepartment == budget.department,
-                            viewModel: ProjectDetialViewModel
-                        )
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                selectedDepartment = selectedDepartment == budget.department ? nil : budget.department
+                VStack(spacing: DesignSystem.Spacing.large) {
+                    ForEach(filteredCurrentPhases, id: \.id) { phase in
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            // Header (only phase name + timeline inline)
+                            HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
+                                Text(phase.name)
+                                    .font(DesignSystem.Typography.headline)
+                                    .foregroundColor(.primary)
+                                if let s = phase.start, let e = phase.end {
+                                    Text("\(phaseDateFormatter.string(from: s)) - \(phaseDateFormatter.string(from: e))")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
                             }
-                            HapticManager.selection()
-                        }
-                        .onLongPressGesture {
-                            if budget.department == "Other Expenses" {
-                                // Show anonymous expenses detail
-                                showingAnonymousExpensesDetail = true
-                            } else {
-                                selectedDepartmentForDetail = budget.department
-                                showingDepartmentDetail = true
+                            
+                            // Horizontal departments scroller (cell style)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: DesignSystem.Spacing.medium) {
+                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                        DepartmentMiniCard(
+                                            title: dept,
+                                            amount: amount,
+                                            onTap: {
+                                            selectedDepartmentForDetail = dept
+                                            showingDepartmentDetail = true
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.vertical, 6)
                             }
-                            HapticManager.impact(.medium)
                         }
+                        .padding(DesignSystem.Spacing.medium)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
                     }
+                    // View All Phases button under the last scroller
+                    Button(action: {
+                        HapticManager.selection()
+                        showingAllPhases = true
+                    }) {
+                        Text("View All Phases")
+                            .font(DesignSystem.Typography.callout)
+                            .fontWeight(.semibold)
+                    }
+                    .secondaryButton()
                 }
             }
+        }
+        .sheet(isPresented: $showingAllPhases) {
+            AllPhasesView(phases: allPhases, onOpenDepartment: { dept in
+                selectedDepartmentForDetail = dept
+                showingDepartmentDetail = true
+            })
         }
     }
     
@@ -755,6 +771,48 @@ struct DashboardView: View {
             ForEach(Array(viewModel.departmentBudgets.enumerated()), id: \.element.department) { index, budget in
                 departmentLegendRow(budget: budget, index: index)
             }
+        }
+    }
+
+    // MARK: - Helpers for Phases
+    private var phaseDateFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateFormat = "dd/MM/yyyy"
+        return df
+    }
+    
+    private var now: Date { Date() }
+    
+    private var filteredCurrentPhases: [PhaseSummary] {
+        allPhases.filter { phase in
+            if let s = phase.start, let e = phase.end {
+                return s <= now && now <= e
+            }
+            // If dates missing, treat as not current
+            return false
+        }
+    }
+    
+    private func loadPhases() async {
+        guard let projectId = project?.id else { return }
+        do {
+            let snapshot = try await Firestore.firestore()
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("phases")
+                .order(by: "phaseNumber")
+                .getDocuments()
+            var collected: [PhaseSummary] = []
+            for doc in snapshot.documents {
+                if let p = try? doc.data(as: Phase.self) {
+                    let s = p.startDate.flatMap { phaseDateFormatter.date(from: $0) }
+                    let e = p.endDate.flatMap { phaseDateFormatter.date(from: $0) }
+                    collected.append(PhaseSummary(id: doc.documentID, name: p.phaseName, start: s, end: e, departments: p.departments))
+                }
+            }
+            await MainActor.run { allPhases = collected }
+        } catch {
+            print("Error loading phases: \(error)")
         }
     }
     
@@ -1172,6 +1230,144 @@ struct EnhancedDepartmentBudgetCard: View {
             return "globe"
         default:
             return "folder.fill"
+        }
+    }
+}
+
+// MARK: - Phase Department Pill
+private struct DepartmentPill: View {
+    let title: String
+    let amount: Double
+    let color: Color
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(DesignSystem.Typography.callout)
+                    .foregroundColor(color)
+                    .lineLimit(1)
+                Text("\(Int(amount).formattedCurrency)")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(color.opacity(0.1))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// Small card used in horizontal scrollers for departments
+private struct DepartmentMiniCard: View {
+    let title: String
+    let amount: Double
+    let onTap: () -> Void
+
+    private var budget: Double { amount }
+    private var spent: Double { 0 }
+    private var remaining: Double { max(budget - spent, 0) }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                // Title row
+                HStack {
+                    Text(title)
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // Budget/Spent/Remaining rows
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Budget:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(budget).formattedCurrency)")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    HStack {
+                        Text("Spent:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(spent).formattedCurrency)")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    HStack {
+                        Text("Remaining:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(remaining).formattedCurrency)")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.green)
+                    }
+
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color(.systemGray5))
+                                .frame(height: 6)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.accentColor)
+                                .frame(width: budget > 0 ? min(CGFloat(spent / budget) * geometry.size.width, geometry.size.width) : 0, height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
+            .padding(DesignSystem.Spacing.medium)
+            .frame(width: 240, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(.systemGray5), lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - All Phases View
+private struct AllPhasesView: View {
+    let phases: [DashboardView.PhaseSummary]
+    let onOpenDepartment: (String) -> Void
+    
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(phases) { phase in
+                    Section(header: Text(phase.name).textCase(.uppercase).foregroundColor(.secondary)) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                    DepartmentMiniCard(title: dept, amount: amount) {
+                                        onOpenDepartment(dept)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("All Phases")
         }
     }
 }
