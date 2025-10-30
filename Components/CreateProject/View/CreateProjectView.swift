@@ -5,8 +5,6 @@
 //  Created by Prajwal S S Reddy on 6/25/25.
 //
 
-
-// CreateProjectView.swift
 // CreateProjectView.swift
 
 import SwiftUI
@@ -22,14 +20,11 @@ struct CreateProjectView: View {
                 // MARK: - Project Information
                 projectDetailsSection
                 
-                // MARK: - Timeline Settings
-                timelineSection
+                // MARK: - Phases Section
+                phasesSection
                 
-                // MARK: - Team Management
-                teamAssignmentSection
-                
-                // MARK: - Budget Planning
-                departmentsSection
+                // MARK: - Template Overrides Section
+                templateOverridesSection
                 
                 // MARK: - Submit Action
                 submitSection
@@ -93,47 +88,21 @@ struct CreateProjectView: View {
         }
     }
     
-    private var timelineSection: some View {
-        Section {
-            timelineView
-        } header: {
-            SectionHeaderLabel(title: "Timeline", icon: "calendar")
-        } footer: {
-            Text("Dates are optional. Enable to set specific project timeline.")
-                .font(DesignSystem.Typography.caption1)
-                .foregroundColor(.secondary)
-        }
-    }
-    
-    private var teamAssignmentSection: some View {
+    private var phasesSection: some View {
         Section {
             VStack(spacing: DesignSystem.Spacing.large) {
-                managerSelectionView
-                teamMemberSelectionView
-            }
-            .padding(.vertical, DesignSystem.Spacing.small)
-        } header: {
-            SectionHeaderLabel(title: "Team Assignment", icon: "person.2.fill")
-        }
-    }
-    
-    private var departmentsSection: some View {
-        Section {
-            VStack(spacing: DesignSystem.Spacing.medium) {
-                ForEach($viewModel.departments) { $item in
-                    DepartmentInputRow(item: $item)
-                }
-                .onDelete { offsets in
-                    viewModel.removeDepartment(at: offsets)
+                ForEach($viewModel.phases) { $phase in
+                    PhaseCardView(phase: $phase, viewModel: viewModel)
                 }
                 
+                // Add Phase Button
                 Button(action: {
                     HapticManager.selection()
                     withAnimation(DesignSystem.Animation.standardSpring) {
-                        viewModel.addDepartment()
+                        viewModel.addPhase()
                     }
                 }) {
-                    Label("Add Department", systemImage: "plus.circle.fill")
+                    Label("Add Phase", systemImage: "plus.circle.fill")
                         .foregroundColor(.accentColor)
                         .font(DesignSystem.Typography.callout)
                         .fontWeight(.medium)
@@ -143,9 +112,33 @@ struct CreateProjectView: View {
             }
             .padding(.vertical, DesignSystem.Spacing.small)
         } header: {
-            SectionHeaderLabel(title: "Departments", icon: "building.2.fill")
+            SectionHeaderLabel(title: "Project Phases", icon: "arrow.triangle.2.circlepath")
         } footer: {
             budgetFooterView
+        }
+    }
+    
+    private var templateOverridesSection: some View {
+        Section {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Allow Template Overrides")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text("Enable to allow overriding project templates")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Toggle("", isOn: $viewModel.allowTemplateOverrides)
+                    .labelsHidden()
+            }
+            .padding(.vertical, DesignSystem.Spacing.small)
+        } header: {
+            SectionHeaderLabel(title: "Template Settings", icon: "doc.on.doc")
         }
     }
     
@@ -157,119 +150,6 @@ struct CreateProjectView: View {
     }
     
     // MARK: - Subviews
-    
-    private var timelineView: some View {
-        VStack(spacing: 16) {
-            // Start Date Section
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label("Start Date", systemImage: "calendar.badge.plus")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Toggle("", isOn: $viewModel.hasStartDate)
-                        .labelsHidden()
-                }
-                
-                if viewModel.hasStartDate {
-                    DatePicker("Select start date", selection: $viewModel.startDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.hasStartDate)
-                }
-            }
-            .padding(.vertical, 4)
-            
-            // End Date Section
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Label("End Date", systemImage: "calendar.badge.minus")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Toggle("", isOn: $viewModel.hasEndDate)
-                        .labelsHidden()
-                }
-                
-                if viewModel.hasEndDate {
-                    DatePicker("Select end date", selection: $viewModel.endDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                        .animation(.easeInOut(duration: 0.2), value: viewModel.hasEndDate)
-                }
-            }
-            .padding(.vertical, 4)
-            
-            // Date Validation Warning
-            if viewModel.hasStartDate && viewModel.hasEndDate && viewModel.endDate <= viewModel.startDate {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    Text("End date must be after start date")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                    Spacer()
-                }
-                .padding(.top, 4)
-                .transition(.opacity.animation(.easeInOut))
-            }
-        }
-    }
-    
-    private var managerSelectionView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Project Manager (Approver)").font(.caption).foregroundColor(.secondary)
-            
-            if let manager = viewModel.selectedManager {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(manager.name).fontWeight(.bold)
-                        Text(manager.phoneNumber).font(.caption).foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    Button(action: { viewModel.selectedManager = nil }) {
-                        Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
-                    }
-                }
-                .padding(10).background(Color.blue.opacity(0.1)).cornerRadius(8)
-            } else {
-                SearchableDropdownView(
-                    title: "Search name or phone number...",
-                    searchText: $viewModel.managerSearchText,
-                    items: viewModel.filteredApprovers,
-                    itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
-                    onSelect: viewModel.selectManager
-                )
-            }
-        }
-        .padding(.vertical, 5)
-    }
-    
-    private var teamMemberSelectionView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Team Members (Users)").font(.caption).foregroundColor(.secondary)
-            
-            SearchableDropdownView(
-                title: "Search name or phone number...",
-                searchText: $viewModel.teamMemberSearchText,
-                items: viewModel.filteredTeamMembers,
-                itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
-                onSelect: viewModel.selectTeamMember
-            )
-            
-            if !viewModel.selectedTeamMembers.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(Array(viewModel.selectedTeamMembers)) { member in
-                            TagView(user: member, onRemove: { viewModel.removeTeamMember(member) })
-                        }
-                    }
-                    .padding(.top, 5)
-                }
-            }
-        }
-        .padding(.vertical, 5)
-    }
     
     private var budgetFooterView: some View {
         HStack {
@@ -315,6 +195,240 @@ struct CreateProjectView: View {
     }
 }
 
+// MARK: - Phase Card View
+
+struct PhaseCardView: View {
+    @Binding var phase: PhaseItem
+    @ObservedObject var viewModel: CreateProjectViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Phase Header
+            HStack {
+                Text("Phase \(phase.phaseNumber)")
+                    .font(DesignSystem.Typography.headline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                // Delete Phase Button
+                if viewModel.phases.count > 1 {
+                    Button(action: {
+                        HapticManager.selection()
+                        if let index = viewModel.phases.firstIndex(where: { $0.id == phase.id }) {
+                            viewModel.removePhase(at: IndexSet(integer: index))
+                        }
+                    }) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                            .font(.system(size: 16))
+                    }
+                }
+            }
+            
+            // Phase Name
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                Text("Phase Name")
+                    .font(DesignSystem.Typography.subheadline)
+                    .foregroundColor(.secondary)
+                
+                TextField("Enter phase name", text: $phase.phaseName)
+                    .font(DesignSystem.Typography.body)
+                    .fieldStyle()
+            }
+            
+            // Timeline Section
+            timelineView
+            
+            // Manager Selection
+            managerSelectionView
+            
+            // Team Members Selection
+            teamMemberSelectionView
+            
+            // Departments
+            departmentsView
+            
+            Divider()
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Timeline View
+    
+    private var timelineView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Timeline")
+                .font(DesignSystem.Typography.subheadline)
+                .foregroundColor(.secondary)
+            
+            // Start Date
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Start Date", systemImage: "calendar.badge.plus")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Toggle("", isOn: $phase.hasStartDate)
+                        .labelsHidden()
+                }
+                
+                if phase.hasStartDate {
+                    DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+            .padding(.vertical, 4)
+            
+            // End Date
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("End Date", systemImage: "calendar.badge.minus")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Toggle("", isOn: $phase.hasEndDate)
+                        .labelsHidden()
+                }
+                
+                if phase.hasEndDate {
+                    DatePicker("Select end date", selection: $phase.endDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+            .padding(.vertical, 4)
+            
+            // Date Validation Warnings
+            if phase.hasStartDate && phase.hasEndDate && phase.endDate <= phase.startDate {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("End date must be after start date")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .transition(.opacity.animation(.easeInOut))
+            }
+            
+            // Phase Timeline Validation
+            if let phaseIndex = viewModel.phases.firstIndex(where: { $0.id == phase.id }),
+               phaseIndex > 0,
+               let previousPhase = viewModel.phases[safe: phaseIndex - 1],
+               previousPhase.hasEndDate,
+               phase.hasStartDate,
+               phase.startDate <= previousPhase.endDate {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("Phase must start after Phase \(previousPhase.phaseNumber) ends")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .transition(.opacity.animation(.easeInOut))
+            }
+        }
+    }
+    
+    // MARK: - Manager Selection
+    
+    private var managerSelectionView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Phase Manager (Approver)").font(.caption).foregroundColor(.secondary)
+            
+            if let manager = phase.selectedManager {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(manager.name).fontWeight(.bold)
+                        Text(manager.phoneNumber).font(.caption).foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button(action: { phase.selectedManager = nil }) {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
+                    }
+                }
+                .padding(10).background(Color.blue.opacity(0.1)).cornerRadius(8)
+            } else {
+                SearchableDropdownView(
+                    title: "Search name or phone number...",
+                    searchText: $phase.managerSearchText,
+                    items: viewModel.filteredApprovers(for: phase),
+                    itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                    onSelect: { manager in
+                        viewModel.updatePhaseManager(phase.id, manager: manager)
+                    }
+                )
+            }
+        }
+    }
+    
+    // MARK: - Team Members Selection
+    
+    private var teamMemberSelectionView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Team Members (Users)").font(.caption).foregroundColor(.secondary)
+            
+            SearchableDropdownView(
+                title: "Search name or phone number...",
+                searchText: $phase.teamMemberSearchText,
+                items: viewModel.filteredTeamMembers(for: phase),
+                itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                onSelect: { member in
+                    viewModel.selectTeamMember(for: phase.id, member: member)
+                }
+            )
+            
+            if !phase.selectedTeamMembers.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        ForEach(Array(phase.selectedTeamMembers)) { member in
+                            TagView(user: member, onRemove: {
+                                viewModel.removeTeamMember(for: phase.id, member: member)
+                            })
+                        }
+                    }
+                    .padding(.top, 5)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Departments View
+    
+    private var departmentsView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Departments")
+                .font(DesignSystem.Typography.subheadline)
+                .foregroundColor(.secondary)
+            
+            ForEach($phase.departments) { $dept in
+                DepartmentInputRow(item: $dept)
+            }
+            
+            Button(action: {
+                HapticManager.selection()
+                viewModel.addDepartment(to: phase.id)
+            }) {
+                Label("Add Department", systemImage: "plus.circle.fill")
+                    .foregroundColor(.accentColor)
+                    .font(DesignSystem.Typography.caption1)
+                    .fontWeight(.medium)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Array Extension for Safe Access
+
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
+    }
+}
 
 // MARK: - Reusable Helper Views
 

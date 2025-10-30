@@ -11,13 +11,27 @@ import Foundation
 import FirebaseFirestore
 import Combine
 
-
 struct DepartmentItem: Identifiable {
     let id = UUID()
     var name: String = ""
     var amount: String = "" // Use String for TextField, convert to Double later
 }
 
+struct PhaseItem: Identifiable {
+    let id = UUID()
+    var phaseNumber: Int
+    var phaseName: String = ""
+    var startDate: Date = Date()
+    var endDate: Date = Date().addingTimeInterval(86400 * 30)
+    var hasStartDate: Bool = false
+    var hasEndDate: Bool = false
+    var managerSearchText: String = ""
+    var teamMemberSearchText: String = ""
+    var selectedManager: User?
+    var selectedTeamMembers: Set<User> = []
+    var departments: [DepartmentItem] = [DepartmentItem()]
+    var categories: [String] = []
+}
 
 @MainActor // Ensures all UI updates happen on the main thread
 class CreateProjectViewModel: ObservableObject {
@@ -25,20 +39,8 @@ class CreateProjectViewModel: ObservableObject {
     // MARK: - Form Inputs
     @Published var projectName: String = ""
     @Published var projectDescription: String = ""
-    @Published var startDate: Date = Date()
-    @Published var endDate: Date = Date().addingTimeInterval(86400 * 30) // Default to 30 days
-    @Published var departments: [DepartmentItem] = [DepartmentItem()]
-    
-    // MARK: - Date Toggle States
-    @Published var hasStartDate: Bool = false
-    @Published var hasEndDate: Bool = false
-    
-    // MARK: - User Selection State
-    @Published var managerSearchText: String = ""
-    @Published var teamMemberSearchText: String = ""
-    
-    @Published var selectedManager: User?
-    @Published var selectedTeamMembers: Set<User> = []
+    @Published var phases: [PhaseItem] = [PhaseItem(phaseNumber: 1)]
+    @Published var allowTemplateOverrides: Bool = false
     
     // MARK: - Data Source for Dropdowns (private)
     @Published private var allApprovers: [User] = []
@@ -56,23 +58,23 @@ class CreateProjectViewModel: ObservableObject {
     
     // MARK: - Computed Properties for Filtering
     
-    var filteredApprovers: [User] {
-        if managerSearchText.isEmpty { return [] }
+    func filteredApprovers(for phase: PhaseItem) -> [User] {
+        if phase.managerSearchText.isEmpty { return [] }
         return allApprovers.filter {
             $0.isActive && // Only show active approvers
-            ($0.name.localizedCaseInsensitiveContains(managerSearchText) ||
-            $0.phoneNumber.localizedCaseInsensitiveContains(managerSearchText))
+            ($0.name.localizedCaseInsensitiveContains(phase.managerSearchText) ||
+            $0.phoneNumber.localizedCaseInsensitiveContains(phase.managerSearchText))
         }
     }
     
-    var filteredTeamMembers: [User] {
-        if teamMemberSearchText.isEmpty { return [] }
+    func filteredTeamMembers(for phase: PhaseItem) -> [User] {
+        if phase.teamMemberSearchText.isEmpty { return [] }
         // Filter by search text AND ensure the user is not already selected AND is active
         return allUsers.filter { user in
-            let isNotSelected = !selectedTeamMembers.contains(user)
+            let isNotSelected = !phase.selectedTeamMembers.contains(user)
             let isActive = user.isActive // Only show active users
-            let matchesSearch = user.name.localizedCaseInsensitiveContains(teamMemberSearchText) ||
-                                user.phoneNumber.localizedCaseInsensitiveContains(teamMemberSearchText)
+            let matchesSearch = user.name.localizedCaseInsensitiveContains(phase.teamMemberSearchText) ||
+                                user.phoneNumber.localizedCaseInsensitiveContains(phase.teamMemberSearchText)
             return isNotSelected && isActive && matchesSearch
         }
     }
@@ -80,7 +82,9 @@ class CreateProjectViewModel: ObservableObject {
     // MARK: - Computed Properties for Validation & Display
     
     var totalBudget: Double {
-        departments.compactMap { Double($0.amount) }.reduce(0, +)
+        phases.reduce(0) { total, phase in
+            total + phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
+        }
     }
     
     var totalBudgetFormatted: String {
@@ -91,15 +95,49 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     var isFormValid: Bool {
-        let basicFieldsValid = !projectName.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !projectDescription.trimmingCharacters(in: .whitespaces).isEmpty &&
-        selectedManager != nil && // A manager must be selected
-        !departments.contains { $0.name.isEmpty || (Double($0.amount) ?? 0) <= 0 }
+        // Basic fields validation
+        guard !projectName.trimmingCharacters(in: .whitespaces).isEmpty,
+              !projectDescription.trimmingCharacters(in: .whitespaces).isEmpty,
+              !phases.isEmpty else {
+            return false
+        }
         
-        // Date validation: if both dates are set, end date must be after start date
-        let dateValidation = !(hasStartDate && hasEndDate && endDate <= startDate)
+        // Validate each phase
+        for phase in phases {
+            // Phase name required
+            if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+                return false
+            }
+            
+            // Manager required for each phase
+            if phase.selectedManager == nil {
+                return false
+            }
+            
+            // At least one department required
+            if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.isEmpty || (Double($0.amount) ?? 0) <= 0 }) {
+                return false
+            }
+            
+            // Date validation: if both dates are set, end date must be after start date
+            if phase.hasStartDate && phase.hasEndDate && phase.endDate <= phase.startDate {
+                return false
+            }
+        }
         
-        return basicFieldsValid && dateValidation
+        // Validate phase timeline: next phase must start after previous phase ends
+        for i in 0..<phases.count - 1 {
+            let currentPhase = phases[i]
+            let nextPhase = phases[i + 1]
+            
+            if currentPhase.hasEndDate && nextPhase.hasStartDate {
+                if nextPhase.startDate <= currentPhase.endDate {
+                    return false
+                }
+            }
+        }
+        
+        return true
     }
     
     // MARK: - Initialization
@@ -138,11 +176,6 @@ class CreateProjectViewModel: ObservableObject {
             allUsers = loadedUsers.sorted { $0.name < $1.name }
             allApprovers = loadedApprovers.sorted { $0.name < $1.name }
             
-            // If there's only one approver, select them by default
-            if allApprovers.count == 1 {
-                selectedManager = allApprovers[0]
-            }
-            
             isLoading = false
         } catch {
             print("Error fetching users: \(error)")
@@ -151,35 +184,66 @@ class CreateProjectViewModel: ObservableObject {
         }
     }
     
-    // MARK: - User Selection Methods
-    func selectManager(_ manager: User) {
-        selectedManager = manager
-        managerSearchText = ""
+    // MARK: - Phase Management
+    func addPhase() {
+        let nextPhaseNumber = phases.count + 1
+        var newPhase = PhaseItem(phaseNumber: nextPhaseNumber)
+        
+        // If previous phase has end date, set start date to day after
+        if let lastPhase = phases.last, lastPhase.hasEndDate {
+            newPhase.startDate = Calendar.current.date(byAdding: .day, value: 1, to: lastPhase.endDate) ?? Date()
+            newPhase.hasStartDate = true
+        }
+        
+        phases.append(newPhase)
     }
     
-    func selectTeamMember(_ member: User) {
-        selectedTeamMembers.insert(member)
-        teamMemberSearchText = ""
+    func removePhase(at offsets: IndexSet) {
+        phases.remove(atOffsets: offsets)
+        // Renumber phases
+        for (index, _) in phases.enumerated() {
+            phases[index].phaseNumber = index + 1
+        }
     }
     
-    func removeTeamMember(_ member: User) {
-        selectedTeamMembers.remove(member)
-    }
-
-    // MARK: - Department Management
-    func addDepartment() {
-        departments.append(DepartmentItem())
+    // MARK: - Phase Management Helpers
+    func updatePhaseManager(_ phaseId: UUID, manager: User) {
+        if let index = phases.firstIndex(where: { $0.id == phaseId }) {
+            phases[index].selectedManager = manager
+            phases[index].managerSearchText = ""
+        }
     }
     
-    func removeDepartment(at offsets: IndexSet) {
-        departments.remove(atOffsets: offsets)
+    func selectTeamMember(for phaseId: UUID, member: User) {
+        if let index = phases.firstIndex(where: { $0.id == phaseId }) {
+            phases[index].selectedTeamMembers.insert(member)
+            phases[index].teamMemberSearchText = ""
+        }
+    }
+    
+    func removeTeamMember(for phaseId: UUID, member: User) {
+        if let index = phases.firstIndex(where: { $0.id == phaseId }) {
+            phases[index].selectedTeamMembers.remove(member)
+        }
+    }
+    
+    func addDepartment(to phaseId: UUID) {
+        if let index = phases.firstIndex(where: { $0.id == phaseId }) {
+            phases[index].departments.append(DepartmentItem())
+        }
+    }
+    
+    func removeDepartment(from phaseId: UUID, at offsets: IndexSet) {
+        if let index = phases.firstIndex(where: { $0.id == phaseId }) {
+            phases[index].departments.remove(atOffsets: offsets)
+        }
     }
 
     // MARK: - Firestore Saving Logic
     func saveProject() {
         Task {
             guard isFormValid else {
-                errorMessage = "Please fill in all required fields"
+                errorMessage = "Please fill in all required fields and ensure phase timelines are valid"
                 return
             }
             
@@ -187,39 +251,79 @@ class CreateProjectViewModel: ObservableObject {
             errorMessage = nil
             
             do {
+                // Calculate total budget from all phases
+                let totalBudget = phases.reduce(0) { total, phase in
+                    total + phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
+                }
+                
+                // Collect all unique team members from all phases
+                let allTeamMembers = Set(phases.flatMap { $0.selectedTeamMembers.map { $0.phoneNumber } })
+                
+                // Use the manager from the first phase as the main project manager (for backward compatibility)
+                let mainManagerId = phases.first?.selectedManager?.phoneNumber ?? ""
+                
+                // Create project data (without departments, they're in phases now)
                 let docRef = db.collection(FirebaseCollections.projects).document()
                 
-                // Get selected team members' phone numbers
-                let teamMemberPhones = selectedTeamMembers.map { $0.phoneNumber }
-                
-                // Format dates to strings
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "dd/MM/yyyy"
-                let startDateStr = hasStartDate ? dateFormatter.string(from: startDate) : nil
-                let endDateStr = hasEndDate ? dateFormatter.string(from: endDate) : nil
-                
-                // Create project data
                 let projectData = Project(
                     id: docRef.documentID,
                     name: projectName,
                     description: projectDescription,
                     budget: totalBudget,
                     status: ProjectStatus.ACTIVE.rawValue,
-                    startDate: startDateStr,
-                    endDate: endDateStr,
-                    teamMembers: teamMemberPhones,
-                    managerId: selectedManager?.phoneNumber ?? "",
+                    startDate: nil, // Removed from main project
+                    endDate: nil, // Removed from main project
+                    teamMembers: Array(allTeamMembers),
+                    managerId: mainManagerId,
                     tempApproverID: nil,
-                    departments: Dictionary(uniqueKeysWithValues: departments.map { ($0.name, Double($0.amount) ?? 0) }),
+                    departments: [:], // Empty, departments are in phases
+                    Allow_Template_Overrides: allowTemplateOverrides,
                     createdAt: Timestamp(),
                     updatedAt: Timestamp()
                 )
                 
+                // Save project
                 try await docRef.setData(from: projectData)
+                
+                // Save phases in subcollection
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                for phase in phases {
+                    let phaseRef = docRef.collection("phases").document()
+                    
+                    // Get team member phone numbers
+                    let teamMemberPhones = phase.selectedTeamMembers.map { $0.phoneNumber }
+                    
+                    // Format dates
+                    let startDateStr = phase.hasStartDate ? dateFormatter.string(from: phase.startDate) : nil
+                    let endDateStr = phase.hasEndDate ? dateFormatter.string(from: phase.endDate) : nil
+                    
+                    // Create departments dictionary
+                    let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { ($0.name, Double($0.amount) ?? 0) })
+                    
+                    let phaseData = Phase(
+                        id: phaseRef.documentID,
+                        phaseName: phase.phaseName,
+                        phaseNumber: phase.phaseNumber,
+                        startDate: startDateStr,
+                        endDate: endDateStr,
+                        managerId: phase.selectedManager?.phoneNumber ?? "",
+                        teamMembers: teamMemberPhones,
+                        departments: departmentsDict,
+                        categories: phase.categories,
+                        createdAt: Timestamp(),
+                        updatedAt: Timestamp()
+                    )
+                    
+                    try await phaseRef.setData(from: phaseData)
+                }
                 
                 // Show success message and reset form
                 isLoading = false
                 showSuccessMessage = true
+                alertMessage = "Project created successfully!"
+                showAlert = true
                 resetForm()
                 
                 // Notify that a new project was created
@@ -228,6 +332,8 @@ class CreateProjectViewModel: ObservableObject {
             } catch {
                 isLoading = false
                 errorMessage = "Failed to create project: \(error.localizedDescription)"
+                alertMessage = error.localizedDescription
+                showAlert = true
             }
         }
     }
@@ -236,15 +342,8 @@ class CreateProjectViewModel: ObservableObject {
     private func resetForm() {
         projectName = ""
         projectDescription = ""
-        startDate = Date()
-        endDate = Date().addingTimeInterval(86400 * 30)
-        hasStartDate = false
-        hasEndDate = false
-        departments = [DepartmentItem()]
-        selectedManager = nil
-        selectedTeamMembers.removeAll()
-        managerSearchText = ""
-        teamMemberSearchText = ""
+        phases = [PhaseItem(phaseNumber: 1)]
+        allowTemplateOverrides = false
         showSuccessMessage = false
         errorMessage = nil
     }

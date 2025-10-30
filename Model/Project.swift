@@ -28,6 +28,9 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     // Example: ["Casting": 10000, "Location Fees": 5000, "Catering": 3000]
     let departments: [String: Double]
     
+    // Allow template overrides
+    let Allow_Template_Overrides: Bool?
+    
     // Firestore Timestamps
     let createdAt: Timestamp
     let updatedAt: Timestamp
@@ -99,6 +102,7 @@ extension Project {
                 departments: [:
 
                 ],
+                Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 30)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-3600))),
         Project(id: "128YgC7uVnge9RLxVrgG",
@@ -120,6 +124,7 @@ extension Project {
                     "Post-Production": 8000,
                     "Marketing": 5000
                 ],
+                Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 30)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-3600))),
         
@@ -138,6 +143,7 @@ extension Project {
                     "Market Research": 25000,
                     "Website Development": 20000
                 ],
+                Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 150)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-86400 * 10))),
     ]

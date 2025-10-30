@@ -848,6 +848,7 @@ class DelegateViewModel: ObservableObject {
             managerId: "manager123",
             tempApproverID: "temp123",
             departments: ["Casting": 10000, "Location": 5000],
+            Allow_Template_Overrides: false,
             createdAt: Timestamp(date: Date()),
             updatedAt: Timestamp(date: Date())
         ),
