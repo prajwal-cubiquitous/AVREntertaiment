@@ -1354,19 +1354,46 @@ private struct AllPhasesView: View {
             List {
                 ForEach(phases) { phase in
                     Section(header: Text(phase.name).textCase(.uppercase).foregroundColor(.secondary)) {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
-                                    DepartmentMiniCard(title: dept, amount: amount) {
-                                        onOpenDepartment(dept)
+                        ZStack(alignment: .leading) {
+                            // Card background for the horizontal scroller
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.secondarySystemGroupedBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color(.systemGray5), lineWidth: 0.5)
+                                )
+                            // Horizontal scroller
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                        DepartmentMiniCard(title: dept, amount: amount) {
+                                            onOpenDepartment(dept)
+                                        }
                                     }
                                 }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
                             }
-                            .padding(.vertical, 6)
+                            // Scroll hint (left chevron) to indicate horizontal scroll
+                            HStack { 
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                                    .padding(.leading, 6)
+                                Spacer()
+                            }
+                            .allowsHitTesting(false)
                         }
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("All Phases")
         }
     }
