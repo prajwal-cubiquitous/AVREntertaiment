@@ -115,13 +115,14 @@ private struct SplashView: View {
             
             VStack(spacing: DesignSystem.Spacing.large) {
                 // App Logo
-                Image(systemName: "film.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.accentColor)
-                    .symbolRenderingMode(.hierarchical)
-                
+                Image("TracuraLogo")
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 100)
+
                 VStack(spacing: DesignSystem.Spacing.small) {
-                    Text("AVR Entertainment")
+                    Text("Tracura")
                         .font(DesignSystem.Typography.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)

@@ -1,0 +1,26 @@
+{
+  "images" : [
+    {
+      "filename" : "Tracura_logo_cubiquitous_colors_transparent.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "Tracura_logo_cubiquitous_colors_transparent 2.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "Tracura_logo_cubiquitous_colors_transparent 1.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "properties" : {
+    "template-rendering-intent" : "original"
+  }
+}
