@@ -591,7 +591,7 @@ struct DashboardView: View {
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(DesignSystem.CornerRadius.medium)
             } else {
-                VStack(spacing: DesignSystem.Spacing.large) {
+                VStack(spacing: DesignSystem.Spacing.medium) {
                     ForEach(filteredCurrentPhases, id: \.id) { phase in
                         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                             // Header (only phase name + timeline inline)
@@ -607,21 +607,35 @@ struct DashboardView: View {
                                 Spacer()
                             }
                             
-                            // Horizontal departments scroller (cell style)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: DesignSystem.Spacing.medium) {
-                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
-                                        DepartmentMiniCard(
-                                            title: dept,
-                                            amount: amount,
-                                            onTap: {
-                                            selectedDepartmentForDetail = dept
-                                            showingDepartmentDetail = true
-                                            }
-                                        )
+                            // Horizontal departments scroller (cell style) with scroll hint
+                            ZStack(alignment: .leading) {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: DesignSystem.Spacing.medium) {
+                                        ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                            DepartmentMiniCard(
+                                                title: dept,
+                                                amount: amount,
+                                                onTap: {
+                                                    selectedDepartmentForDetail = dept
+                                                    showingDepartmentDetail = true
+                                                }
+                                            )
+                                        }
                                     }
+                                    .padding(.vertical, 6)
                                 }
-                                .padding(.vertical, 6)
+                                // Left scroll hint
+                                HStack {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .padding(6)
+                                        .background(.ultraThinMaterial)
+                                        .clipShape(Circle())
+                                        .padding(.leading, 6)
+                                    Spacer()
+                                }
+                                .allowsHitTesting(false)
                             }
                         }
                         .padding(DesignSystem.Spacing.medium)
@@ -1372,7 +1386,7 @@ private struct AllPhasesView: View {
                                     }
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
+                                .padding(.vertical, 8)
                             }
                             // Scroll hint (left chevron) to indicate horizontal scroll
                             HStack { 
@@ -1387,13 +1401,14 @@ private struct AllPhasesView: View {
                             }
                             .allowsHitTesting(false)
                         }
-                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                         .listRowBackground(Color.clear)
                     }
                 }
             }
             .scrollContentBackground(.hidden)
             .background(Color(.systemGroupedBackground))
+            .listSectionSpacing(.custom(8))
             .navigationTitle("All Phases")
         }
     }
