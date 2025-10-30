@@ -549,7 +549,7 @@ struct DashboardView: View {
                 }) {
                     ProjectStatsCard(
                         title: "Departments",
-                        value: "\(project?.departments.count ?? 0)",
+                        value: "\(viewModel.departmentBudgets.count)",
                         icon: "folder.fill",
                         color: .purple
                     )
@@ -865,7 +865,7 @@ struct DashboardView: View {
                 
                 // Fetch latest temp approver record
                 let tempApproverSnapshot = try await db
-                    .collection("projects_ios")
+                    .collection("projects_ios1")
                     .document(project.id ?? "")
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: approverPhone)
@@ -1532,7 +1532,7 @@ class AnonymousExpensesViewModel: ObservableObject {
         
         Task {
             do {
-                let expensesSnapshot = try await db.collection("projects_ios")
+                let expensesSnapshot = try await db.collection("projects_ios1")
                     .document(projectId)
                     .collection("expenses")
                     .whereField("isAnonymous", isEqualTo: true)

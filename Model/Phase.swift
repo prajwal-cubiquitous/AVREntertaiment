@@ -15,8 +15,6 @@ struct Phase: Identifiable, Codable {
     let phaseNumber: Int // Order of the phase (1, 2, 3, etc.)
     let startDate: String? // Format: "dd/MM/yyyy"
     let endDate: String? // Format: "dd/MM/yyyy"
-    let managerId: String // Approver/Manager for this phase
-    let teamMembers: [String] // Team members for this phase
     let departments: [String: Double] // Departments with their budgets
     let categories: [String] // Categories for this phase
     

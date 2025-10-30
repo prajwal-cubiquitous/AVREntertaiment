@@ -124,14 +124,16 @@ class GroupChatViewModel: ObservableObject {
             }
         }
         
-        // Add manager
-        if let manager = await fetchUser(phoneNumber: project.managerId) {
-            members.append(ProjectMember(
-                id: manager.phoneNumber,
-                name: manager.name,
-                phoneNumber: manager.phoneNumber,
-                role: manager.role
-            ))
+        // Add managers
+        for managerId in project.managerIds {
+            if let manager = await fetchUser(phoneNumber: managerId) {
+                members.append(ProjectMember(
+                    id: manager.phoneNumber,
+                    name: manager.name,
+                    phoneNumber: manager.phoneNumber,
+                    role: manager.role
+                ))
+            }
         }
         
         // Add temp approver if active
@@ -178,7 +180,7 @@ class GroupChatViewModel: ObservableObject {
     }
     
     private func createOrGetGroupChat(projectId: String, chatId: String) async throws -> Chat {
-        let chatRef = db.collection("projects_ios")
+        let chatRef = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -219,7 +221,7 @@ class GroupChatViewModel: ObservableObject {
         mentions: [String]? = nil,
         isGroupMessage: Bool = true
     ) async throws {
-        let messageRef = db.collection("projects_ios")
+        let messageRef = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -242,7 +244,7 @@ class GroupChatViewModel: ObservableObject {
         try messageRef.setData(from: message)
         
         // Update last message in chat
-        try await db.collection("projects_ios")
+        try await db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -253,7 +255,7 @@ class GroupChatViewModel: ObservableObject {
     }
     
     private func loadMessagesAsync(projectId: String, chatId: String) async throws -> [Message] {
-        let snapshot = try await db.collection("projects_ios")
+        let snapshot = try await db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -271,7 +273,7 @@ class GroupChatViewModel: ObservableObject {
     private func startListeningToMessages(projectId: String, chatId: String) {
         messageListener?.remove()
         
-        messageListener = db.collection("projects_ios")
+        messageListener = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)

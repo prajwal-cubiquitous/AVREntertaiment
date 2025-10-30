@@ -349,13 +349,13 @@ struct ExpenseDetailView: View {
                 
                 if currentUserRole == .ADMIN {
                     // Admin can approve expenses from all projects
-                    projectsSnapshot = try await db.collection("projects_ios").getDocuments()
+                    projectsSnapshot = try await db.collection("projects_ios1").getDocuments()
                 } else {
                     // Regular users can approve expenses from their managed projects or where they are temp approver
-                    projectsSnapshot = try await db.collection("projects_ios")
+                    projectsSnapshot = try await db.collection("projects_ios1")
                         .whereFilter(
                             Filter.orFilter([
-                                Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                                Filter.whereField("managerIds", arrayContains: currentUserPhone),
                                 Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
                             ])
                         )

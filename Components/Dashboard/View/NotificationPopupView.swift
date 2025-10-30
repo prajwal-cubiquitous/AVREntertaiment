@@ -250,7 +250,7 @@ struct NotificationPopupView: View {
         do {
             // Fetch expenses with recent chat messages
             let expensesSnapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("expenses")
                 .getDocuments()
@@ -262,7 +262,7 @@ struct NotificationPopupView: View {
                 
                 // Check for recent expense chat messages
                 let expenseChatSnapshot = try await db
-                    .collection("projects_ios")
+                    .collection("projects_ios1")
                     .document(projectId)
                     .collection("expenses")
                     .document(expenseDoc.documentID)

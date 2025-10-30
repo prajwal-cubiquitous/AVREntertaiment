@@ -119,7 +119,7 @@ class IndividualChatViewModel: ObservableObject {
         
         // 3️⃣ Deterministic Chat Document ID using phone identifiers
         let chatId = participantPhones.joined(separator: "_")
-        let chatRef = db.collection("projects_ios")
+        let chatRef = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -161,7 +161,7 @@ class IndividualChatViewModel: ObservableObject {
         isGroupMessage: Bool = false
     ) async throws {
         let db = Firestore.firestore()
-        let messageRef = db.collection("projects_ios")
+        let messageRef = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -184,7 +184,7 @@ class IndividualChatViewModel: ObservableObject {
         try messageRef.setData(from: message)
         
         // Update last message in chat
-        try await db.collection("projects_ios")
+        try await db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -196,7 +196,7 @@ class IndividualChatViewModel: ObservableObject {
     
     func loadMessagesAsync(projectId: String, chatId: String) async throws -> [Message] {
         let db = Firestore.firestore()
-        let snapshot = try await db.collection("projects_ios")
+        let snapshot = try await db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -215,7 +215,7 @@ class IndividualChatViewModel: ObservableObject {
         let db = Firestore.firestore()
         
         return AsyncStream { continuation in
-            let listener = db.collection("projects_ios")
+            let listener = db.collection("projects_ios1")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -392,7 +392,7 @@ class IndividualChatViewModel: ObservableObject {
     private func startListeningToMessages(projectId: String, chatId: String) {
         messageListener?.remove()
         
-        messageListener = db.collection("projects_ios")
+        messageListener = db.collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)

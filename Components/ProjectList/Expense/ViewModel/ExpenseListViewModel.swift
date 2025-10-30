@@ -27,7 +27,7 @@ class ExpenseListViewModel: ObservableObject {
         
         Task {
             do {
-                let snapshot = try await db.collection("projects_ios")
+                let snapshot = try await db.collection("projects_ios1")
                     .document(project.id ?? "")
                     .collection("expenses")
                     .whereField("submittedBy", isEqualTo: currentUserPhone)
@@ -59,7 +59,7 @@ class ExpenseListViewModel: ObservableObject {
         guard let expenseId = expense.id else { return }
         
         do {
-            let expenseRef = db.collection("projects_ios")
+            let expenseRef = db.collection("projects_ios1")
                 .document(project.id ?? "")
                 .collection("expenses")
                 .document(expenseId)

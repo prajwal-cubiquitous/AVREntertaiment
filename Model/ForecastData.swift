@@ -48,7 +48,7 @@ struct ReportData {
 
 func fetchForecastData(for projectId: String, completion: @escaping ([ForecastData]) -> Void) {
     let db = Firestore.firestore()
-    let projectRef = db.collection("projects_ios").document(projectId)
+    let projectRef = db.collection("projects_ios1").document(projectId)
     
     Task {
         do {

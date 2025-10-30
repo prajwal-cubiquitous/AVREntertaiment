@@ -423,7 +423,7 @@ struct IndividualChatView: View {
         do {
             // Update all unread messages from this participant
             let messagesSnapshot = try await Firestore.firestore()
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)

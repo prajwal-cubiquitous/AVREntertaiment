@@ -701,7 +701,7 @@ class MemberExpensesViewModel: ObservableObject {
         Task {
             do {
                 let snapshot = try await db
-                    .collection("projects_ios")
+                    .collection("projects_ios1")
                     .document(projectId)
                     .collection("expenses")
                     .whereField("submittedBy", isEqualTo: memberId)

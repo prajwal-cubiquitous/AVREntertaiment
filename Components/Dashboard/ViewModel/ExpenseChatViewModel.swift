@@ -44,7 +44,7 @@ class ExpenseChatViewModel: ObservableObject {
             return
         }
         
-        let chatCollection = db.collection("projects_ios").document(projectID).collection("expenses").document(ExpenseId).collection("expenseChats")
+        let chatCollection = db.collection("projects_ios1").document(projectID).collection("expenses").document(ExpenseId).collection("expenseChats")
             .order(by: "timeStamp", descending: false)
         
         listener = chatCollection.addSnapshotListener { [weak self] snapshot, error in
@@ -78,7 +78,7 @@ class ExpenseChatViewModel: ObservableObject {
         
         let chatData = message
         
-        let docRef = db.collection("projects_ios").document(projectID)
+        let docRef = db.collection("projects_ios1").document(projectID)
                             .collection("expenses").document(ExpenseId)
                             .collection("expenseChats").document() // Let Firestore generate the ID
 

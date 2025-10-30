@@ -636,7 +636,7 @@ class DelegateViewModel: ObservableObject {
                 await loadAllApprovers()
                 
                 // Fetch temp approver details from subcollection
-                let tempApproverDoc = try await db.collection("projects_ios")
+                let tempApproverDoc = try await db.collection("projects_ios1")
                     .document(projectId)
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: tempApproverID)
@@ -713,14 +713,14 @@ class DelegateViewModel: ObservableObject {
         
         do {
             // Update the project's tempApproverID
-            try await db.collection("projects_ios")
+            try await db.collection("projects_ios1")
                 .document(projectId)
                 .updateData([
                     "tempApproverID": newTempApprover.approverId
                 ])
             
             // Create new temp approver document
-            let docRef = try await db.collection("projects_ios")
+            let docRef = try await db.collection("projects_ios1")
                 .document(projectId)
                 .collection("tempApprover")
                 .addDocument(data: [
@@ -756,7 +756,7 @@ class DelegateViewModel: ObservableObject {
         
         do {
             
-            try await db.collection("projects_ios")
+            try await db.collection("projects_ios1")
                 .document(projectId)
                 .collection("tempApprover")
                 .document(tempDocumentId) // the known document ID
@@ -765,14 +765,14 @@ class DelegateViewModel: ObservableObject {
                 ])
             
             // Update the project's tempApproverID
-            try await db.collection("projects_ios")
+            try await db.collection("projects_ios1")
                 .document(projectId)
                 .updateData([
                     "tempApproverID": newTempApprover.approverId
                 ])
             
             // Create new temp approver document
-            try await db.collection("projects_ios")
+            try await db.collection("projects_ios1")
                 .document(projectId)
                 .collection("tempApprover")
                 .addDocument(data: [
@@ -811,7 +811,7 @@ class DelegateViewModel: ObservableObject {
         }
         
         do {
-            try await db.collection("projects_ios")
+            try await db.collection("projects_ios1")
                 .document(projectId)
                 .collection("tempApprover")
                 .document(tempDocumentId)
@@ -834,24 +834,24 @@ class DelegateViewModel: ObservableObject {
     }
 }
 
-#Preview {
-    DelegateView(
-        project: Project(
-            id: "preview",
-            name: "Sample Project",
-            description: "A sample project for preview",
-            budget: 50000,
-            status: "ACTIVE",
-            startDate: "2024-01-01",
-            endDate: "2024-12-31",
-            teamMembers: ["member1", "member2"],
-            managerId: "manager123",
-            tempApproverID: "temp123",
-            departments: ["Casting": 10000, "Location": 5000],
-            Allow_Template_Overrides: false,
-            createdAt: Timestamp(date: Date()),
-            updatedAt: Timestamp(date: Date())
-        ),
-        currentUserRole: .ADMIN, showingDelegate: .constant(false)
-    )
-}
+//#Preview {
+//    DelegateView(
+//        project: Project(
+//            id: "preview",
+//            name: "Sample Project",
+//            description: "A sample project for preview",
+//            budget: 50000,
+//            status: "ACTIVE",
+//            startDate: "2024-01-01",
+//            endDate: "2024-12-31",
+//            teamMembers: ["member1", "member2"],
+//            managerId: "manager123",
+//            tempApproverID: "temp123",
+//            departments: ["Casting": 10000, "Location": 5000],
+//            Allow_Template_Overrides: false,
+//            createdAt: Timestamp(date: Date()),
+//            updatedAt: Timestamp(date: Date())
+//        ),
+//        currentUserRole: .ADMIN, showingDelegate: .constant(false)
+//    )
+//}

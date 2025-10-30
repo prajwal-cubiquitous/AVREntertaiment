@@ -115,18 +115,33 @@ private struct SplashView: View {
             
             VStack(spacing: DesignSystem.Spacing.large) {
                 // App Logo
-                Image(systemName: "film.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.accentColor)
-                    .symbolRenderingMode(.hierarchical)
-                
+                Image("TracuraLogo")
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 100)
+
                 VStack(spacing: DesignSystem.Spacing.small) {
-                    Text("AVR Entertainment")
-                        .font(DesignSystem.Typography.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
+                    Text("TRACURA")
+                        .font(.system(size: 44, weight: .heavy, design: .rounded))
+                        .kerning(2)
+                        .overlay(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.24, green: 0.53, blue: 0.98), // light blue
+                                    Color(red: 0.02, green: 0.20, blue: 0.55)  // deep blue
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .mask(
+                            Text("TRACURA")
+                                .font(.system(size: 44, weight: .heavy, design: .rounded))
+                                .kerning(2)
+                        )
                     
-                    Text("Project Management System")
+                    Text("Track. Approve. Control.")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.secondary)
                 }

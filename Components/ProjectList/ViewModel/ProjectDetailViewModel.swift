@@ -12,6 +12,7 @@ import FirebaseFirestore
 @MainActor
 class ProjectDetailViewModel: ObservableObject {
     @Published var approvedExpensesByDepartment: [String: Double] = [:]
+    @Published var allocatedBudgetsByDepartment: [String: Double] = [:]
     @Published var isLoading = false
     
     private let project: Project
@@ -21,6 +22,7 @@ class ProjectDetailViewModel: ObservableObject {
     init(project: Project, CurrentUserPhone : String) {
         self.project = project
         self.CurrentUserPhone = CurrentUserPhone
+        self.fetchAllocatedBudgets()
         self.fetchApprovedExpenses()
     }
     
@@ -28,7 +30,7 @@ class ProjectDetailViewModel: ObservableObject {
         guard let projectId = project.id else { return }
         isLoading = true
         
-        db.collection("projects_ios")
+        db.collection("projects_ios1")
             .document(projectId)
             .collection("expenses")
             .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
@@ -56,6 +58,26 @@ class ProjectDetailViewModel: ObservableObject {
                     self?.approvedExpensesByDepartment = departmentTotals
                 }
             }
+    }
+
+    func fetchAllocatedBudgets() {
+        guard let projectId = project.id else { return }
+        let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
+        phasesRef.getDocuments { [weak self] snapshot, error in
+            var totals: [String: Double] = [:]
+            if let documents = snapshot?.documents {
+                for doc in documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        for (dept, amount) in phase.departments {
+                            totals[dept, default: 0] += amount
+                        }
+                    }
+                }
+            }
+            DispatchQueue.main.async {
+                self?.allocatedBudgetsByDepartment = totals
+            }
+        }
     }
     
     func approvedAmount(for department: String) -> Double {

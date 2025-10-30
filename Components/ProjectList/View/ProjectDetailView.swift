@@ -48,12 +48,10 @@ struct ProjectDetailView: View {
                     .cardStyle()
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                 
-                // MARK: - Budget Breakdown
-                if !project.departments.isEmpty {
-                    EnhancedDepartmentBreakdownView(project: project, viewModel: viewModel)
-                        .cardStyle()
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
-                }
+                // MARK: - Budget Breakdown (aggregated from phases)
+                EnhancedDepartmentBreakdownView(project: project, viewModel: viewModel)
+                    .cardStyle()
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
                 
                 // MARK: - Expense Section
                 ExpenseListView(project: project, currentUserPhone : phoneNumber)
@@ -238,7 +236,7 @@ private struct KeyInformationView: View {
                 InfoRowDetial(
                     icon: "person.crop.circle.badge.checkmark",
                     label: "Project Manager",
-                    value: project.managerId,
+                    value: project.managerIds.first ?? "",
                     iconColor: .indigo
                 )
                 
@@ -269,7 +267,7 @@ private struct EnhancedDepartmentBreakdownView: View {
     @ObservedObject var viewModel: ProjectDetailViewModel
     
     private var sortedDepartments: [(String, Double)] {
-        project.departments.sorted { $0.value > $1.value }
+        viewModel.allocatedBudgetsByDepartment.sorted { $0.value > $1.value }
     }
     
     var body: some View {

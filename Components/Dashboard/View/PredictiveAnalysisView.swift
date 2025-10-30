@@ -250,13 +250,12 @@ struct PredictiveAnalysisView: View {
     
     // MARK: - Helper Methods
     private func generateReportData(from project: Project) -> ReportData {
-        // Calculate total spent from project data
-        let totalSpent = project.departments.values.reduce(0, +) // Using department budgets as spent for demo
+        // Departments are phase-based now; the Predictive view will compute
+        // actuals internally using managers. Provide a seed payload.
+        let totalSpent: Double = 0
         let totalBudget = project.budget
-        let budgetUsagePercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0
-        
-        // Generate expenses by department
-        let expensesByDepartment = project.departments
+        let budgetUsagePercentage = 0.0
+        let expensesByDepartment: [String: Double] = [:]
         
         // Generate sample expenses by category
         let expensesByCategory: [String: Double] = [

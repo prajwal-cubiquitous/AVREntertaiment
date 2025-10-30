@@ -39,12 +39,21 @@ class CreateProjectViewModel: ObservableObject {
     // MARK: - Form Inputs
     @Published var projectName: String = ""
     @Published var projectDescription: String = ""
+    @Published var client: String = ""
+    @Published var location: String = ""
+    @Published var currency: String = "INR" // Only INR exposed in UI for now
     @Published var phases: [PhaseItem] = [PhaseItem(phaseNumber: 1)]
     @Published var allowTemplateOverrides: Bool = false
     
     // MARK: - Data Source for Dropdowns (private)
     @Published private var allApprovers: [User] = []
     @Published private var allUsers: [User] = []
+
+    // Project-level selections (same for all phases)
+    @Published var selectedProjectManagers: [User] = []
+    @Published var selectedProjectTeamMembers: Set<User> = []
+    @Published var projectManagerSearchText: String = ""
+    @Published var projectTeamMemberSearchText: String = ""
 
     // MARK: - UI State
     @Published var isLoading: Bool = false
@@ -78,6 +87,26 @@ class CreateProjectViewModel: ObservableObject {
             return isNotSelected && isActive && matchesSearch
         }
     }
+
+    // Project-level filters
+    func filteredProjectManagers() -> [User] {
+        if projectManagerSearchText.isEmpty { return [] }
+        return allApprovers.filter {
+            $0.isActive && ($0.name.localizedCaseInsensitiveContains(projectManagerSearchText) ||
+                            $0.phoneNumber.localizedCaseInsensitiveContains(projectManagerSearchText) ||
+                            ($0.email ?? "").localizedCaseInsensitiveContains(projectManagerSearchText))
+        }
+    }
+    
+    func filteredProjectTeamMembers() -> [User] {
+        if projectTeamMemberSearchText.isEmpty { return [] }
+        return allUsers.filter { user in
+            let isNotSelected = !selectedProjectTeamMembers.contains(user)
+            let matches = user.name.localizedCaseInsensitiveContains(projectTeamMemberSearchText) ||
+                          user.phoneNumber.localizedCaseInsensitiveContains(projectTeamMemberSearchText)
+            return user.isActive && isNotSelected && matches
+        }
+    }
     
     // MARK: - Computed Properties for Validation & Display
     
@@ -98,19 +127,20 @@ class CreateProjectViewModel: ObservableObject {
         // Basic fields validation
         guard !projectName.trimmingCharacters(in: .whitespaces).isEmpty,
               !projectDescription.trimmingCharacters(in: .whitespaces).isEmpty,
+              !client.trimmingCharacters(in: .whitespaces).isEmpty,
+              !location.trimmingCharacters(in: .whitespaces).isEmpty,
               !phases.isEmpty else {
             return false
         }
         
+        // Validate project-level selections
+        if selectedProjectManagers.isEmpty { return false }
+        if selectedProjectTeamMembers.isEmpty { return false }
+
         // Validate each phase
         for phase in phases {
             // Phase name required
             if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
-                return false
-            }
-            
-            // Manager required for each phase
-            if phase.selectedManager == nil {
                 return false
             }
             
@@ -256,11 +286,9 @@ class CreateProjectViewModel: ObservableObject {
                     total + phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
                 }
                 
-                // Collect all unique team members from all phases
-                let allTeamMembers = Set(phases.flatMap { $0.selectedTeamMembers.map { $0.phoneNumber } })
-                
-                // Use the manager from the first phase as the main project manager (for backward compatibility)
-                let mainManagerId = phases.first?.selectedManager?.phoneNumber ?? ""
+                // Project-level team members and managers
+                let allTeamMembers = Set(selectedProjectTeamMembers.map { $0.phoneNumber })
+                let managerIds = selectedProjectManagers.map { $0.email ?? $0.phoneNumber }.filter { !$0.isEmpty }
                 
                 // Create project data (without departments, they're in phases now)
                 let docRef = db.collection(FirebaseCollections.projects).document()
@@ -269,14 +297,16 @@ class CreateProjectViewModel: ObservableObject {
                     id: docRef.documentID,
                     name: projectName,
                     description: projectDescription,
+                    client: client,
+                    location: location,
+                    currency: currency,
                     budget: totalBudget,
                     status: ProjectStatus.ACTIVE.rawValue,
                     startDate: nil, // Removed from main project
                     endDate: nil, // Removed from main project
                     teamMembers: Array(allTeamMembers),
-                    managerId: mainManagerId,
+                    managerIds: managerIds,
                     tempApproverID: nil,
-                    departments: [:], // Empty, departments are in phases
                     Allow_Template_Overrides: allowTemplateOverrides,
                     createdAt: Timestamp(),
                     updatedAt: Timestamp()
@@ -292,9 +322,6 @@ class CreateProjectViewModel: ObservableObject {
                 for phase in phases {
                     let phaseRef = docRef.collection("phases").document()
                     
-                    // Get team member phone numbers
-                    let teamMemberPhones = phase.selectedTeamMembers.map { $0.phoneNumber }
-                    
                     // Format dates
                     let startDateStr = phase.hasStartDate ? dateFormatter.string(from: phase.startDate) : nil
                     let endDateStr = phase.hasEndDate ? dateFormatter.string(from: phase.endDate) : nil
@@ -308,8 +335,6 @@ class CreateProjectViewModel: ObservableObject {
                         phaseNumber: phase.phaseNumber,
                         startDate: startDateStr,
                         endDate: endDateStr,
-                        managerId: phase.selectedManager?.phoneNumber ?? "",
-                        teamMembers: teamMemberPhones,
                         departments: departmentsDict,
                         categories: phase.categories,
                         createdAt: Timestamp(),
@@ -342,6 +367,13 @@ class CreateProjectViewModel: ObservableObject {
     private func resetForm() {
         projectName = ""
         projectDescription = ""
+        client = ""
+        location = ""
+        currency = "INR"
+        selectedProjectManagers = []
+        selectedProjectTeamMembers = []
+        projectManagerSearchText = ""
+        projectTeamMemberSearchText = ""
         phases = [PhaseItem(phaseNumber: 1)]
         allowTemplateOverrides = false
         showSuccessMessage = false

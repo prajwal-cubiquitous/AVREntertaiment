@@ -23,6 +23,9 @@ struct CreateProjectView: View {
                 // MARK: - Phases Section
                 phasesSection
                 
+                // MARK: - Project Team Section
+                projectTeamSection
+
                 // MARK: - Template Overrides Section
                 templateOverridesSection
                 
@@ -63,6 +66,40 @@ struct CreateProjectView: View {
                     TextField("Enter project name", text: $viewModel.projectName)
                         .font(DesignSystem.Typography.body)
                         .fieldStyle()
+                }
+                
+                // Client
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Client")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter client name", text: $viewModel.client)
+                        .font(DesignSystem.Typography.body)
+                        .fieldStyle()
+                }
+                
+                // Location
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Location")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter location", text: $viewModel.location)
+                        .font(DesignSystem.Typography.body)
+                        .fieldStyle()
+                }
+                
+                // Currency Picker (currently only INR)
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Currency")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    Picker("Currency", selection: $viewModel.currency) {
+                        Text("₹ Indian Rupee").tag("INR")
+                    }
+                    .pickerStyle(.menu)
                 }
                 
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -115,6 +152,68 @@ struct CreateProjectView: View {
             SectionHeaderLabel(title: "Project Phases", icon: "arrow.triangle.2.circlepath")
         } footer: {
             budgetFooterView
+        }
+    }
+
+    // MARK: - Project Team & Managers Section
+    private var projectTeamSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                // Managers (Approvers) - allow multiple
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Project Managers (Approvers)").font(.caption).foregroundColor(.secondary)
+                    if !viewModel.selectedProjectManagers.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(viewModel.selectedProjectManagers, id: \.self) { manager in
+                                HStack {
+                                    Text(manager.name).fontWeight(.bold)
+                                    Spacer()
+                                    Button(action: {
+                                        viewModel.selectedProjectManagers.removeAll { $0 == manager }
+                                    }) { Image(systemName: "xmark.circle.fill").foregroundColor(.gray) }
+                                }
+                                .padding(10).background(Color.blue.opacity(0.08)).cornerRadius(8)
+                            }
+                        }
+                    }
+                    SearchableDropdownView(
+                        title: "Search manager name/email/phone",
+                        searchText: $viewModel.projectManagerSearchText,
+                        items: viewModel.filteredProjectManagers(),
+                        itemContent: { user in Text("\(user.name) - \(user.email ?? user.phoneNumber)") },
+                        onSelect: { user in
+                            if !viewModel.selectedProjectManagers.contains(user) { viewModel.selectedProjectManagers.append(user) }
+                            viewModel.projectManagerSearchText = ""
+                        }
+                    )
+                }
+
+                // Team members
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Project Team Members").font(.caption).foregroundColor(.secondary)
+                    SearchableDropdownView(
+                        title: "Search name or phone number...",
+                        searchText: $viewModel.projectTeamMemberSearchText,
+                        items: viewModel.filteredProjectTeamMembers(),
+                        itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                        onSelect: { member in
+                            viewModel.selectedProjectTeamMembers.insert(member)
+                            viewModel.projectTeamMemberSearchText = ""
+                        }
+                    )
+                    if !viewModel.selectedProjectTeamMembers.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack { ForEach(Array(viewModel.selectedProjectTeamMembers)) { member in
+                                TagView(user: member, onRemove: { viewModel.selectedProjectTeamMembers.remove(member) })
+                            } }
+                            .padding(.top, 5)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, DesignSystem.Spacing.small)
+        } header: {
+            SectionHeaderLabel(title: "Project Team", icon: "person.3.fill")
         }
     }
     
@@ -240,11 +339,12 @@ struct PhaseCardView: View {
             // Timeline Section
             timelineView
             
-            // Manager Selection
-            managerSelectionView
-            
-            // Team Members Selection
-            teamMemberSelectionView
+            // Manager & Team selections moved to project-level section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Manager & Team for this phase are inherited from Project Team section")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             // Departments
             departmentsView

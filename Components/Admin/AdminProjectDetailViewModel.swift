@@ -91,10 +91,10 @@ class AdminProjectDetailViewModel: ObservableObject {
             self.endDate = Date().addingTimeInterval(86400 * 30)
         }
         
-        // Convert departments dictionary to array
-        self.departments = project.departments.map { DepartmentItem(name: $0.key, amount: String($0.value)) }
+        // Project no longer maintains departments; keep empty for admin editing UI
+        self.departments = []
         self.teamMembers = project.teamMembers
-        self.managerName = project.managerId
+        self.managerName = project.managerIds.first ?? ""
         self.tempApproverID = project.tempApproverID
         
         Task {
@@ -148,7 +148,7 @@ class AdminProjectDetailViewModel: ObservableObject {
                         }
                     } else if user.role == .APPROVER {
                         loadedApprovers.append(user)
-                        if user.phoneNumber == project.managerId {
+                        if let firstManager = project.managerIds.first, user.phoneNumber == firstManager {
                             selectedApprover = user
                             managerName = user.name
                         }
@@ -294,7 +294,7 @@ class AdminProjectDetailViewModel: ObservableObject {
                     saveTempApprover()
                 }
                 let data: [String: Any] = [
-                    "managerId": selectedApprover?.phoneNumber ?? project.managerId,
+                    "managerIds": [selectedApprover?.phoneNumber ?? (project.managerIds.first ?? "")],
                     "teamMembers": Array(selectedTeamMembers).map { $0.phoneNumber }
                 ]
                 

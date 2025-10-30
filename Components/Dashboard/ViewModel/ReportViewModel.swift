@@ -74,7 +74,7 @@ class ReportViewModel: ObservableObject {
     func fetchDepartmentNames(from documentID: String) {
         let db = Firestore.firestore()
         
-        db.collection("projects_ios").document(documentID).getDocument { snapshot, error in
+        db.collection("projects_ios1").document(documentID).getDocument { snapshot, error in
             if let error = error {
                 print("Error fetching document: \(error)")
                 return
@@ -92,7 +92,7 @@ class ReportViewModel: ObservableObject {
             // Check if there are any anonymous expenses (Other Expenses)
             Task {
                 do {
-                    let expensesSnapshot = try await db.collection("projects_ios").document(documentID)
+                    let expensesSnapshot = try await db.collection("projects_ios1").document(documentID)
                         .collection("expenses")
                         .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                         .getDocuments()
@@ -156,7 +156,7 @@ class ReportViewModel: ObservableObject {
     
     func loadApprovedExpenses(projectId: String) async {
         let db = Firestore.firestore()
-        let expenseCollectionRef = db.collection("projects_ios").document(projectId).collection("expenses")
+        let expenseCollectionRef = db.collection("projects_ios1").document(projectId).collection("expenses")
         do {
             let snapshot: QuerySnapshot
             if selectedDepartment != "All" && selectedDepartment != "Other Expenses" {
@@ -180,7 +180,7 @@ class ReportViewModel: ObservableObject {
             // Filter for "Other Expenses" if selected
             if selectedDepartment == "Other Expenses" {
                 // Get valid departments from project
-                let projectDoc = try await db.collection("projects_ios").document(projectId).getDocument()
+                let projectDoc = try await db.collection("projects_ios1").document(projectId).getDocument()
                 guard let projectData = projectDoc.data(),
                       let departments = projectData["departments"] as? [String: Double] else {
                     await MainActor.run {
@@ -208,7 +208,7 @@ class ReportViewModel: ObservableObject {
         let db = Firestore.firestore()
         do {
             // Get the project document
-            let projectDoc = try await db.collection("projects_ios").document(projectId).getDocument()
+            let projectDoc = try await db.collection("projects_ios1").document(projectId).getDocument()
             
             guard let projectData = projectDoc.data(),
                   let departments = projectData["departments"] as? [String: Double] else {
@@ -226,7 +226,7 @@ class ReportViewModel: ObservableObject {
             }
             
             // Get approved expenses for this project
-            let expensesSnapshot = try await db.collection("projects_ios").document(projectId)
+            let expensesSnapshot = try await db.collection("projects_ios1").document(projectId)
                 .collection("expenses")
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()

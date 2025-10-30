@@ -87,7 +87,7 @@ class NotificationViewModel: ObservableObject {
         
         do {
             let expensesSnapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("expenses")
                 .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
@@ -104,7 +104,7 @@ class NotificationViewModel: ObservableObject {
         do {
             // Fetch all chats for this project
             let chatsSnapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("chats")
                 .getDocuments()
@@ -119,7 +119,7 @@ class NotificationViewModel: ObservableObject {
                 if chatData.participants.contains(currentUserPhone) {
                     // Count unread messages in this chat
                     let messagesSnapshot = try await db
-                        .collection("projects_ios")
+                        .collection("projects_ios1")
                         .document(projectId)
                         .collection("chats")
                         .document(chatId)
@@ -143,7 +143,7 @@ class NotificationViewModel: ObservableObject {
         do {
             // Fetch all expenses for this project
             let expensesSnapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("expenses")
                 .getDocuments()
@@ -157,7 +157,7 @@ class NotificationViewModel: ObservableObject {
                 if expenseData.submittedBy == currentUserPhone && expenseData.status != .approved {
                     // Check for expense chat messages
                     let expenseChatSnapshot = try await db
-                        .collection("projects_ios")
+                        .collection("projects_ios1")
                         .document(projectId)
                         .collection("expenses")
                         .document(expenseDoc.documentID)

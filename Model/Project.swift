@@ -15,18 +15,16 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     
     let name: String
     let description: String
+    let client: String
+    let location: String
+    let currency: String
     let budget: Double // This remains the total budget stored in Firestore
     let status: String
     let startDate: String?
     let endDate: String?
     let teamMembers: [String]
-    let managerId: String
+    let managerIds: [String] // Project approvers/managers
     var tempApproverID: String?
-    
-    // MARK: - New Property for Department Breakdown
-    // This dictionary holds the user-defined departments and their amounts.
-    // Example: ["Casting": 10000, "Location Fees": 5000, "Catering": 3000]
-    let departments: [String: Double]
     
     // Allow template overrides
     let Allow_Template_Overrides: Bool?
@@ -44,6 +42,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
         // This continues to work on the total budget
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
+        // Fallback to INR until multiple currencies are supported in UI
         formatter.locale = Locale(identifier: "en_IN")
         return formatter.string(from: NSNumber(value: budget)) ?? "₹0.00"
     }
@@ -90,40 +89,34 @@ extension Project {
         Project(id: "128YgC7uVnge9RLxVfisdhihfrgG",
                 name: "",
                 description: "",
+                client: "",
+                location: "",
+                currency: "INR",
                 // The total budget MUST match the sum of the categories
                 budget: 0000,
                 status: "ACTIVE",
                 startDate: "",
                 endDate: "",
                 teamMembers: ["user1", "user2", "user3"],
-                managerId: "manager1",
+                managerIds: ["manager1"],
                 tempApproverID: nil,
-                // The new dictionary for department breakdown
-                departments: [:
-
-                ],
                 Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 30)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-3600))),
         Project(id: "128YgC7uVnge9RLxVrgG",
                 name: "Movie Production A",
                 description: "Action thriller movie production...",
+                client: "Client A",
+                location: "Mumbai",
+                currency: "INR",
                 // The total budget MUST match the sum of the categories
                 budget: 50000,
                 status: "ACTIVE",
                 startDate: "01/06/2024",
                 endDate: "31/12/2024",
                 teamMembers: ["user1", "user2", "user3"],
-                managerId: "manager1",
+                managerIds: ["manager1"],
                 tempApproverID: nil,
-                // The new dictionary for department breakdown
-                departments: [
-                    "Casting": 15000,
-                    "Location & Permits": 10000,
-                    "Equipment Rental": 12000,
-                    "Post-Production": 8000,
-                    "Marketing": 5000
-                ],
                 Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 30)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-3600))),
@@ -131,18 +124,16 @@ extension Project {
         Project(id: "p9Fh3aKeLzBvY7j2NnQx",
                 name: "Corporate Rebranding",
                 description: "Complete visual and messaging overhaul...",
+                client: "Client B",
+                location: "Bengaluru",
+                currency: "INR",
                 budget: 120000,
                 status: "COMPLETED",
                 startDate: "01/01/2024",
                 endDate: "31/05/2024",
                 teamMembers: ["user1", "user4"],
-                managerId: "manager2",
+                managerIds: ["manager2"],
                 tempApproverID: nil,
-                departments: [
-                    "Design Agency Fees": 75000,
-                    "Market Research": 25000,
-                    "Website Development": 20000
-                ],
                 Allow_Template_Overrides: false,
                 createdAt: Timestamp(date: Date().addingTimeInterval(-86400 * 150)),
                 updatedAt: Timestamp(date: Date().addingTimeInterval(-86400 * 10))),

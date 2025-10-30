@@ -90,7 +90,7 @@ class PendingApprovalsViewModel: ObservableObject {
         do {
             guard let projectId = project.id else{ return }
             // Get all projects where current user is the manager or temp approver
-            let projectsSnapshot = try await db.collection("projects_ios").document(projectId)
+            let projectsSnapshot = try await db.collection("projects_ios1").document(projectId)
                 .getDocument()
             
             var expenses: [Expense] = []
@@ -121,7 +121,7 @@ class PendingApprovalsViewModel: ObservableObject {
             guard let projectId = project.id else{ return }
             
             // Get all projects where current user is the manager
-            let projectsSnapshot = try await db.collection("projects_ios").document(projectId)
+            let projectsSnapshot = try await db.collection("projects_ios1").document(projectId)
                 .getDocument()
             
             var expenses: [Expense] = []
@@ -151,14 +151,17 @@ class PendingApprovalsViewModel: ObservableObject {
             
             guard let projectId = project.id else{ return }
             
-            let projectsSnapshot = try await db.collection("projects_ios")
+            let phasesSnapshot = try await db.collection("projects_ios1")
                 .document(projectId)
-                .getDocument()
+                .collection("phases")
+                .getDocuments()
             
             var departments: Set<String> = []
-            
-                let project = try projectsSnapshot.data(as: Project.self)
-                departments.formUnion(project.departments.keys)
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    departments.formUnion(phase.departments.keys)
+                }
+            }
             
             availableDepartments = Array(departments).sorted()
             
@@ -171,14 +174,17 @@ class PendingApprovalsViewModel: ObservableObject {
         do {
             guard let projectId = project.id else{ return }
             
-            let projectsSnapshot = try await db.collection("projects_ios")
+            let phasesSnapshot = try await db.collection("projects_ios1")
                 .document(projectId)
-                .getDocument()
+                .collection("phases")
+                .getDocuments()
             
             var departments: Set<String> = []
-            
-                let project = try projectsSnapshot.data(as: Project.self)
-                departments.formUnion(project.departments.keys)
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    departments.formUnion(phase.departments.keys)
+                }
+            }
             
             availableDepartments = Array(departments).sorted()
             
@@ -230,7 +236,7 @@ class PendingApprovalsViewModel: ObservableObject {
             for expenseId in selectedExpenses {
                 // Find the project and update the expense
                 
-                let projectsSnapshot = try await db.collection("projects_ios")
+                let projectsSnapshot = try await db.collection("projects_ios1")
                     .document(projectId)
                     .getDocument()
                 

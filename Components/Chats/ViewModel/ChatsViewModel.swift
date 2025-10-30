@@ -134,7 +134,7 @@ class ChatsViewModel: ObservableObject {
             participantIds.formUnion(project.teamMembers)
             
             // Add manager
-            participantIds.insert(project.managerId)
+            if let manager = project.managerIds.first { participantIds.insert(manager) }
             
             if let approverId = project.tempApproverID, 
                let validApproverId = try await fetchValidTempApprover(for: approverId) {
@@ -261,7 +261,7 @@ class ChatsViewModel: ObservableObject {
             
             // Get chat document
             let chatDoc = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -293,7 +293,7 @@ class ChatsViewModel: ObservableObject {
     
     private func countUnreadMessages(projectId: String, chatId: String, currentUserPhone: String) async throws -> Int {
         let messagesSnapshot = try await db
-            .collection("projects_ios")
+            .collection("projects_ios1")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -315,7 +315,7 @@ class ChatsViewModel: ObservableObject {
         do {
             // Update all unread messages from this participant
             let messagesSnapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -419,7 +419,7 @@ class ChatsViewModel: ObservableObject {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            db.collection("projects_ios").document(projectId).collection("tempApprover")
+            db.collection("projects_ios1").document(projectId).collection("tempApprover")
                 .whereField("approverId", isEqualTo: approverId)
                 .whereField("status", isEqualTo: "active")
                 .whereField("endDate", isGreaterThanOrEqualTo: Timestamp(date: currentDate))

@@ -112,34 +112,48 @@ class DashboardViewModel: ObservableObject {
     private func loadDataFromProject(_ project: Project) {
         var budgets: [String: (total: Double, spent: Double)] = [:]
         
-        // Get department budgets from the project
-        for (department, amount) in project.departments {
-            budgets[department] = (total: amount, spent: 0)
-        }
-        
-        // Convert to DepartmentBudget objects
-        var departmentBudgetsList = budgets.map { (department, budget) in
-            DepartmentBudget(
-                department: department,
-                totalBudget: budget.total,
-                approvedBudget: 0, // Placeholder, will be updated
-                color: colorForDepartment(department)
-            )
-        }.sorted { $0.department < $1.department }
-        
-        // Always add "Other Expenses" department for anonymous expenses
-        let otherExpensesBudget = DepartmentBudget(
-            department: "Other Expenses",
-            totalBudget: 0, // No allocated budget for anonymous expenses
-            approvedBudget: 0, // Will be updated when loading expenses
-            color: .gray
-        )
-        departmentBudgetsList.append(otherExpensesBudget)
-        
-        departmentBudgets = departmentBudgetsList
-        
-        // Load approved expenses asynchronously
+        // Aggregate department budgets from phases subcollection
         Task {
+            guard let projectId = project.id else { return }
+            do {
+                let phasesSnapshot = try await db.collection("projects_ios1")
+                    .document(projectId)
+                    .collection("phases")
+                    .getDocuments()
+                for doc in phasesSnapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        for (dept, amount) in phase.departments {
+                            let current = budgets[dept] ?? (0, 0)
+                            budgets[dept] = (current.0 + amount, current.1)
+                        }
+                    }
+                }
+            } catch {
+                print("Error loading phases for aggregation: \(error)")
+            }
+            
+            // Convert to DepartmentBudget objects
+            var departmentBudgetsList = budgets.map { (department, budget) in
+                DepartmentBudget(
+                    department: department,
+                    totalBudget: budget.total,
+                    approvedBudget: 0, // Placeholder, will be updated
+                    color: colorForDepartment(department)
+                )
+            }.sorted { $0.department < $1.department }
+            
+            // Always add "Other Expenses" department for anonymous expenses
+            let otherExpensesBudget = DepartmentBudget(
+                department: "Other Expenses",
+                totalBudget: 0, // No allocated budget for anonymous expenses
+                approvedBudget: 0, // Will be updated when loading expenses
+                color: .gray
+            )
+            departmentBudgetsList.append(otherExpensesBudget)
+            
+            await MainActor.run { self.departmentBudgets = departmentBudgetsList }
+            
+            // Load approved expenses asynchronously
             await loadApprovedExpensesForProject(project)
         }
     }
@@ -148,7 +162,7 @@ class DashboardViewModel: ObservableObject {
         guard let projectId = project.id else { return }
         
         do {
-            let expensesSnapshot = try await db.collection("projects_ios")
+            let expensesSnapshot = try await db.collection("projects_ios1")
                 .document(projectId)
                 .collection("expenses")
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
@@ -158,8 +172,21 @@ class DashboardViewModel: ObservableObject {
             var anonymousExpenses: Double = 0
             var anonymousDepartmentInfo: [String: String] = [:] // Track original departments
             
-            // Get list of valid departments from project
-            let validDepartments = Set(project.departments.keys)
+            // Get list of valid departments by aggregating phases
+            var validDepartments = Set<String>()
+            do {
+                let phasesSnapshot = try await db.collection("projects_ios1")
+                    .document(projectId)
+                    .collection("phases")
+                    .getDocuments()
+                for doc in phasesSnapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        validDepartments.formUnion(phase.departments.keys)
+                    }
+                }
+            } catch {
+                print("Error loading phases for departments: \(error)")
+            }
             for expenseDoc in expensesSnapshot.documents {
 
                 if let expense = try? expenseDoc.data(as: Expense.self) {
@@ -223,10 +250,10 @@ class DashboardViewModel: ObservableObject {
     private func loadProjectForApprover() async {
         do {
             // Query project where current user is the manager or temp approver
-            let snapshot = try await db.collection("projects_ios")
+            let snapshot = try await db.collection("projects_ios1")
                 .whereFilter(
                     Filter.orFilter([
-                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("managerIds", arrayContains: currentUserPhone),
                         Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
                     ])
                 )
@@ -239,13 +266,25 @@ class DashboardViewModel: ObservableObject {
             var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
             var anonymousExpenses: Double = 0
             
-            // Add department budgets from project
-            for (department, amount) in project.departments {
-                departmentBudgetDict[department] = (Double(amount), 0)
+            // Aggregate department budgets from phases
+            do {
+                let phasesSnapshot = try await document.reference
+                    .collection("phases")
+                    .getDocuments()
+                for phaseDoc in phasesSnapshot.documents {
+                    if let phase = try? phaseDoc.data(as: Phase.self) {
+                        for (dept, amount) in phase.departments {
+                            let current = departmentBudgetDict[dept] ?? (0, 0)
+                            departmentBudgetDict[dept] = (current.0 + amount, current.1)
+                        }
+                    }
+                }
+            } catch {
+                print("Error aggregating departments from phases: \(error)")
             }
             
-            // Get list of valid departments from project
-            let validDepartments = Set(project.departments.keys)
+            // Build validDepartments set
+            let validDepartments = Set(departmentBudgetDict.keys)
             
             // Fetch and calculate approved amounts from expenses
             let expensesSnapshot = try await document.reference
@@ -303,10 +342,10 @@ class DashboardViewModel: ObservableObject {
     private func loadNotifications() async {
         do {
             // Load pending expenses for approval
-            let projectsSnapshot = try await db.collection("projects_ios")
+            let projectsSnapshot = try await db.collection("projects_ios1")
                 .whereFilter(
                     Filter.orFilter([
-                        Filter.whereField("managerId", isEqualTo: currentUserPhone),
+                        Filter.whereField("managerIds", arrayContains: currentUserPhone),
                         Filter.whereField("tempApproverID", isEqualTo: currentUserPhone)
                     ])
                 )
@@ -461,7 +500,7 @@ class DashboardViewModel: ObservableObject {
         return currentAndPreviousBudgets / totalBudget
     }
     func fetchProject(byId projectId: String) async throws -> Project? {
-        let docRef = db.collection("projects_ios").document(projectId)
+        let docRef = db.collection("projects_ios1").document(projectId)
         let snapshot = try await docRef.getDocument()
         
         guard let project = try? snapshot.data(as: Project.self) else {

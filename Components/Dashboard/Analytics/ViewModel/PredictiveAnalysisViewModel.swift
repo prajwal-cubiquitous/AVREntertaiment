@@ -80,7 +80,7 @@ class PredictiveAnalysisViewModel: ObservableObject {
 
         do {
             let snapshot = try await db
-                .collection("projects_ios")
+                .collection("projects_ios1")
                 .document(projectId)
                 .collection("expenses")
                 .whereField("status", isEqualTo: "APPROVED")
@@ -228,7 +228,7 @@ class PredictiveAnalysisViewModel: ObservableObject {
     
     func fetchStartDate(projectId: String) async -> (Date?, Date?)?{
         do{
-            let doc = try await db.collection("projects_ios").document(projectId).getDocument()
+            let doc = try await db.collection("projects_ios1").document(projectId).getDocument()
             
             guard let data = doc.data() else {
                 print("❌ No project data found.")
@@ -270,7 +270,7 @@ class PredictiveAnalysisViewModel: ObservableObject {
     func fetchProjectDurationAndMonthlyBudget(projectId: String) async -> (Int, Double)? {
         
         do {
-            let doc = try await db.collection("projects_ios").document(projectId).getDocument()
+            let doc = try await db.collection("projects_ios1").document(projectId).getDocument()
             
             guard let data = doc.data() else {
                 print("❌ No project data found.")
@@ -322,7 +322,7 @@ class PredictiveAnalysisViewModel: ObservableObject {
     
     
     private func fetchExpensesFromFirestore(projectId: String) {
-        db.collection("projects_ios").document(projectId).collection("expenses")
+        db.collection("projects_ios1").document(projectId).collection("expenses")
             .getDocuments { [weak self] (snapshot, error) in
             DispatchQueue.main.async {
                 self?.isLoading = false

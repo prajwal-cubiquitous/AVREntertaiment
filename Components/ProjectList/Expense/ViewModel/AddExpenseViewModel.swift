@@ -28,9 +28,7 @@ class AddExpenseViewModel: ObservableObject {
     
     // MARK: - Project Data
     let project: Project
-    var availableDepartments: [String] {
-        Array(project.departments.keys).sorted()
-    }
+    @Published var availableDepartments: [String] = []
     
     // MARK: - Firebase References
     private let db = Firestore.firestore()
@@ -63,15 +61,35 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Initialization
     init(project: Project) {
         self.project = project
-        // Set first department as default if available
-        if let firstDepartment = availableDepartments.first {
-            self.selectedDepartment = firstDepartment
-        }
+        loadDepartmentsFromPhases()
     }
     
     // MARK: - Category Management
     func addCategory() {
         categories.append("")
+    }
+
+    // MARK: - Load Departments from Phases
+    private func loadDepartmentsFromPhases() {
+        guard let projectId = project.id else { return }
+        let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
+        phasesRef.getDocuments { [weak self] snapshot, error in
+            var departmentsSet = Set<String>()
+            if let documents = snapshot?.documents {
+                for doc in documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        departmentsSet.formUnion(phase.departments.keys)
+                    }
+                }
+            }
+            let list = Array(departmentsSet).sorted()
+            DispatchQueue.main.async {
+                self?.availableDepartments = list
+                if self?.selectedDepartment.isEmpty == true, let first = list.first {
+                    self?.selectedDepartment = first
+                }
+            }
+        }
     }
     
     func removeCategory(at index: Int) {
@@ -93,7 +111,7 @@ class AddExpenseViewModel: ObservableObject {
         // Create unique file path
         let timestamp = Int(Date().timeIntervalSince1970)
         let storageRef = storage.reference()
-            .child("projects_ios")
+            .child("projects_ios1")
             .child(projectId)
             .child("expenses")
             .child("\(timestamp)_\(fileName)")
@@ -192,8 +210,8 @@ class AddExpenseViewModel: ObservableObject {
             "updatedAt": Timestamp()
         ]
         
-        // Store in subcollection: projects_ios/{projectId}/expenses/{expenseId}
-        db.collection("projects_ios")
+        // Store in subcollection: projects_ios1/{projectId}/expenses/{expenseId}
+        db.collection("projects_ios1")
             .document(projectId)
             .collection("expenses")
             .addDocument(data: expenseData) { [weak self] error in
@@ -247,7 +265,7 @@ class AddExpenseViewModel: ObservableObject {
         }
         
         // Update document in Firestore
-        db.collection("projects_ios")
+        db.collection("projects_ios1")
             .document(projectId)
             .collection("expenses")
             .document(expenseId)

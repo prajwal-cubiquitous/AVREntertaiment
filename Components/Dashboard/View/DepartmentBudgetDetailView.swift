@@ -762,17 +762,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             do {
                 let db = Firestore.firestore()
                 
-                let projectSnapshot = try await db
-                        .collection("projects_ios")
-                        .document(projectId)
-                        .getDocument()
-                    
-                let loadedProject = try projectSnapshot.data(as: Project.self)
-                
-
                 // Load expenses for the department
                 let expensesSnapshot = try await db
-                    .collection("projects_ios")
+                    .collection("projects_ios1")
                     .document(projectId)
                     .collection("expenses")
                     .whereField("department", isEqualTo: department)
@@ -788,11 +780,24 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     .filter { $0.status == .approved }
                     .reduce(0) { $0 + $1.amount }
                 
+                // Aggregate allocated budget from phases for this department
+                var allocated: Double = 0
+                let phasesSnapshot = try await db
+                    .collection("projects_ios1")
+                    .document(projectId)
+                    .collection("phases")
+                    .getDocuments()
+                for doc in phasesSnapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        allocated += phase.departments[department] ?? 0
+                    }
+                }
+                
                 // Load approver names
                 await loadApproverNames(for: loadedExpenses)
                 
                 await MainActor.run {
-                    self.totalBudget = loadedProject.departments[department] ?? 0
+                    self.totalBudget = allocated
                     self.expenses = loadedExpenses
                     self.totalSpent = totalSpent
                     self.isLoading = false
