@@ -11,6 +11,7 @@ struct ProjectReviewScreen: View {
     let viewModel: CreateProjectViewModel
     let onConfirm: () -> Void
     let onCancel: () -> Void
+    let onEdit: () -> Void
     
     @Environment(\.dismiss) private var dismiss
     
@@ -39,27 +40,60 @@ struct ProjectReviewScreen: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
-                // Project Basics Section
-                projectBasicsSection
-                
-                // Phases/Stages Section
-                phasesSection
+        Form {
+            // Project Basics Section
+            Section {
+                projectBasicsContent
+            } header: {
+                ReviewSectionHeader(title: "Project Basics", icon: "info.circle.fill")
             }
-            .padding(DesignSystem.Spacing.medium)
+            
+            // Description Section
+            if !viewModel.projectDescription.isEmpty {
+                Section {
+                    Text(viewModel.projectDescription)
+                        .font(DesignSystem.Typography.body)
+                        .foregroundColor(.primary)
+                        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                } header: {
+                    Text("Description")
+                        .textCase(nil)
+                        .font(DesignSystem.Typography.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Project Team Section
+            Section {
+                projectTeamContent
+            } header: {
+                Text("Project Team")
+                    .textCase(nil)
+                    .font(DesignSystem.Typography.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Phases Section
+            Section {
+                ForEach(viewModel.phases) { phase in
+                    PhaseReviewCard(phase: phase, currencySymbol: currencySymbol)
+                }
+            } header: {
+                ReviewSectionHeader(title: "Project Phases", icon: "arrow.triangle.2.circlepath")
+            }
         }
         .navigationTitle("Review Project")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button("Cancel") {
-                    onCancel()
+                Button("Edit") {
+                    HapticManager.selection()
+                    onEdit()
                 }
-                .foregroundColor(.secondary)
+                .foregroundColor(.accentColor)
             }
             
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button("Confirm") {
                     HapticManager.impact(.medium)
                     onConfirm()
@@ -78,64 +112,76 @@ struct ProjectReviewScreen: View {
         }
     }
     
-    // MARK: - Project Basics Section
-    private var projectBasicsSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            ReviewSectionHeader(title: "Project Basics", icon: "info.circle.fill")
-            
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                ReviewInfoRow(label: "Project Name", value: viewModel.projectName.isEmpty ? "Not provided" : viewModel.projectName)
-                ReviewInfoRow(label: "Client", value: viewModel.client.isEmpty ? "Not provided" : viewModel.client)
-                ReviewInfoRow(label: "Location", value: viewModel.location.isEmpty ? "Not provided" : viewModel.location)
-                ReviewInfoRow(label: "Currency", value: currencySymbol + " " + viewModel.currency)
-                ReviewInfoRow(label: "Total Budget", value: formatAmount(viewModel.totalBudget))
-            }
-            
-            if !viewModel.projectDescription.isEmpty {
-                Divider()
-                
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                    Text("Description")
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text(viewModel.projectDescription)
-                        .font(DesignSystem.Typography.body)
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            // Project Team Summary
-            Divider()
-            
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                Text("Project Team")
-                    .font(DesignSystem.Typography.headline)
-                    .foregroundColor(.primary)
-                
-                HStack(spacing: DesignSystem.Spacing.medium) {
-                    Label("\(viewModel.selectedProjectManagers.count) Manager\(viewModel.selectedProjectManagers.count == 1 ? "" : "s")", systemImage: "person.badge.key.fill")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    Label("\(viewModel.selectedProjectTeamMembers.count) Member\(viewModel.selectedProjectTeamMembers.count == 1 ? "" : "s")", systemImage: "person.2.fill")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                }
-            }
+    // MARK: - Project Basics Content
+    private var projectBasicsContent: some View {
+        Group {
+            ReviewInfoRow(label: "Project Name", value: viewModel.projectName.isEmpty ? "Not provided" : viewModel.projectName)
+            ReviewInfoRow(label: "Client", value: viewModel.client.isEmpty ? "Not provided" : viewModel.client)
+            ReviewInfoRow(label: "Location", value: viewModel.location.isEmpty ? "Not provided" : viewModel.location)
+            ReviewInfoRow(label: "Currency", value: currencySymbol + " " + viewModel.currency)
+            ReviewInfoRow(label: "Total Budget", value: formatAmount(viewModel.totalBudget))
         }
-        .padding(DesignSystem.Spacing.medium)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(DesignSystem.CornerRadius.medium)
     }
     
-    // MARK: - Phases Section
-    private var phasesSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            ReviewSectionHeader(title: "Project Phases", icon: "arrow.triangle.2.circlepath")
+    // MARK: - Project Team Content
+    private var projectTeamContent: some View {
+        Group {
+            // Managers
+            if !viewModel.selectedProjectManagers.isEmpty {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.badge.key.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Managers (\(viewModel.selectedProjectManagers.count))")
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.top, DesignSystem.Spacing.extraSmall)
+                    
+                    ForEach(viewModel.selectedProjectManagers, id: \.id) { manager in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.2))
+                                .frame(width: 6, height: 6)
+                            Text(manager.name)
+                                .font(DesignSystem.Typography.body)
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.leading, 12)
+                    }
+                }
+                .padding(.vertical, DesignSystem.Spacing.extraSmall)
+            }
             
-            ForEach(viewModel.phases) { phase in
-                PhaseReviewCard(phase: phase, currencySymbol: currencySymbol)
+            // Team Members
+            if !viewModel.selectedProjectTeamMembers.isEmpty {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.2.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("Team Members (\(viewModel.selectedProjectTeamMembers.count))")
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.top, viewModel.selectedProjectManagers.isEmpty ? DesignSystem.Spacing.extraSmall : DesignSystem.Spacing.small)
+                    
+                    ForEach(Array(viewModel.selectedProjectTeamMembers), id: \.id) { member in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.2))
+                                .frame(width: 6, height: 6)
+                            Text(member.name)
+                                .font(DesignSystem.Typography.body)
+                                .foregroundColor(.primary)
+                        }
+                        .padding(.leading, 12)
+                    }
+                }
+                .padding(.vertical, DesignSystem.Spacing.extraSmall)
             }
         }
     }
@@ -183,10 +229,16 @@ struct PhaseReviewCard: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
             // Phase Header
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                HStack {
-                    Text("Phase \(phase.phaseNumber)")
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.primary)
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Phase \(phase.phaseNumber)")
+                            .font(DesignSystem.Typography.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text(phase.phaseName.isEmpty ? "Unnamed Phase" : phase.phaseName)
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
+                    }
                     
                     Spacer()
                     
@@ -194,10 +246,6 @@ struct PhaseReviewCard: View {
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.accentColor)
                 }
-                
-                Text(phase.phaseName.isEmpty ? "Unnamed Phase" : phase.phaseName)
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
                 
                 // Timeline
                 HStack(spacing: 6) {
@@ -210,21 +258,14 @@ struct PhaseReviewCard: View {
                 }
             }
             
-            Divider()
-            
             // Departments
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                Text("Departments")
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                
-                if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
-                    Text("No departments added")
-                        .font(DesignSystem.Typography.caption1)
+            if !phase.departments.isEmpty && !phase.departments.allSatisfy({ $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("DEPARTMENTS")
+                        .font(DesignSystem.Typography.subheadline)
                         .foregroundColor(.secondary)
-                        .italic()
-                } else {
+                        .textCase(.uppercase)
+                    
                     ForEach(phase.departments) { dept in
                         if !dept.name.trimmingCharacters(in: .whitespaces).isEmpty {
                             HStack {
@@ -239,15 +280,17 @@ struct PhaseReviewCard: View {
                                     .foregroundColor(.secondary)
                                     .fontWeight(.medium)
                             }
-                            .padding(.vertical, 4)
                         }
                     }
                 }
+            } else {
+                Text("No departments added")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                    .italic()
             }
         }
-        .padding(DesignSystem.Spacing.medium)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(DesignSystem.CornerRadius.medium)
+        .padding(.vertical, DesignSystem.Spacing.small)
     }
 }
 
@@ -261,11 +304,13 @@ private struct ReviewSectionHeader: View {
             Image(systemName: icon)
                 .foregroundColor(.accentColor)
                 .font(DesignSystem.Typography.callout)
+                .symbolRenderingMode(.hierarchical)
             
             Text(title)
-                .font(DesignSystem.Typography.headline)
-                .foregroundColor(.primary)
+                .font(DesignSystem.Typography.subheadline)
+                .foregroundColor(.secondary)
         }
+        .textCase(nil)
     }
 }
 

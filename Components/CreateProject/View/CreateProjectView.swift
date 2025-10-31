@@ -67,6 +67,10 @@ struct CreateProjectView: View {
                         },
                         onCancel: {
                             showingReviewScreen = false
+                        },
+                        onEdit: {
+                            // Dismiss review screen to go back to editing
+                            showingReviewScreen = false
                         }
                     )
                 }
