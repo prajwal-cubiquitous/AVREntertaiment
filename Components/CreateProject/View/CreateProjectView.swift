@@ -13,6 +13,7 @@ struct CreateProjectView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @StateObject private var viewModel = CreateProjectViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var showingReviewScreen = false
     
     var body: some View {
         NavigationView {
@@ -46,9 +47,30 @@ struct CreateProjectView: View {
                 viewModel.setAuthService(authService)
             }
             .alert("Project Status", isPresented: $viewModel.showAlert) {
-                Button("OK", role: .cancel) { }
+                Button("OK", role: .cancel) { 
+                    if viewModel.showSuccessMessage {
+                        dismiss()
+                    }
+                }
             } message: {
                 Text(viewModel.alertMessage)
+            }
+            .sheet(isPresented: $showingReviewScreen) {
+                NavigationView {
+                    ProjectReviewScreen(
+                        viewModel: viewModel,
+                        onConfirm: {
+                            viewModel.saveProject()
+                            // Dismiss review screen after starting save
+                            showingReviewScreen = false
+                            // Dismiss main view after save completes (handled in alert)
+                        },
+                        onCancel: {
+                            showingReviewScreen = false
+                        }
+                    )
+                }
+                .presentationDetents([.large])
             }
         }
     }
@@ -309,18 +331,11 @@ struct CreateProjectView: View {
     private var submitButton: some View {
         Button(action: {
             HapticManager.impact(.medium)
-            viewModel.saveProject()
-            dismiss()
+            showingReviewScreen = true
         }) {
             HStack {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
-                } else {
-                    Label("Create Project", systemImage: "plus.app.fill")
-                        .symbolRenderingMode(.hierarchical)
-                }
+                Label("Review Project", systemImage: "doc.text.magnifyingglass")
+                    .symbolRenderingMode(.hierarchical)
             }
             .font(DesignSystem.Typography.headline)
         }
