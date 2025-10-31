@@ -30,6 +30,8 @@ struct DashboardView: View {
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     @EnvironmentObject var navigationManager: NavigationManager
     @State private var showProjectDetail = false
+    @State private var showingAddDepartment = false
+    @State private var phaseForDepartmentAdd: PhaseSummary? = nil
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -350,6 +352,22 @@ struct DashboardView: View {
                     .presentationDetents([.large])
             }
         }
+        .sheet(isPresented: $showingAddDepartment, onDismiss: {
+            Task { await loadPhases() }
+        }) {
+            if let projectId = project?.id, let phase = phaseForDepartmentAdd {
+                AddDepartmentSheet(
+                    projectId: projectId,
+                    phaseId: phase.id,
+                    phaseName: phase.name,
+                    onSaved: {
+                        HapticManager.impact(.light)
+                        Task { await loadPhases() }
+                    }
+                )
+                .presentationDetents([.medium])
+            }
+        }
         .sheet(isPresented: $showingAnalytics) {
             //            if let projectId = project?.id , let projectBudget = project?.budget{
             ////                PredictiveAnalysisView1(projectId: projectId, budget: projectBudget)
@@ -639,6 +657,21 @@ struct DashboardView: View {
                                         .background(Color.green.opacity(0.12))
                                         .clipShape(Capsule())
                                         .accessibilityLabel("Phase status: In Progress")
+
+                                    if role == .ADMIN{
+                                        Button {
+                                            HapticManager.selection()
+                                            phaseForDepartmentAdd = phase
+                                            showingAddDepartment = true
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.accentColor)
+                                                .accessibilityLabel("Add department to this phase")
+                                        }
+                                        .buttonStyle(.plain)
+                                        .padding(.leading, 4)
+                                    }
                                 }
                             }
                             
@@ -1153,6 +1186,104 @@ private struct BudgetComparisonRow: View {
         .padding(DesignSystem.Spacing.medium)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+}
+
+// MARK: - Add Department Sheet
+private struct AddDepartmentSheet: View {
+    let projectId: String
+    let phaseId: String
+    let phaseName: String
+    var onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var departmentName: String = ""
+    @State private var budgetText: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case name, budget }
+
+    private var isFormValid: Bool {
+        !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Add a department to \(phaseName)")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                Section {
+                    TextField("Department name", text: $departmentName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .name)
+
+                    HStack {
+                        TextField("Budget (₹)", text: $budgetText)
+                            .keyboardType(.decimalPad)
+                            .focused($focusedField, equals: .budget)
+                        if let amount = Double(budgetText) {
+                            Text(Int(amount).formattedCurrency)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: { Text("Department Details").textCase(.uppercase) } footer: { Text("Budget is optional and can be 0.") }
+
+                if let error = errorMessage {
+                    Section { Text(error).foregroundColor(.red) }
+                }
+            }
+            .navigationTitle("Add Department")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(!isFormValid || isSaving)
+                        .fontWeight(.semibold)
+                }
+                // Removed custom keyboard toolbar per request
+            }
+            .onAppear { focusedField = .name }
+        }
+    }
+
+    private func save() {
+        let amount = Double(budgetText) ?? 0
+        isSaving = true
+        errorMessage = nil
+
+        let db = Firestore.firestore()
+        db.collection(FirebaseCollections.projects)
+            .document(projectId)
+            .collection("phases")
+            .document(phaseId)
+            .setData([
+                "departments": [
+                    departmentName: amount
+                ]
+            ], merge: true) { error in
+                isSaving = false
+                if let error = error {
+                    errorMessage = "Failed to save: \(error.localizedDescription)"
+                } else {
+                    onSaved()
+                    dismiss()
+                }
+            }
+
     }
 }
 
