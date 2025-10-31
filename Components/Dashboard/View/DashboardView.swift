@@ -747,6 +747,9 @@ struct DashboardView: View {
                     }
                     .secondaryButton()
                 }
+//                .onAppear{
+//                    print("DEEBG 1: Current Phases:\(filteredCurrentPhases.count)")
+//                }
             }
         }
     }
@@ -893,20 +896,25 @@ struct DashboardView: View {
 
     private func isPhaseInProgress(_ phase: PhaseSummary) -> Bool {
         let current = now
-        switch (phase.start, phase.end) {
-        case (nil, nil):
-            // No dates provided: treat as in progress
-            return true
-        case (let s?, nil):
-            // Only start date: in progress if started
-            return s <= current
-        case (nil, let e?):
-            // Only end date: consider in progress until it ends
-            return current <= e
-        case (let s?, let e?):
-            // Both dates present: current within range
-            return s <= current && current <= e
-        }
+//        if phase.name == "SDFSD"{
+//            print("DEBUG 3: \(phase.start)")
+            if let startDate = phase.start, let endDate = phase.end {
+                // both are non-nil
+                return startDate <= current && current <= endDate
+            } else if let startDate = phase.start {
+                // only startDate
+                return startDate <= current
+            } else if let endDate = phase.end {
+                // only endDate
+                return current <= endDate
+            } else {
+                // neither provided
+                return true
+            }
+//        }else{
+//            return false
+//        }
+
     }
 
     private func phaseTimelineText(_ phase: PhaseSummary) -> String {
