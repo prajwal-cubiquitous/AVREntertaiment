@@ -48,6 +48,10 @@ struct DepartmentBudgetDetailView: View {
     @State private var showingEditBudget = false
     @State private var showingDeleteConfirmation = false
     @State private var showingMenu = false
+    @State private var showingOnlyDepartmentAlert = false
+    @State private var showingAddDepartmentSheet = false
+    @State private var pendingDeleteAfterAdd = false
+    @State private var phaseIdForDelete: String? = nil
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -139,7 +143,19 @@ struct DepartmentBudgetDetailView: View {
                         }
                         
                         Button(role: .destructive) {
-                            showingDeleteConfirmation = true
+                            Task {
+                                let isOnlyDepartment = await viewModel.isOnlyDepartmentInAnyPhase(
+                                    department: department,
+                                    projectId: projectId
+                                )
+                                await MainActor.run {
+                                    if isOnlyDepartment {
+                                        showingOnlyDepartmentAlert = true
+                                    } else {
+                                        showingDeleteConfirmation = true
+                                    }
+                                }
+                            }
                         } label: {
                             Label("Delete Department", systemImage: "trash")
                         }
@@ -210,6 +226,14 @@ struct DepartmentBudgetDetailView: View {
             )
             .presentationDetents([.medium])
         }
+        .alert("Cannot Delete Department", isPresented: $showingOnlyDepartmentAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Add Department") {
+                showingAddDepartmentSheet = true
+            }
+        } message: {
+            Text("There should be at least one department in each phase. Please add a new department before deleting this one.")
+        }
         .alert("Delete Department", isPresented: $showingDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
@@ -225,6 +249,38 @@ struct DepartmentBudgetDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete this department? This will remove it from all phases. This action cannot be undone.")
+        }
+        .sheet(isPresented: $showingAddDepartmentSheet, onDismiss: {
+            if pendingDeleteAfterAdd, let phaseIdToDelete = phaseIdForDelete {
+                Task {
+                    await viewModel.deleteDepartmentFromPhase(
+                        department: department,
+                        projectId: projectId,
+                        phaseId: phaseIdToDelete
+                    )
+                    // Reload expenses to refresh the view
+                    await viewModel.loadExpenses(for: department, projectId: projectId)
+                    await MainActor.run {
+                        pendingDeleteAfterAdd = false
+                        phaseIdForDelete = nil
+                        dismiss()
+                    }
+                }
+            }
+        }) {
+            if let phaseInfo = viewModel.phasesWithOnlyThisDepartment.first {
+                AddDepartmentSheetForDelete(
+                    projectId: projectId,
+                    phaseId: phaseInfo.id,
+                    phaseName: phaseInfo.name,
+                    onSaved: {
+                        phaseIdForDelete = phaseInfo.id
+                        pendingDeleteAfterAdd = true
+                        showingAddDepartmentSheet = false
+                    }
+                )
+                .presentationDetents([.medium])
+            }
         }
     }
     
@@ -784,6 +840,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     @Published var totalSpent: Double = 0
     @Published var approvers: [String: String] = [:] // phoneNumber: name
     @Published var phaseIds: [String] = [] // Store phase IDs that contain this department
+    @Published var phasesWithOnlyThisDepartment: [(id: String, name: String)] = [] // Phases with only this department
     
     var remainingBudget: Double {
         totalBudget - totalSpent
@@ -844,6 +901,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 // Aggregate allocated budget from phases for this department
                 var allocated: Double = 0
                 var phaseIdsWithDepartment: [String] = []
+                var phasesOnlyWithThisDepartment: [(id: String, name: String)] = []
                 let phasesSnapshot = try await db
                     .collection("projects_ios1")
                     .document(projectId)
@@ -854,6 +912,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                         if phase.departments[department] != nil {
                             allocated += phase.departments[department] ?? 0
                             phaseIdsWithDepartment.append(doc.documentID)
+                            
+                            // Check if this is the only department in this phase
+                            if phase.departments.count == 1 {
+                                phasesOnlyWithThisDepartment.append((id: doc.documentID, name: phase.phaseName))
+                            }
                         }
                     }
                 }
@@ -866,6 +929,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     self.expenses = loadedExpenses
                     self.totalSpent = totalSpent
                     self.phaseIds = phaseIdsWithDepartment
+                    self.phasesWithOnlyThisDepartment = phasesOnlyWithThisDepartment
                     self.isLoading = false
                 }
             } catch {
@@ -913,6 +977,38 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         // This should be passed from the parent view or retrieved from user defaults
         // For now, returning a placeholder - you may need to implement proper user management
         return UserDefaults.standard.string(forKey: "userPhoneNumber") ?? ""
+    }
+    
+    func isOnlyDepartmentInAnyPhase(department: String, projectId: String) async -> Bool {
+        do {
+            let db = Firestore.firestore()
+            
+            // Get all phases
+            let phasesSnapshot = try await db
+                .collection("projects_ios1")
+                .document(projectId)
+                .collection("phases")
+                .getDocuments()
+            
+            // Check if any phase has only this department
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    if phase.departments[department] != nil && phase.departments.count == 1 {
+                        // Update phasesWithOnlyThisDepartment if not already loaded
+                        await MainActor.run {
+                            if !self.phasesWithOnlyThisDepartment.contains(where: { $0.id == doc.documentID }) {
+                                self.phasesWithOnlyThisDepartment.append((id: doc.documentID, name: phase.phaseName))
+                            }
+                        }
+                        return true
+                    }
+                }
+            }
+            
+            return false
+        } catch {
+            return false
+        }
     }
     
     func updateDepartmentBudget(department: String, projectId: String, newBudget: Double) async {
@@ -1004,6 +1100,33 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     }
                 }
             }
+            
+            // Notify parent views to refresh
+            await MainActor.run {
+                NotificationCenter.default.post(name: NSNotification.Name("DepartmentDeleted"), object: nil)
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to delete department: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func deleteDepartmentFromPhase(department: String, projectId: String, phaseId: String) async {
+        do {
+            let db = Firestore.firestore()
+            
+            let phaseRef = db
+                .collection("projects_ios1")
+                .document(projectId)
+                .collection("phases")
+                .document(phaseId)
+            
+            // Remove the department from the departments dictionary
+            try await phaseRef.updateData([
+                "departments.\(department)": FieldValue.delete()
+            ])
             
             // Notify parent views to refresh
             await MainActor.run {
@@ -1176,5 +1299,103 @@ struct EditBudgetSheet: View {
         
         // The onSave closure will handle the async save
         isSaving = false
+    }
+}
+
+// MARK: - Add Department Sheet For Delete
+struct AddDepartmentSheetForDelete: View {
+    let projectId: String
+    let phaseId: String
+    let phaseName: String
+    var onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var departmentName: String = ""
+    @State private var budgetText: String = "0"
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case name, budget }
+
+    private var isFormValid: Bool {
+        !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Add a department to \(phaseName)")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 2)
+                }
+
+                Section {
+                    TextField("Department name", text: $departmentName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .name)
+
+                    HStack {
+                        TextField("Budget (₹)", text: $budgetText)
+                            .keyboardType(.decimalPad)
+                            .focused($focusedField, equals: .budget)
+                        if let amount = Double(budgetText) {
+                            Text(Int(amount).formattedCurrency)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: { Text("Department Details").textCase(.uppercase) } footer: { Text("Budget is optional and can be 0.") }
+
+                if let error = errorMessage {
+                    Section { Text(error).foregroundColor(.red) }
+                }
+            }
+            .navigationTitle("Add Department")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(!isFormValid || isSaving)
+                        .fontWeight(.semibold)
+                }
+            }
+            .onAppear { focusedField = .name }
+        }
+    }
+
+    private func save() {
+        let amount = Double(budgetText) ?? 0
+        isSaving = true
+        errorMessage = nil
+
+        let db = Firestore.firestore()
+        let phaseRef = db.collection(FirebaseCollections.projects)
+            .document(projectId)
+            .collection("phases")
+            .document(phaseId)
+        
+        // Use updateData with the department key path to properly merge
+        phaseRef.updateData([
+            "departments.\(departmentName)": amount
+        ]) { error in
+            DispatchQueue.main.async {
+                self.isSaving = false
+                if let error = error {
+                    self.errorMessage = "Failed to save: \(error.localizedDescription)"
+                } else {
+                    self.onSaved()
+                    self.dismiss()
+                }
+            }
+        }
     }
 }
