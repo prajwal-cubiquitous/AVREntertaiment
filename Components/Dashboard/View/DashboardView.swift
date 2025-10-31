@@ -607,13 +607,36 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                             // Header (only phase name + timeline inline)
                             HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
-                                Text(phase.name)
-                                    .font(DesignSystem.Typography.headline)
-                                    .foregroundColor(.primary)
-                                if let s = phase.start, let e = phase.end {
-                                    Text("\(phaseDateFormatter.string(from: s)) - \(phaseDateFormatter.string(from: e))")
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(phase.name)
+                                        .font(DesignSystem.Typography.headline)
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
+
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "calendar")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .accessibilityHidden(true)
+                                        Text(phaseTimelineText(phase))
+                                            .font(DesignSystem.Typography.caption1)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+
+                                Spacer()
+
+                                if isPhaseInProgress(phase) {
+                                    Text("In Progress")
                                         .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green.opacity(0.12))
+                                        .clipShape(Capsule())
+                                        .accessibilityLabel("Phase status: In Progress")
                                 }
                             }
                             
@@ -648,10 +671,11 @@ struct DashboardView: View {
                                 .allowsHitTesting(false)
                             }
                         }
-                        .padding(DesignSystem.Spacing.medium)
+                        .padding(DesignSystem.Spacing.extraSmall)
                         .background(Color(.secondarySystemGroupedBackground))
                         .cornerRadius(DesignSystem.CornerRadius.medium)
                     }
+                    
                     // View All Phases button under the last scroller
                     Button(action: {
                         HapticManager.selection()
@@ -809,14 +833,38 @@ struct DashboardView: View {
     
     private var filteredCurrentPhases: [PhaseSummary] {
         allPhases.filter { phase in
-            if let s = phase.start, let e = phase.end {
-                return s <= now && now <= e
-            }
-            else if let s = phase.start{
-                return s <= now
-            }
-            // If dates missing, treat as not current
-            return false
+            isPhaseInProgress(phase)
+        }
+    }
+
+    private func isPhaseInProgress(_ phase: PhaseSummary) -> Bool {
+        let current = now
+        switch (phase.start, phase.end) {
+        case (nil, nil):
+            // No dates provided: treat as in progress
+            return true
+        case (let s?, nil):
+            // Only start date: in progress if started
+            return s <= current
+        case (nil, let e?):
+            // Only end date: consider in progress until it ends
+            return current <= e
+        case (let s?, let e?):
+            // Both dates present: current within range
+            return s <= current && current <= e
+        }
+    }
+
+    private func phaseTimelineText(_ phase: PhaseSummary) -> String {
+        switch (phase.start, phase.end) {
+        case (nil, nil):
+            return "Timeline not set"
+        case (let s?, nil):
+            return "Since: \(phaseDateFormatter.string(from: s))"
+        case (nil, let e?):
+            return "Until: \(phaseDateFormatter.string(from: e))"
+        case (let s?, let e?):
+            return "\(phaseDateFormatter.string(from: s)) – \(phaseDateFormatter.string(from: e))"
         }
     }
     
