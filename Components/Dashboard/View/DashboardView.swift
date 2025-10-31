@@ -25,7 +25,6 @@ struct DashboardView: View {
     @State private var selectedDepartmentForDetail: String? = nil
     @State private var showingTeamMembersDetail = false
     @State private var showingAnonymousExpensesDetail = false
-    @State private var showingAllPhases = false
     @State private var scrollToDepartmentSection = false
     @StateObject private var ProjectDetialViewModel : ProjectDetailViewModel
     @EnvironmentObject var navigationManager: NavigationManager
@@ -409,10 +408,10 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartmentForDetail, let project = project {
+            if let department = selectedDepartmentForDetail, let project = project, let projectId = project.id, !projectId.isEmpty {
                 DepartmentBudgetDetailView(
                     department: department,
-                    projectId: project.id ?? "",
+                    projectId: projectId,
                     role: role,
                     phoneNumber: phoneNumber
                 )
@@ -604,10 +603,14 @@ struct DashboardView: View {
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     
-                    Button(action: {
-                        HapticManager.selection()
-                        showingAllPhases = true
-                    }) {
+                    NavigationLink {
+                        AllPhasesView(
+                            phases: allPhases,
+                            project: project,
+                            role: role,
+                            phoneNumber: phoneNumber
+                        )
+                    } label: {
                         Text("View All Phases")
                             .font(DesignSystem.Typography.callout)
                             .fontWeight(.semibold)
@@ -685,7 +688,10 @@ struct DashboardView: View {
                                                 amount: amount,
                                                 onTap: {
                                                     selectedDepartmentForDetail = dept
-                                                    showingDepartmentDetail = true
+                                                    // Small delay to ensure state is set before showing sheet
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                        showingDepartmentDetail = true
+                                                    }
                                                 }
                                             )
                                         }
@@ -712,10 +718,14 @@ struct DashboardView: View {
                     }
                     
                     // View All Phases button under the last scroller
-                    Button(action: {
-                        HapticManager.selection()
-                        showingAllPhases = true
-                    }) {
+                    NavigationLink {
+                        AllPhasesView(
+                            phases: allPhases,
+                            project: project,
+                            role: role,
+                            phoneNumber: phoneNumber
+                        )
+                    } label: {
                         Text("View All Phases")
                             .font(DesignSystem.Typography.callout)
                             .fontWeight(.semibold)
@@ -723,12 +733,6 @@ struct DashboardView: View {
                     .secondaryButton()
                 }
             }
-        }
-        .sheet(isPresented: $showingAllPhases) {
-            AllPhasesView(phases: allPhases, onOpenDepartment: { dept in
-                selectedDepartmentForDetail = dept
-                showingDepartmentDetail = true
-            })
         }
     }
     
@@ -1473,137 +1477,168 @@ private struct DepartmentPill: View {
 private struct DepartmentMiniCard: View {
     let title: String
     let amount: Double
-    let onTap: () -> Void
+    let onTap: (() -> Void)?
 
     private var budget: Double { amount }
     private var spent: Double { 0 }
     private var remaining: Double { max(budget - spent, 0) }
+    
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Title row
+            HStack {
+                Text(title)
+                    .font(DesignSystem.Typography.headline)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // Budget/Spent/Remaining rows
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Budget:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(budget).formattedCurrency)")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                }
+                HStack {
+                    Text("Spent:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(spent).formattedCurrency)")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                }
+                HStack {
+                    Text("Remaining:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(remaining).formattedCurrency)")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                }
+
+                // Progress bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 6)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.accentColor)
+                            .frame(width: budget > 0 ? min(CGFloat(spent / budget) * geometry.size.width, geometry.size.width) : 0, height: 6)
+                    }
+                }
+                .frame(height: 6)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(width: 240, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.systemGray5), lineWidth: 0.5)
+        )
+    }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                // Title row
-                HStack {
-                    Text(title)
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    Spacer()
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                // Budget/Spent/Remaining rows
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Budget:")
-                            .font(DesignSystem.Typography.caption1)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("\(Int(budget).formattedCurrency)")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    HStack {
-                        Text("Spent:")
-                            .font(DesignSystem.Typography.caption1)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("\(Int(spent).formattedCurrency)")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    HStack {
-                        Text("Remaining:")
-                            .font(DesignSystem.Typography.caption1)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("\(Int(remaining).formattedCurrency)")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.green)
-                    }
-
-                    // Progress bar
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color(.systemGray5))
-                                .frame(height: 6)
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.accentColor)
-                                .frame(width: budget > 0 ? min(CGFloat(spent / budget) * geometry.size.width, geometry.size.width) : 0, height: 6)
-                        }
-                    }
-                    .frame(height: 6)
-                }
+        if let onTap = onTap {
+            Button(action: onTap) {
+                cardContent
             }
-            .padding(DesignSystem.Spacing.medium)
-            .frame(width: 240, alignment: .leading)
-            .background(Color(.secondarySystemGroupedBackground))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(.systemGray5), lineWidth: 0.5)
-            )
+            .buttonStyle(.plain)
+        } else {
+            cardContent
         }
-        .buttonStyle(.plain)
     }
 }
 
 // MARK: - All Phases View
 private struct AllPhasesView: View {
     let phases: [DashboardView.PhaseSummary]
-    let onOpenDepartment: (String) -> Void
+    let project: Project?
+    let role: UserRole?
+    let phoneNumber: String
+    
+    @State private var showingDepartmentDetail = false
+    @State private var selectedDepartment: String? = nil
     
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(phases) { phase in
-                    Section(header: Text(phase.name).textCase(.uppercase).foregroundColor(.secondary)) {
-                        ZStack(alignment: .leading) {
-                            // Card background for the horizontal scroller
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.secondarySystemGroupedBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color(.systemGray5), lineWidth: 0.5)
-                                )
-                            // Horizontal scroller
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
-                                        DepartmentMiniCard(title: dept, amount: amount) {
-                                            onOpenDepartment(dept)
+        List {
+            ForEach(phases) { phase in
+                Section(header: Text(phase.name).textCase(.uppercase).foregroundColor(.secondary)) {
+                    ZStack(alignment: .leading) {
+                        // Card background for the horizontal scroller
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.secondarySystemGroupedBackground))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color(.systemGray5), lineWidth: 0.5)
+                            )
+                        // Horizontal scroller
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                    DepartmentMiniCard(
+                                        title: dept,
+                                        amount: amount,
+                                        onTap: {
+                                            selectedDepartment = dept
+                                            // Small delay to ensure state is set before showing sheet
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                showingDepartmentDetail = true
+                                            }
                                         }
-                                    }
+                                    )
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
                             }
-                            // Scroll hint (left chevron) to indicate horizontal scroll
-                            HStack { 
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(6)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                                    .padding(.leading, 6)
-                                Spacer()
-                            }
-                            .allowsHitTesting(false)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
                         }
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                        .listRowBackground(Color.clear)
+                        // Scroll hint (left chevron) to indicate horizontal scroll
+                        HStack { 
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(6)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .padding(.leading, 6)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                     }
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color(.systemGroupedBackground))
-            .listSectionSpacing(.custom(8))
-            .navigationTitle("All Phases")
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color(.systemGroupedBackground))
+        .listSectionSpacing(.custom(8))
+        .navigationTitle("All Phases")
+        .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showingDepartmentDetail) {
+            if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {
+                DepartmentBudgetDetailView(
+                    department: department,
+                    projectId: projectId,
+                    role: role,
+                    phoneNumber: phoneNumber
+                )
+                .presentationDetents([.large])
+            }
         }
     }
 }
