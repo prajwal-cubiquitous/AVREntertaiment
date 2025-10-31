@@ -1573,53 +1573,145 @@ private struct AllPhasesView: View {
     
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartment: String? = nil
+    @State private var showingAddDepartment = false
+    @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
+    
+    private var phaseDateFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateFormat = "dd/MM/yyyy"
+        return df
+    }
+    
+    private var now: Date { Date() }
+    
+    private func isPhaseInProgress(_ phase: DashboardView.PhaseSummary) -> Bool {
+        let current = now
+        switch (phase.start, phase.end) {
+        case (nil, nil):
+            return true
+        case (let s?, nil):
+            return s <= current
+        case (nil, let e?):
+            return current <= e
+        case (let s?, let e?):
+            return s <= current && current <= e
+        }
+    }
+    
+    private func phaseTimelineText(_ phase: DashboardView.PhaseSummary) -> String {
+        switch (phase.start, phase.end) {
+        case (nil, nil):
+            return ""
+        case (let s?, nil):
+            return "Since: \(phaseDateFormatter.string(from: s))"
+        case (nil, let e?):
+            return "Until: \(phaseDateFormatter.string(from: e))"
+        case (let _?, let e?):
+            return "Until: \(phaseDateFormatter.string(from: e))"
+        }
+    }
     
     var body: some View {
         List {
             ForEach(phases) { phase in
-                Section(header: Text(phase.name).textCase(.uppercase).foregroundColor(.secondary)) {
-                    ZStack(alignment: .leading) {
-                        // Card background for the horizontal scroller
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color(.systemGray5), lineWidth: 0.5)
-                            )
-                        // Horizontal scroller
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
-                                    DepartmentMiniCard(
-                                        title: dept,
-                                        amount: amount,
-                                        onTap: {
-                                            selectedDepartment = dept
-                                            // Small delay to ensure state is set before showing sheet
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                showingDepartmentDetail = true
-                                            }
-                                        }
-                                    )
+                Section {
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        // Phase Header with date, In Progress badge, and + icon
+                        HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(phase.name)
+                                    .font(DesignSystem.Typography.headline)
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.85)
+
+                                HStack(spacing: 6) {
+                                    if phaseTimelineText(phase) != "" {
+                                        Image(systemName: "calendar")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .accessibilityHidden(true)
+                                    }
+                                    Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
                                 }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                        }
-                        // Scroll hint (left chevron) to indicate horizontal scroll
-                        HStack { 
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(6)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .padding(.leading, 6)
+
                             Spacer()
+
+                            if isPhaseInProgress(phase) {
+                                Text("In Progress")
+                                    .font(DesignSystem.Typography.caption1)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.green)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.green.opacity(0.12))
+                                    .clipShape(Capsule())
+                                    .accessibilityLabel("Phase status: In Progress")
+
+                                if role == .ADMIN {
+                                    Button {
+                                        HapticManager.selection()
+                                        phaseForDepartmentAdd = phase
+                                        showingAddDepartment = true
+                                    } label: {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.accentColor)
+                                            .accessibilityLabel("Add department to this phase")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.leading, 4)
+                                }
+                            }
                         }
-                        .allowsHitTesting(false)
+                        
+                        // Departments scroller
+                        ZStack(alignment: .leading) {
+                            // Card background for the horizontal scroller
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(.secondarySystemGroupedBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color(.systemGray5), lineWidth: 0.5)
+                                )
+                            // Horizontal scroller
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                        DepartmentMiniCard(
+                                            title: dept,
+                                            amount: amount,
+                                            onTap: {
+                                                selectedDepartment = dept
+                                                // Small delay to ensure state is set before showing sheet
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                    showingDepartmentDetail = true
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                            }
+                            // Scroll hint (left chevron) to indicate horizontal scroll
+                            HStack { 
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .padding(6)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                                    .padding(.leading, 6)
+                                Spacer()
+                            }
+                            .allowsHitTesting(false)
+                        }
                     }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     .listRowBackground(Color.clear)
                 }
             }
@@ -1638,6 +1730,26 @@ private struct AllPhasesView: View {
                     phoneNumber: phoneNumber
                 )
                 .presentationDetents([.large])
+            }
+        }
+        .sheet(isPresented: $showingAddDepartment, onDismiss: {
+            Task {
+                // Reload phases if needed
+                if let projectId = project?.id {
+                    // Refresh would happen through notification
+                }
+            }
+        }) {
+            if let phase = phaseForDepartmentAdd, let projectId = project?.id {
+                AddDepartmentSheet(
+                    projectId: projectId,
+                    phaseId: phase.id,
+                    phaseName: phase.name,
+                    onSaved: {
+                        HapticManager.impact(.light)
+                    }
+                )
+                .presentationDetents([.medium])
             }
         }
     }
