@@ -673,7 +673,8 @@ struct DashboardView: View {
                                         ))
                                         .labelsHidden()
                                         .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                        .padding(.leading, 4)
+                                        .scaleEffect(0.85)
+                                        .padding(.leading, 6)
 
                                         Button {
                                             HapticManager.selection()
@@ -681,12 +682,13 @@ struct DashboardView: View {
                                             showingAddDepartment = true
                                         } label: {
                                             Image(systemName: "plus.circle.fill")
-                                                .font(.system(size: 16, weight: .semibold))
+                                                .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.accentColor)
                                                 .accessibilityLabel("Add department to this phase")
                                         }
                                         .buttonStyle(.plain)
-                                        .padding(.leading, 4)
+                                        .padding(.leading, 6)
+                                        .padding(.vertical, 2)
                                     }
                                 }
                             }
@@ -1704,7 +1706,8 @@ private struct AllPhasesView: View {
                                     ))
                                     .labelsHidden()
                                     .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                    .padding(.leading, 4)
+                                    .scaleEffect(0.85)
+                                    .padding(.leading, 6)
 
                                     Button {
                                         HapticManager.selection()
@@ -1712,12 +1715,13 @@ private struct AllPhasesView: View {
                                         showingAddDepartment = true
                                     } label: {
                                         Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 16, weight: .semibold))
+                                            .font(.system(size: 16, weight: .medium))
                                             .foregroundColor(.accentColor)
                                             .accessibilityLabel("Add department to this phase")
                                     }
                                     .buttonStyle(.plain)
-                                    .padding(.leading, 4)
+                                    .padding(.leading, 6)
+                                    .padding(.vertical, 2)
                                 }
                             }
                         }
