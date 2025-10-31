@@ -45,6 +45,9 @@ struct DepartmentBudgetDetailView: View {
     @State private var isDateRangeActive = false
     @State private var sortOption: SortOption = .dateDescending
     @State private var showingSortOptions = false
+    @State private var showingEditBudget = false
+    @State private var showingDeleteConfirmation = false
+    @State private var showingMenu = false
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -126,6 +129,25 @@ struct DepartmentBudgetDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button(role: .none) {
+                            showingEditBudget = true
+                        } label: {
+                            Label("Edit Budget", systemImage: "pencil")
+                        }
+                        
+                        Button(role: .destructive) {
+                            showingDeleteConfirmation = true
+                        } label: {
+                            Label("Delete Department", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundColor(.accentColor)
+                    }
+                }
             }
         }
         .onAppear {
@@ -165,6 +187,44 @@ struct DepartmentBudgetDetailView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showingEditBudget) {
+            EditBudgetSheet(
+                department: department,
+                projectId: projectId,
+                currentBudget: viewModel.totalBudget,
+                onSave: { newBudget in
+                    Task {
+                        await viewModel.updateDepartmentBudget(
+                            department: department,
+                            projectId: projectId,
+                            newBudget: newBudget
+                        )
+                        // Reload expenses to refresh budget display
+                        await viewModel.loadExpenses(for: department, projectId: projectId)
+                        await MainActor.run {
+                            showingEditBudget = false
+                        }
+                    }
+                }
+            )
+            .presentationDetents([.medium])
+        }
+        .alert("Delete Department", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    await viewModel.deleteDepartment(
+                        department: department,
+                        projectId: projectId
+                    )
+                    await MainActor.run {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this department? This will remove it from all phases. This action cannot be undone.")
         }
     }
     
@@ -723,6 +783,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     @Published var totalBudget: Double = 0
     @Published var totalSpent: Double = 0
     @Published var approvers: [String: String] = [:] // phoneNumber: name
+    @Published var phaseIds: [String] = [] // Store phase IDs that contain this department
     
     var remainingBudget: Double {
         totalBudget - totalSpent
@@ -782,6 +843,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 
                 // Aggregate allocated budget from phases for this department
                 var allocated: Double = 0
+                var phaseIdsWithDepartment: [String] = []
                 let phasesSnapshot = try await db
                     .collection("projects_ios1")
                     .document(projectId)
@@ -789,7 +851,10 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     .getDocuments()
                 for doc in phasesSnapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
-                        allocated += phase.departments[department] ?? 0
+                        if phase.departments[department] != nil {
+                            allocated += phase.departments[department] ?? 0
+                            phaseIdsWithDepartment.append(doc.documentID)
+                        }
                     }
                 }
                 
@@ -800,6 +865,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     self.totalBudget = allocated
                     self.expenses = loadedExpenses
                     self.totalSpent = totalSpent
+                    self.phaseIds = phaseIdsWithDepartment
                     self.isLoading = false
                 }
             } catch {
@@ -847,6 +913,108 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         // This should be passed from the parent view or retrieved from user defaults
         // For now, returning a placeholder - you may need to implement proper user management
         return UserDefaults.standard.string(forKey: "userPhoneNumber") ?? ""
+    }
+    
+    func updateDepartmentBudget(department: String, projectId: String, newBudget: Double) async {
+        do {
+            let db = Firestore.firestore()
+            
+            // Update budget in all phases that contain this department
+            // We need to distribute the new budget across all phases
+            // For simplicity, we'll set the same budget in each phase
+            // Or you could calculate proportional distribution
+            
+            // First, get all phases with this department
+            let phasesSnapshot = try await db
+                .collection("projects_ios1")
+                .document(projectId)
+                .collection("phases")
+                .getDocuments()
+            
+            var phasesWithDepartment: [(id: String, currentBudget: Double)] = []
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    if let currentBudget = phase.departments[department] {
+                        phasesWithDepartment.append((id: doc.documentID, currentBudget: currentBudget))
+                    }
+                }
+            }
+            
+            guard !phasesWithDepartment.isEmpty else { return }
+            
+            // Calculate total current budget to maintain proportions
+            let totalCurrentBudget = phasesWithDepartment.reduce(0) { $0 + $1.currentBudget }
+            
+            // Update each phase proportionally
+            for phaseData in phasesWithDepartment {
+                let phaseRef = db
+                    .collection("projects_ios1")
+                    .document(projectId)
+                    .collection("phases")
+                    .document(phaseData.id)
+                
+                // Calculate proportional budget for this phase
+                let proportion = totalCurrentBudget > 0 ? (phaseData.currentBudget / totalCurrentBudget) : (1.0 / Double(phasesWithDepartment.count))
+                let newPhaseBudget = newBudget * proportion
+                
+                try await phaseRef.updateData([
+                    "departments.\(department)": newPhaseBudget
+                ])
+            }
+            
+            // Reload expenses to refresh the budget
+            await MainActor.run {
+                self.totalBudget = newBudget
+                // Notify parent views to refresh
+                NotificationCenter.default.post(name: NSNotification.Name("DepartmentBudgetUpdated"), object: nil)
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to update budget: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func deleteDepartment(department: String, projectId: String) async {
+        do {
+            let db = Firestore.firestore()
+            
+            // Get all phases
+            let phasesSnapshot = try await db
+                .collection("projects_ios1")
+                .document(projectId)
+                .collection("phases")
+                .getDocuments()
+            
+            // Delete department from all phases that contain it
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    if phase.departments[department] != nil {
+                        let phaseRef = db
+                            .collection("projects_ios1")
+                            .document(projectId)
+                            .collection("phases")
+                            .document(doc.documentID)
+                        
+                        // Remove the department from the departments dictionary
+                        try await phaseRef.updateData([
+                            "departments.\(department)": FieldValue.delete()
+                        ])
+                    }
+                }
+            }
+            
+            // Notify parent views to refresh
+            await MainActor.run {
+                NotificationCenter.default.post(name: NSNotification.Name("DepartmentDeleted"), object: nil)
+            }
+            
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to delete department: \(error.localizedDescription)"
+            }
+        }
     }
 }
 
@@ -917,5 +1085,96 @@ struct InlineDateRangePopover: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemBackground)))
+    }
+}
+
+// MARK: - Edit Budget Sheet
+struct EditBudgetSheet: View {
+    let department: String
+    let projectId: String
+    let currentBudget: Double
+    let onSave: (Double) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var budgetText: String = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    
+    private var isFormValid: Bool {
+        if let value = Double(budgetText), value >= 0 {
+            return true
+        }
+        return false
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Edit budget for \(department)")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 2)
+                }
+                
+                Section {
+                    HStack {
+                        TextField("Budget (₹)", text: $budgetText)
+                            .keyboardType(.decimalPad)
+                        
+                        if let amount = Double(budgetText) {
+                            Text(Int(amount).formattedCurrency)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Budget Details").textCase(.uppercase)
+                } footer: {
+                    Text("Current budget: \(Int(currentBudget).formattedCurrency)")
+                }
+                
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit Budget")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        save()
+                    }
+                    .disabled(!isFormValid || isSaving)
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                budgetText = String(format: "%.0f", currentBudget)
+            }
+        }
+    }
+    
+    private func save() {
+        guard let newBudget = Double(budgetText), newBudget >= 0 else {
+            errorMessage = "Please enter a valid budget amount"
+            return
+        }
+        
+        isSaving = true
+        errorMessage = nil
+        
+        onSave(newBudget)
+        
+        // The onSave closure will handle the async save
+        isSaving = false
     }
 }
