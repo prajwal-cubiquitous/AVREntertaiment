@@ -615,11 +615,13 @@ struct DashboardView: View {
                                         .minimumScaleFactor(0.85)
 
                                     HStack(spacing: 6) {
-                                        Image(systemName: "calendar")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                            .accessibilityHidden(true)
-                                        Text(phaseTimelineText(phase))
+                                        if (phaseTimelineText(phase) != ""){
+                                            Image(systemName: "calendar")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .accessibilityHidden(true)
+                                        }
+                                        Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
                                             .font(DesignSystem.Typography.caption1)
                                             .foregroundColor(.secondary)
                                     }
@@ -858,13 +860,13 @@ struct DashboardView: View {
     private func phaseTimelineText(_ phase: PhaseSummary) -> String {
         switch (phase.start, phase.end) {
         case (nil, nil):
-            return "Timeline not set"
+            return ""
         case (let s?, nil):
             return "Since: \(phaseDateFormatter.string(from: s))"
         case (nil, let e?):
             return "Until: \(phaseDateFormatter.string(from: e))"
-        case (let s?, let e?):
-            return "\(phaseDateFormatter.string(from: s)) – \(phaseDateFormatter.string(from: e))"
+        case (let _?, let e?):
+            return "Until: \(phaseDateFormatter.string(from: e))"
         }
     }
     
