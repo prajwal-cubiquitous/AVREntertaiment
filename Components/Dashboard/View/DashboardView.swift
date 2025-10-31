@@ -48,6 +48,7 @@ struct DashboardView: View {
     }
     
     @State private var allPhases: [PhaseSummary] = []
+    @State private var phaseEnabledMap: [String: Bool] = [:]
     
     // Permanent approver
     
@@ -662,6 +663,18 @@ struct DashboardView: View {
                                         .accessibilityLabel("Phase status: In Progress")
 
                                     if role == .ADMIN{
+                                        // Enable toggle
+                                        Toggle("", isOn: Binding(
+                                            get: { phaseEnabledMap[phase.id] ?? true },
+                                            set: { newValue in
+                                                phaseEnabledMap[phase.id] = newValue
+                                                updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                            }
+                                        ))
+                                        .labelsHidden()
+                                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                        .padding(.leading, 4)
+
                                         Button {
                                             HapticManager.selection()
                                             phaseForDepartmentAdd = phase
@@ -922,12 +935,30 @@ struct DashboardView: View {
                     let s = p.startDate.flatMap { phaseDateFormatter.date(from: $0) }
                     let e = p.endDate.flatMap { phaseDateFormatter.date(from: $0) }
                     collected.append(PhaseSummary(id: doc.documentID, name: p.phaseName, start: s, end: e, departments: p.departments))
+                    phaseEnabledMap[doc.documentID] = p.isEnabledValue
                 }
             }
             await MainActor.run { allPhases = collected }
         } catch {
             print("Error loading phases: \(error)")
         }
+    }
+
+    private func updatePhaseEnabled(phaseId: String, enabled: Bool) {
+        guard let projectId = project?.id else { return }
+        Firestore.firestore()
+            .collection(FirebaseCollections.projects)
+            .document(projectId)
+            .collection("phases")
+            .document(phaseId)
+            .updateData([
+                "isEnabled": enabled,
+                "updatedAt": Timestamp()
+            ]) { error in
+                if let error = error {
+                    print("Failed to update isEnabled: \(error.localizedDescription)")
+                }
+            }
     }
     
     // MARK: - Department Legend Row
@@ -1575,6 +1606,7 @@ private struct AllPhasesView: View {
     @State private var selectedDepartment: String? = nil
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
+    @State private var phaseEnabledMap: [String: Bool] = [:]
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -1652,6 +1684,28 @@ private struct AllPhasesView: View {
                                     .accessibilityLabel("Phase status: In Progress")
 
                                 if role == .ADMIN {
+                                    // Enable toggle
+                                    Toggle("", isOn: Binding(
+                                        get: { phaseEnabledMap[phase.id] ?? true },
+                                        set: { newValue in
+                                            phaseEnabledMap[phase.id] = newValue
+                                            if let projectId = project?.id {
+                                                Firestore.firestore()
+                                                    .collection(FirebaseCollections.projects)
+                                                    .document(projectId)
+                                                    .collection("phases")
+                                                    .document(phase.id)
+                                                    .updateData([
+                                                        "isEnabled": newValue,
+                                                        "updatedAt": Timestamp()
+                                                    ])
+                                            }
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                    .padding(.leading, 4)
+
                                     Button {
                                         HapticManager.selection()
                                         phaseForDepartmentAdd = phase

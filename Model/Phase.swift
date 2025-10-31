@@ -17,6 +17,7 @@ struct Phase: Identifiable, Codable {
     let endDate: String? // Format: "dd/MM/yyyy"
     let departments: [String: Double] // Departments with their budgets
     let categories: [String] // Categories for this phase
+    let isEnabled: Bool? // Whether this phase is enabled (default true)
     
     // Firestore Timestamps
     let createdAt: Timestamp
@@ -41,5 +42,8 @@ struct Phase: Identifiable, Codable {
         }
         return "\(start) - \(end)"
     }
+    
+    // Default to true when the field is absent in Firestore
+    var isEnabledValue: Bool { isEnabled ?? true }
 }
 

@@ -357,6 +357,7 @@ class CreateProjectViewModel: ObservableObject {
                         endDate: endDateStr,
                         departments: departmentsDict,
                         categories: phase.categories,
+                        isEnabled: true,
                         createdAt: Timestamp(),
                         updatedAt: Timestamp()
                     )
