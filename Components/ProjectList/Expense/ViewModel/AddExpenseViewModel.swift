@@ -11,6 +11,7 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Form Inputs
     @Published var expenseDate: Date = Date()
     @Published var amount: String = ""
+    @Published var selectedPhaseId: String = ""
     @Published var selectedDepartment: String = ""
     @Published var categories: [String] = [""]
     @Published var description: String = ""
@@ -28,7 +29,15 @@ class AddExpenseViewModel: ObservableObject {
     
     // MARK: - Project Data
     let project: Project
-    @Published var availableDepartments: [String] = []
+    @Published var availablePhases: [PhaseInfo] = []
+    
+    struct PhaseInfo: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let departments: [String]
+        let isEnabled: Bool
+        let canAddExpense: Bool // True if phase is in timeline and enabled
+    }
     
     // MARK: - Firebase References
     private let db = Firestore.firestore()
@@ -49,9 +58,14 @@ class AddExpenseViewModel: ObservableObject {
     var isFormValid: Bool {
         !amount.isEmpty &&
         amountValue > 0 &&
+        !selectedPhaseId.isEmpty &&
         !selectedDepartment.isEmpty &&
         !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !categories.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).isEmpty
+    }
+    
+    var selectedPhase: PhaseInfo? {
+        availablePhases.first { $0.id == selectedPhaseId }
     }
     
     var nonEmptyCategories: [String] {
@@ -61,7 +75,7 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Initialization
     init(project: Project) {
         self.project = project
-        loadDepartmentsFromPhases()
+        loadPhases()
     }
     
     // MARK: - Category Management
@@ -69,26 +83,74 @@ class AddExpenseViewModel: ObservableObject {
         categories.append("")
     }
 
-    // MARK: - Load Departments from Phases
-    private func loadDepartmentsFromPhases() {
+    // MARK: - Load Phases
+    private func loadPhases() {
         guard let projectId = project.id else { return }
         let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
-        phasesRef.getDocuments { [weak self] snapshot, error in
-            var departmentsSet = Set<String>()
+        phasesRef.order(by: "phaseNumber").getDocuments { [weak self] snapshot, error in
+            guard let self = self else { return }
+            var phasesList: [PhaseInfo] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let now = Date()
+            
             if let documents = snapshot?.documents {
                 for doc in documents {
                     if let phase = try? doc.data(as: Phase.self) {
-                        departmentsSet.formUnion(phase.departments.keys)
+                        // Check if phase is in timeline
+                        let startDate = phase.startDate.flatMap { dateFormatter.date(from: $0) }
+                        let endDate = phase.endDate.flatMap { dateFormatter.date(from: $0) }
+                        
+                        let isInTimeline: Bool = {
+                            switch (startDate, endDate) {
+                            case (nil, nil):
+                                return true // Always visible if no dates
+                            case (let s?, nil):
+                                return s <= now // Visible if start date passed
+                            case (nil, let e?):
+                                return now <= e // Visible if before end date
+                            case (let s?, let e?):
+                                return s <= now && now <= e // Visible if in range
+                            }
+                        }()
+                        
+                        let isEnabled = phase.isEnabledValue
+                        let canAddExpense = isInTimeline && isEnabled
+                        
+                        phasesList.append(PhaseInfo(
+                            id: doc.documentID,
+                            name: phase.phaseName,
+                            departments: Array(phase.departments.keys).sorted(),
+                            isEnabled: isEnabled,
+                            canAddExpense: canAddExpense
+                        ))
                     }
                 }
             }
-            let list = Array(departmentsSet).sorted()
+            
             DispatchQueue.main.async {
-                self?.availableDepartments = list
-                if self?.selectedDepartment.isEmpty == true, let first = list.first {
-                    self?.selectedDepartment = first
+                self.availablePhases = phasesList
+                // Auto-select first available phase that can add expense
+                if let firstAvailable = phasesList.first(where: { $0.canAddExpense }),
+                   self.selectedPhaseId.isEmpty {
+                    self.selectedPhaseId = firstAvailable.id
+                    if let firstDept = firstAvailable.departments.first {
+                        self.selectedDepartment = firstDept
+                    }
                 }
             }
+        }
+    }
+    
+    func updateDepartmentForPhase() {
+        guard let phase = selectedPhase else {
+            selectedDepartment = ""
+            return
+        }
+        
+        // If current department is not in selected phase, select first available
+        if !phase.departments.contains(selectedDepartment) {
+            selectedDepartment = phase.departments.first ?? ""
         }
     }
     
@@ -194,11 +256,14 @@ class AddExpenseViewModel: ObservableObject {
         
         isLoading = true
         
+        let phase = selectedPhase
         let expenseData: [String: Any] = [
             "projectId": projectId,
             "date": formatDate(expenseDate),
             "amount": amountValue,
             "department": selectedDepartment,
+            "phaseId": selectedPhaseId,
+            "phaseName": phase?.name ?? "",
             "categories": nonEmptyCategories,
             "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
             "modeOfPayment": selectedPaymentMode.rawValue,
@@ -246,10 +311,13 @@ class AddExpenseViewModel: ObservableObject {
         
         isLoading = true
         
+        let phase = selectedPhase
         var updateData: [String: Any] = [
             "date": formatDate(expenseDate),
             "amount": amountValue,
             "department": selectedDepartment,
+            "phaseId": selectedPhaseId,
+            "phaseName": phase?.name ?? "",
             "categories": nonEmptyCategories,
             "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
             "modeOfPayment": selectedPaymentMode.rawValue,
@@ -301,7 +369,11 @@ class AddExpenseViewModel: ObservableObject {
         attachmentName = nil
         uploadProgress = 0.0
         
-        // Keep selected department as is for convenience
+        // Reset phase and department to first available
+        if let firstAvailable = availablePhases.first(where: { $0.canAddExpense }) {
+            selectedPhaseId = firstAvailable.id
+            selectedDepartment = firstAvailable.departments.first ?? ""
+        }
     }
 }
 

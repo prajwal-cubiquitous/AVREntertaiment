@@ -9,6 +9,8 @@ struct Expense: Identifiable, Codable {
     let date: String // Format: "dd/MM/yyyy"
     let amount: Double
     let department: String
+    let phaseId: String? // Phase ID for phase-based expenses
+    let phaseName: String? // Phase name for phase-based expenses
     let categories: [String] // Array of category names
     let modeOfPayment: PaymentMode
     let description: String // Description of the expense
@@ -98,6 +100,8 @@ extension Expense {
             date: "15/04/2024",
             amount: 8000,
             department: "Costumes",
+            phaseId: "phase1",
+            phaseName: "Phase 1",
             categories: ["Wages & Crew Payments", "Equipment Rental"],
             modeOfPayment: .cash,
             description: "Costume rentals for lead actors and supporting cast",

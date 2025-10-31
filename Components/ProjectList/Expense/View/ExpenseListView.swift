@@ -137,10 +137,18 @@ struct ExpenseRowView: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(expense.department)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let phaseName = expense.phaseName {
+                            Text(phaseName)
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .fontWeight(.medium)
+                        }
+                        Text(expense.department)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                    }
                     
                     Spacer()
                     

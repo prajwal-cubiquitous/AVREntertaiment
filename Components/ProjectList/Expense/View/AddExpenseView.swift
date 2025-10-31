@@ -66,8 +66,13 @@ struct AddExpenseView: View {
                     .padding(.vertical, 4)
                 }
                 
+                // MARK: - Phase Selection
+                Section(header: Text("Phase Selection")) {
+                    phasePickerView
+                }
+                
                 // MARK: - Department Selection
-                Section(header: Text("Assignment")) {
+                Section(header: Text("Department Selection")) {
                     departmentPickerView
                 }
                 
@@ -122,6 +127,69 @@ struct AddExpenseView: View {
     }
     
     
+    // MARK: - Phase Picker
+    private var phasePickerView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Phase")
+                .font(.subheadline)
+                .foregroundColor(.primary)
+            
+            ForEach(viewModel.availablePhases) { phase in
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(action: {
+                        if phase.canAddExpense {
+                            viewModel.selectedPhaseId = phase.id
+                            viewModel.updateDepartmentForPhase()
+                        }
+                    }) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(phase.name)
+                                        .foregroundColor(phase.canAddExpense ? .primary : .secondary)
+                                        .fontWeight(.medium)
+                                    
+                                    if !phase.canAddExpense {
+                                        if !phase.isEnabled {
+                                            Image(systemName: "lock.fill")
+                                                .font(.caption)
+                                                .foregroundColor(.orange)
+                                        }
+                                        Image(systemName: "info.circle")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                
+                                if !phase.canAddExpense {
+                                    Text(phase.isEnabled ? "This phase is not in the current timeline" : "This phase is disabled")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            if phase.id == viewModel.selectedPhaseId {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.blue)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding()
+                        .background(phase.canAddExpense ? Color(UIColor.tertiarySystemFill) : Color(UIColor.systemGray6))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!phase.canAddExpense && phase.id != viewModel.selectedPhaseId)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
     // MARK: - Department Picker
     private var departmentPickerView: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -129,25 +197,33 @@ struct AddExpenseView: View {
                 .font(.subheadline)
                 .foregroundColor(.primary)
             
-            Menu {
-                ForEach(viewModel.availableDepartments, id: \.self) { department in
-                    Button(department) {
-                        viewModel.selectedDepartment = department
+            if let selectedPhase = viewModel.selectedPhase {
+                Menu {
+                    ForEach(selectedPhase.departments, id: \.self) { department in
+                        Button(department) {
+                            viewModel.selectedDepartment = department
+                        }
                     }
+                } label: {
+                    HStack {
+                        Text(viewModel.selectedDepartment.isEmpty ? "Select Department" : viewModel.selectedDepartment)
+                            .foregroundColor(viewModel.selectedDepartment.isEmpty ? .secondary : .primary)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(8)
                 }
-            } label: {
-                HStack {
-                    Text(viewModel.selectedDepartment.isEmpty ? "Select Department" : viewModel.selectedDepartment)
-                        .foregroundColor(viewModel.selectedDepartment.isEmpty ? .secondary : .primary)
-                        .fontWeight(.medium)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color(UIColor.tertiarySystemFill))
-                .cornerRadius(8)
+                .disabled(!selectedPhase.canAddExpense)
+            } else {
+                Text("Please select a phase first")
+                    .foregroundColor(.secondary)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.vertical, 4)
