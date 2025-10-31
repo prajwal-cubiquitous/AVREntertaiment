@@ -129,62 +129,78 @@ struct AddExpenseView: View {
     
     // MARK: - Phase Picker
     private var phasePickerView: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Phase")
                 .font(.subheadline)
                 .foregroundColor(.primary)
             
-            ForEach(viewModel.availablePhases) { phase in
-                VStack(alignment: .leading, spacing: 8) {
-                    Button(action: {
-                        if phase.canAddExpense {
-                            viewModel.selectedPhaseId = phase.id
-                            viewModel.updateDepartmentForPhase()
-                        }
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(phase.name)
-                                        .foregroundColor(phase.canAddExpense ? .primary : .secondary)
-                                        .fontWeight(.medium)
-                                    
-                                    if !phase.canAddExpense {
-                                        if !phase.isEnabled {
-                                            Image(systemName: "lock.fill")
-                                                .font(.caption)
-                                                .foregroundColor(.orange)
-                                        }
-                                        Image(systemName: "info.circle")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                
-                                if !phase.canAddExpense {
-                                    Text(phase.isEnabled ? "This phase is not in the current timeline" : "This phase is disabled")
+            Menu {
+                // Show only phases that can accept expenses
+                ForEach(viewModel.availablePhases.filter { $0.canAddExpense }) { phase in
+                    Button(phase.name) {
+                        viewModel.selectedPhaseId = phase.id
+                        viewModel.updateDepartmentForPhase()
+                    }
+                }
+                
+                // Show disabled/out-of-timeline phases at the bottom with indicators
+                let disabledPhases = viewModel.availablePhases.filter { !$0.canAddExpense }
+                if !disabledPhases.isEmpty {
+                    Divider()
+                    
+                    ForEach(disabledPhases) { phase in
+                        Button {
+                            // Do nothing - disabled
+                        } label: {
+                            HStack {
+                                Text(phase.name)
+                                Spacer()
+                                if !phase.isEnabled {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                } else {
+                                    Image(systemName: "info.circle")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
                             }
-                            
-                            Spacer()
-                            
-                            if phase.id == viewModel.selectedPhaseId {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.blue)
-                            } else {
-                                Image(systemName: "circle")
-                                    .foregroundColor(.secondary)
-                            }
                         }
-                        .padding()
-                        .background(phase.canAddExpense ? Color(UIColor.tertiarySystemFill) : Color(UIColor.systemGray6))
-                        .cornerRadius(8)
+                        .disabled(true)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!phase.canAddExpense && phase.id != viewModel.selectedPhaseId)
                 }
+            } label: {
+                HStack {
+                    if let selectedPhase = viewModel.selectedPhase {
+                        Text(selectedPhase.name)
+                            .foregroundColor(.primary)
+                            .fontWeight(.medium)
+                    } else {
+                        Text("Select Phase")
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+                .background(Color(UIColor.tertiarySystemFill))
+                .cornerRadius(8)
+            }
+            
+            // Show info about disabled phases if selected phase is not available
+            if let selectedPhase = viewModel.selectedPhase, !selectedPhase.canAddExpense {
+                HStack(spacing: 6) {
+                    Image(systemName: selectedPhase.isEnabled ? "info.circle" : "lock.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                    Text(selectedPhase.isEnabled ? "This phase is not in the current timeline" : "This phase is disabled")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.top, 4)
             }
         }
         .padding(.vertical, 4)
