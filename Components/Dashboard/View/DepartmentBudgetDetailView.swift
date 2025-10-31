@@ -135,33 +135,35 @@ struct DepartmentBudgetDetailView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button(role: .none) {
-                            showingEditBudget = true
-                        } label: {
-                            Label("Edit Budget", systemImage: "pencil")
-                        }
-                        
-                        Button(role: .destructive) {
-                            Task {
-                                let isOnlyDepartment = await viewModel.isOnlyDepartmentInAnyPhase(
-                                    department: department,
-                                    projectId: projectId
-                                )
-                                await MainActor.run {
-                                    if isOnlyDepartment {
-                                        showingOnlyDepartmentAlert = true
-                                    } else {
-                                        showingDeleteConfirmation = true
+                    if role == .ADMIN{
+                        Menu {
+                            Button(role: .none) {
+                                showingEditBudget = true
+                            } label: {
+                                Label("Edit Budget", systemImage: "pencil")
+                            }
+                            
+                            Button(role: .destructive) {
+                                Task {
+                                    let isOnlyDepartment = await viewModel.isOnlyDepartmentInAnyPhase(
+                                        department: department,
+                                        projectId: projectId
+                                    )
+                                    await MainActor.run {
+                                        if isOnlyDepartment {
+                                            showingOnlyDepartmentAlert = true
+                                        } else {
+                                            showingDeleteConfirmation = true
+                                        }
                                     }
                                 }
+                            } label: {
+                                Label("Delete Department", systemImage: "trash")
                             }
                         } label: {
-                            Label("Delete Department", systemImage: "trash")
+                            Image(systemName: "ellipsis.circle")
+                                .foregroundColor(.accentColor)
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundColor(.accentColor)
                     }
                 }
             }
