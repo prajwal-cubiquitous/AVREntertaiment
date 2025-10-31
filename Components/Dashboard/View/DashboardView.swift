@@ -585,11 +585,22 @@ struct DashboardView: View {
                     Text("No phases to show")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
+                    
+                    Button(action: {
+                        HapticManager.selection()
+                        showingAllPhases = true
+                    }) {
+                        Text("View All Phases")
+                            .font(DesignSystem.Typography.callout)
+                            .fontWeight(.semibold)
+                    }
+                    .secondaryButton()
                 }
                 .frame(maxWidth: .infinity)
                 .padding(DesignSystem.Spacing.large)
                 .background(Color(.secondarySystemGroupedBackground))
                 .cornerRadius(DesignSystem.CornerRadius.medium)
+            
             } else {
                 VStack(spacing: DesignSystem.Spacing.medium) {
                     ForEach(filteredCurrentPhases, id: \.id) { phase in
@@ -604,7 +615,6 @@ struct DashboardView: View {
                                         .font(DesignSystem.Typography.caption1)
                                         .foregroundColor(.secondary)
                                 }
-                                Spacer()
                             }
                             
                             // Horizontal departments scroller (cell style) with scroll hint
@@ -802,6 +812,9 @@ struct DashboardView: View {
             if let s = phase.start, let e = phase.end {
                 return s <= now && now <= e
             }
+            else if let s = phase.start{
+                return s <= now
+            }
             // If dates missing, treat as not current
             return false
         }
@@ -835,7 +848,7 @@ struct DashboardView: View {
         // Use max of totalBudget and approvedBudget for calculation to include "Other Expenses"
         let totalBudget = viewModel.departmentBudgets.reduce(0) { $0 + max($1.totalBudget, $1.approvedBudget) }
         let budgetValue = max(budget.totalBudget, budget.approvedBudget)
-        let percentage = Int((budgetValue / totalBudget) * 100)
+        let percentage = totalBudget != 0 ? Int((budgetValue / totalBudget) * 100) : 0
         
         return HStack(spacing: DesignSystem.Spacing.medium) {
             // Color indicator with enhanced styling

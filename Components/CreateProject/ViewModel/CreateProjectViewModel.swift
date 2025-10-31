@@ -14,7 +14,7 @@ import Combine
 struct DepartmentItem: Identifiable {
     let id = UUID()
     var name: String = ""
-    var amount: String = "" // Use String for TextField, convert to Double later
+    var amount: String = "0" // Use String for TextField, convert to Double later
 }
 
 struct PhaseItem: Identifiable {
@@ -144,8 +144,8 @@ class CreateProjectViewModel: ObservableObject {
                 return false
             }
             
-            // At least one department required
-            if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.isEmpty || (Double($0.amount) ?? 0) <= 0 }) {
+            // At least one department with a name required (budget can be 0)
+            if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
                 return false
             }
             

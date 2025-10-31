@@ -584,12 +584,22 @@ private struct DepartmentInputRow: View {
                         .multilineTextAlignment(.trailing)
                         .textFieldStyle(.plain)
                         .frame(width: 100)
+                        .onSubmit {
+                            if item.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                item.amount = "0"
+                            }
+                        }
                 }
             }
             
             Divider()
         }
         .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .onAppear {
+            if item.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                item.amount = "0"
+            }
+        }
     }
 }
 
