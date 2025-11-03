@@ -35,6 +35,23 @@ struct AdminProjectDetailView: View {
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
+        .toolbar {
+            if viewModel.canDeleteProject {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button(role: .destructive, action: {
+                            HapticManager.selection()
+                            viewModel.showDeleteConfirmation = true
+                        }) {
+                            Label("Delete Project", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+        }
         .alert("Error", isPresented: $viewModel.showError) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -44,6 +61,19 @@ struct AdminProjectDetailView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Project updated successfully")
+        }
+        .alert("Delete Project", isPresented: $viewModel.showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                viewModel.showDeleteConfirmation = false
+            }
+            Button("Delete", role: .destructive) {
+                viewModel.deleteProject()
+            }
+        } message: {
+            Text("Are you sure you want to delete this project? This action cannot be undone.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectDeleted"))) { _ in
+            dismiss()
         }
     }
     

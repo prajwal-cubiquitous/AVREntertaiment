@@ -3,6 +3,7 @@ import Foundation
 import FirebaseFirestore
 
 enum ProjectStatus: String, Codable, CaseIterable {
+    case DRAFT
     case ACTIVE
     case INACTIVE
     case COMPLETED

@@ -63,6 +63,9 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var showSuccess = false
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var expensesCount: Int = 0
+    @Published var showDeleteConfirmation = false
+    @Published var isDeleting = false
     
     let project: Project
     private let db = Firestore.firestore()
@@ -100,6 +103,7 @@ class AdminProjectDetailViewModel: ObservableObject {
         Task {
             await fetchUsers()
             await fetchTempApprover()
+            await checkExpensesCount()
         }
     }
     
@@ -499,6 +503,68 @@ class AdminProjectDetailViewModel: ObservableObject {
             } catch {
                 errorMessage = "Failed to save temporary approver: \(error.localizedDescription)"
                 showError = true
+            }
+        }
+    }
+    
+    // MARK: - Expenses Count Check
+    
+    func checkExpensesCount() async {
+        guard let projectId = project.id else { return }
+        
+        do {
+            let expensesSnapshot = try await db.collection("projects_ios1")
+                .document(projectId)
+                .collection("expenses")
+                .getDocuments()
+            
+            await MainActor.run {
+                self.expensesCount = expensesSnapshot.documents.count
+            }
+        } catch {
+            print("Error checking expenses count: \(error)")
+        }
+    }
+    
+    // MARK: - Delete Project
+    
+    var canDeleteProject: Bool {
+        project.statusType == .DRAFT && expensesCount == 0
+    }
+    
+    func deleteProject() {
+        guard let projectId = project.id else {
+            errorMessage = "Project ID not found."
+            showError = true
+            return
+        }
+        
+        isDeleting = true
+        
+        Task {
+            do {
+                // Delete the project document from projects_ios1 collection
+                try await db.collection("projects_ios1")
+                    .document(projectId)
+                    .delete()
+                
+                // Also delete all subcollections (phases, expenses, etc.) if they exist
+                // Firestore doesn't automatically delete subcollections, but for now we'll just delete the main document
+                // The subcollections will remain but won't be accessible without the parent document
+                
+                await MainActor.run {
+                    self.isDeleting = false
+                    self.showDeleteConfirmation = false
+                    
+                    // Notify that project was deleted
+                    NotificationCenter.default.post(name: NSNotification.Name("ProjectDeleted"), object: projectId)
+                }
+            } catch {
+                await MainActor.run {
+                    self.isDeleting = false
+                    self.errorMessage = "Failed to delete project: \(error.localizedDescription)"
+                    self.showError = true
+                }
             }
         }
     }

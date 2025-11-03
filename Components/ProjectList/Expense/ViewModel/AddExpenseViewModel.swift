@@ -256,43 +256,65 @@ class AddExpenseViewModel: ObservableObject {
         
         isLoading = true
         
-        let phase = selectedPhase
-        let expenseData: [String: Any] = [
-            "projectId": projectId,
-            "date": formatDate(expenseDate),
-            "amount": amountValue,
-            "department": selectedDepartment,
-            "phaseId": selectedPhaseId,
-            "phaseName": phase?.name ?? "",
-            "categories": nonEmptyCategories,
-            "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
-            "modeOfPayment": selectedPaymentMode.rawValue,
-            "attachmentURL": attachmentURL as Any,
-            "attachmentName": attachmentName as Any,
-            "submittedBy": "\(currentUserPhone)",
-            "status": ExpenseStatus.pending.rawValue,
-            "createdAt": Timestamp(),
-            "updatedAt": Timestamp()
-        ]
-        
-        // Store in subcollection: projects_ios1/{projectId}/expenses/{expenseId}
-        db.collection("projects_ios1")
-            .document(projectId)
-            .collection("expenses")
-            .addDocument(data: expenseData) { [weak self] error in
+        Task {
+            do {
+                let phase = selectedPhase
+                let expenseData: [String: Any] = [
+                    "projectId": projectId,
+                    "date": formatDate(expenseDate),
+                    "amount": amountValue,
+                    "department": selectedDepartment,
+                    "phaseId": selectedPhaseId,
+                    "phaseName": phase?.name ?? "",
+                    "categories": nonEmptyCategories,
+                    "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "modeOfPayment": selectedPaymentMode.rawValue,
+                    "attachmentURL": attachmentURL as Any,
+                    "attachmentName": attachmentName as Any,
+                    "submittedBy": "\(currentUserPhone)",
+                    "status": ExpenseStatus.pending.rawValue,
+                    "createdAt": Timestamp(),
+                    "updatedAt": Timestamp()
+                ]
                 
-                DispatchQueue.main.async {
-                    self?.isLoading = false
+                // Store in subcollection: projects_ios1/{projectId}/expenses/{expenseId}
+                try await db.collection("projects_ios1")
+                    .document(projectId)
+                    .collection("expenses")
+                    .addDocument(data: expenseData)
+                
+                // Check if project is DRAFT and has 0 expenses (this is the first expense)
+                // Check the expenses count before adding this expense
+                let expensesSnapshot = try await db.collection("projects_ios1")
+                    .document(projectId)
+                    .collection("expenses")
+                    .getDocuments()
+                
+                // If project is DRAFT and this is the first expense (count == 1 after adding)
+                if project.statusType == .DRAFT && expensesSnapshot.documents.count == 1 {
+                    // Update project status to ACTIVE
+                    try await db.collection("projects_ios1")
+                        .document(projectId)
+                        .updateData(["status": ProjectStatus.ACTIVE.rawValue])
                     
-                    if let error = error {
-                        self?.alertMessage = "Error submitting expense: \(error.localizedDescription)"
-                    } else {
-                        self?.alertMessage = "Expense submitted successfully for approval!"
-                        self?.resetForm()
-                    }
-                    self?.showAlert = true
+                    // Notify that project was updated
+                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                }
+                
+                await MainActor.run {
+                    self.isLoading = false
+                    self.alertMessage = "Expense submitted successfully for approval!"
+                    self.resetForm()
+                    self.showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.alertMessage = "Error submitting expense: \(error.localizedDescription)"
+                    self.showAlert = true
                 }
             }
+        }
     }
     
     // MARK: - Update Expense

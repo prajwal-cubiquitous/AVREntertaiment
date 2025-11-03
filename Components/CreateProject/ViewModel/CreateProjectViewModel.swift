@@ -321,7 +321,7 @@ class CreateProjectViewModel: ObservableObject {
                     location: location,
                     currency: currency,
                     budget: totalBudget,
-                    status: ProjectStatus.ACTIVE.rawValue,
+                    status: ProjectStatus.DRAFT.rawValue,
                     startDate: nil, // Removed from main project
                     endDate: nil, // Removed from main project
                     teamMembers: Array(allTeamMembers),
