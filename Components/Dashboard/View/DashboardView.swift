@@ -695,7 +695,7 @@ struct DashboardView: View {
                             
                             // Horizontal departments scroller (cell style) with scroll hint
                             ZStack(alignment: .leading) {
-                                ScrollView(.horizontal, showsIndicators: false) {
+                                ScrollView(.horizontal, showsIndicators: true) {
                                     HStack(spacing: DesignSystem.Spacing.medium) {
                                         ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
                                             DepartmentMiniCard(
@@ -713,6 +713,8 @@ struct DashboardView: View {
                                     }
                                     .padding(.vertical, 6)
                                 }
+                                .scrollIndicators(.visible)
+                                .scrollIndicatorsFlash(onAppear: false)
                                 // Left scroll hint
                                 HStack {
                                     Image(systemName: "chevron.right")
@@ -1770,7 +1772,7 @@ private struct AllPhasesView: View {
                                         .stroke(Color(.systemGray5), lineWidth: 0.5)
                                 )
                             // Horizontal scroller
-                            ScrollView(.horizontal, showsIndicators: false) {
+                            ScrollView(.horizontal, showsIndicators: true) {
                                 HStack(spacing: 12) {
                                     ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
                                         DepartmentMiniCard(
@@ -1789,6 +1791,8 @@ private struct AllPhasesView: View {
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
                             }
+                            .scrollIndicators(.visible)
+                            .scrollIndicatorsFlash(onAppear: false)
                             // Scroll hint (left chevron) to indicate horizontal scroll
                             HStack { 
                                 Image(systemName: "chevron.right")
