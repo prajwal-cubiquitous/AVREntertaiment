@@ -1653,6 +1653,32 @@ private struct AllPhasesView: View {
         }
     }
     
+    private func loadPhaseEnabledStates() {
+        guard let projectId = project?.id else { return }
+        Task {
+            do {
+                let snapshot = try await Firestore.firestore()
+                    .collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("phases")
+                    .getDocuments()
+                
+                var enabledMap: [String: Bool] = [:]
+                for doc in snapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        enabledMap[doc.documentID] = phase.isEnabledValue
+                    }
+                }
+                
+                await MainActor.run {
+                    phaseEnabledMap = enabledMap
+                }
+            } catch {
+                print("Error loading phase enabled states: \(error.localizedDescription)")
+            }
+        }
+    }
+    
     var body: some View {
         List {
             ForEach(phases) { phase in
@@ -1692,45 +1718,45 @@ private struct AllPhasesView: View {
                                     .background(Color.green.opacity(0.12))
                                     .clipShape(Capsule())
                                     .accessibilityLabel("Phase status: In Progress")
+                            }
 
-                                if role == .ADMIN {
-                                    // Enable toggle
-                                    Toggle("", isOn: Binding(
-                                        get: { phaseEnabledMap[phase.id] ?? true },
-                                        set: { newValue in
-                                            phaseEnabledMap[phase.id] = newValue
-                                            if let projectId = project?.id {
-                                                Firestore.firestore()
-                                                    .collection(FirebaseCollections.projects)
-                                                    .document(projectId)
-                                                    .collection("phases")
-                                                    .document(phase.id)
-                                                    .updateData([
-                                                        "isEnabled": newValue,
-                                                        "updatedAt": Timestamp()
-                                                    ])
-                                            }
+                            if role == .ADMIN {
+                                // Enable toggle (always visible in All Phases for admins)
+                                Toggle("", isOn: Binding(
+                                    get: { phaseEnabledMap[phase.id] ?? false },
+                                    set: { newValue in
+                                        phaseEnabledMap[phase.id] = newValue
+                                        if let projectId = project?.id {
+                                            Firestore.firestore()
+                                                .collection(FirebaseCollections.projects)
+                                                .document(projectId)
+                                                .collection("phases")
+                                                .document(phase.id)
+                                                .updateData([
+                                                    "isEnabled": newValue,
+                                                    "updatedAt": Timestamp()
+                                                ])
                                         }
-                                    ))
-                                    .labelsHidden()
-                                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                    .scaleEffect(0.85)
-                                    .padding(.leading, 6)
-
-                                    Button {
-                                        HapticManager.selection()
-                                        phaseForDepartmentAdd = phase
-                                        showingAddDepartment = true
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.accentColor)
-                                            .accessibilityLabel("Add department to this phase")
                                     }
-                                    .buttonStyle(.plain)
-                                    .padding(.leading, 6)
-                                    .padding(.vertical, 2)
+                                ))
+                                .labelsHidden()
+                                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                .scaleEffect(0.85)
+                                .padding(.leading, 6)
+
+                                Button {
+                                    HapticManager.selection()
+                                    phaseForDepartmentAdd = phase
+                                    showingAddDepartment = true
+                                } label: {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.accentColor)
+                                        .accessibilityLabel("Add department to this phase")
                                 }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 6)
+                                .padding(.vertical, 2)
                             }
                         }
                         
@@ -1787,6 +1813,9 @@ private struct AllPhasesView: View {
         .listSectionSpacing(.custom(8))
         .navigationTitle("All Phases")
         .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            loadPhaseEnabledStates()
+        }
         .sheet(isPresented: $showingDepartmentDetail) {
             if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {
                 DepartmentBudgetDetailView(

@@ -87,7 +87,7 @@ class ProjectListViewModel: ObservableObject {
                 print("🔍 Querying as USER - Looking for teamMember: \(cleanPhone)")
                 query = projectsRef
                     .whereField("teamMembers", arrayContains: cleanPhone)
-                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
+//                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
                 
             case .APPROVER:
                 print("🔍 Querying as APPROVER - Looking for managerIds contains: \(cleanPhone)")
