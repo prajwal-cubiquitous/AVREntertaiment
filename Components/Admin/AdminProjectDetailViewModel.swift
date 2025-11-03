@@ -9,7 +9,6 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var projectStatus: String
     @Published var startDate: Date
     @Published var endDate: Date
-    @Published var departments: [DepartmentItem]
     @Published var teamMembers: [String]
     @Published var managerName: String
     @Published var tempApproverID: String?
@@ -19,36 +18,11 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var tempApproverName: String?
     @Published var showingTempApproverSheet = false
     
-    // Temporary departments for editing
-    @Published var tempDepartments: [DepartmentItem] = []
-    
-    // Computed total budget from departments
-    var totalBudget: Double {
-        departments.reduce(0) { sum, department in
-            sum + (Double(department.amount) ?? 0)
-        }
-    }
-    
-    // Computed total budget from temp departments (for preview while editing)
-    var tempTotalBudget: Double {
-        tempDepartments.reduce(0) { sum, department in
-            sum + (Double(department.amount) ?? 0)
-        }
-    }
-    
     // Edit States
     @Published var isEditingName = false
     @Published var isEditingDescription = false
     @Published var isEditingDates = false
     @Published var isEditingTeam = false
-    @Published var isEditingDepartments = false {
-        didSet {
-            if isEditingDepartments {
-                // When starting to edit, copy departments to temp
-                tempDepartments = departments
-            }
-        }
-    }
     
     // Team Selection
     @Published var approverSearchText = ""
@@ -94,8 +68,6 @@ class AdminProjectDetailViewModel: ObservableObject {
             self.endDate = Date().addingTimeInterval(86400 * 30)
         }
         
-        // Project no longer maintains departments; keep empty for admin editing UI
-        self.departments = []
         self.teamMembers = project.teamMembers
         self.managerName = project.managerIds.first ?? ""
         self.tempApproverID = project.tempApproverID
@@ -337,91 +309,6 @@ class AdminProjectDetailViewModel: ObservableObject {
         }
     }
     
-    func updateProjectDepartments() {
-        Task {
-            do {
-                // Get current department names
-                let currentDepartmentNames = Set(departments.map { $0.name })
-                let newDepartmentNames = Set(tempDepartments.map { $0.name })
-                
-                // Find deleted departments
-                let deletedDepartments = currentDepartmentNames.subtracting(newDepartmentNames)
-                
-                // Move expenses from deleted departments to anonymous
-                if !deletedDepartments.isEmpty {
-                    await moveExpensesToAnonymous(departments: Array(deletedDepartments))
-                }
-                
-                let departmentsDict = Dictionary(
-                    uniqueKeysWithValues: tempDepartments.map { ($0.name, Double($0.amount) ?? 0) }
-                )
-                
-                let data: [String: Any] = [
-                    "departments": departmentsDict,
-                    "budget": tempTotalBudget
-                ]
-                
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
-                    .updateData(data)
-                
-                // Only update the actual departments after successful save
-                departments = tempDepartments
-                isEditingDepartments = false
-                showSuccess = true
-                
-                // Notify that project was updated
-                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
-            } catch {
-                errorMessage = "Failed to update departments: \(error.localizedDescription)"
-                showError = true
-            }
-        }
-    }
-    
-    // MARK: - Anonymous Department Management
-    
-    private func moveExpensesToAnonymous(departments: [String]) async {
-        guard let projectId = project.id else { return }
-        
-        for departmentName in departments {
-            do {
-                // Find all expenses in this department
-                let expensesSnapshot = try await db.collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("expenses")
-                    .whereField("department", isEqualTo: departmentName)
-                    .getDocuments()
-                
-                // Update each expense to be anonymous
-                let batch = db.batch()
-                let currentTime = Timestamp()
-                
-                for expenseDoc in expensesSnapshot.documents {
-                    let expenseRef = db.collection(FirebaseCollections.projects)
-                        .document(projectId)
-                        .collection("expenses")
-                        .document(expenseDoc.documentID)
-                    
-                    batch.updateData([
-                        "department": "Anonymous Department",
-                        "isAnonymous": true,
-                        "originalDepartment": departmentName,
-                        "departmentDeletedAt": currentTime,
-                        "updatedAt": currentTime
-                    ], forDocument: expenseRef)
-                }
-                
-                try await batch.commit()
-                print("✅ Moved \(expensesSnapshot.documents.count) expenses from '\(departmentName)' to Anonymous Department")
-                
-            } catch {
-                print("❌ Error moving expenses from '\(departmentName)' to anonymous: \(error)")
-                errorMessage = "Failed to move expenses from deleted department '\(departmentName)': \(error.localizedDescription)"
-                showError = true
-            }
-        }
-    }
-    
     // MARK: - Team Management
     
     func selectApprover(_ user: User) {
@@ -436,33 +323,6 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func removeTeamMember(_ user: User) {
         selectedTeamMembers.remove(user)
-    }
-    
-    // MARK: - Department Management
-    
-    func addDepartment() {
-        tempDepartments.append(DepartmentItem())
-    }
-    
-    func removeDepartment(_ department: DepartmentItem) {
-        tempDepartments.removeAll { $0.id == department.id }
-    }
-    
-    func updateDepartmentAmount(_ department: DepartmentItem, amount: String) {
-        if let index = tempDepartments.firstIndex(where: { $0.id == department.id }) {
-            tempDepartments[index].amount = amount
-        }
-    }
-    
-    func updateDepartmentName(_ department: DepartmentItem, name: String) {
-        if let index = tempDepartments.firstIndex(where: { $0.id == department.id }) {
-            tempDepartments[index].name = name
-        }
-    }
-    
-    func cancelDepartmentEditing() {
-        tempDepartments = departments
-        isEditingDepartments = false
     }
     
     // MARK: - Temporary Approver Methods

@@ -25,9 +25,6 @@ struct AdminProjectDetailView: View {
                 
                 // Team Management Section
                 teamSection
-                
-                // Departments & Budget Section
-                departmentsSection
             }
             .padding(.horizontal)
             .padding(.top, DesignSystem.Spacing.small)
@@ -308,99 +305,13 @@ struct AdminProjectDetailView: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-    }
-    
-    // MARK: - Departments Section
-    private var departmentsSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            ModernSectionHeader(
-                title: "Budget & Departments",
-                icon: "building.columns.fill",
-                isEditing: $viewModel.isEditingDepartments
+        .sheet(isPresented: $viewModel.showingTempApproverSheet) {
+            TempApproverSheet(
+                allApprovers: viewModel.allApprovers,
+                isInitialAssignment: viewModel.project.tempApproverID == nil,
+                onSet: viewModel.setTempApprover
             )
-            
-            if viewModel.isEditingDepartments {
-                VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Department Editor
-                    ForEach($viewModel.tempDepartments) { $dept in
-                        DepartmentEditCard(
-                            department: $dept,
-                            onRemove: { viewModel.removeDepartment(dept) }
-                        )
-                    }
-                    
-                    // Add Department Button
-                    Button {
-                        HapticManager.selection()
-                        viewModel.addDepartment()
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.blue)
-                            
-                            Text("Add Department")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.blue)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-                    }
-                    
-                    // Total Budget Preview
-                    BudgetSummaryCard(
-                        title: "Total Budget (Preview)",
-                        amount: viewModel.tempTotalBudget,
-                        isPreview: true
-                    )
-                    
-                    // Action Buttons
-                    HStack(spacing: DesignSystem.Spacing.medium) {
-                        ModernActionButton(
-                            title: "Cancel",
-                            icon: "xmark.circle.fill",
-                            color: .gray,
-                            action: viewModel.cancelDepartmentEditing
-                        )
-                        
-                        ModernActionButton(
-                            title: "Save Changes",
-                            icon: "checkmark.circle.fill",
-                            color: .green,
-                            action: viewModel.updateProjectDepartments
-                        )
-                    }
-                }
-            } else {
-                VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Department List
-                    ForEach(Array(viewModel.departments.enumerated()), id: \.offset) { _, dept in
-                        DepartmentDisplayCard(department: dept)
-                    }
-                    
-                    // Total Budget
-                    BudgetSummaryCard(
-                        title: "Total Project Budget",
-                        amount: viewModel.totalBudget,
-                        isPreview: false
-                    )
-                }
-            }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-        .padding(.bottom, DesignSystem.Spacing.large)
-       .sheet(isPresented: $viewModel.showingTempApproverSheet) {
-           TempApproverSheet(
-               allApprovers: viewModel.allApprovers,
-               isInitialAssignment: viewModel.project.tempApproverID == nil,
-               onSet: viewModel.setTempApprover
-           )
-       }
     }
     
 }
@@ -787,123 +698,6 @@ struct TeamMembersListCard: View {
         .padding()
         .background(Color(.tertiarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-    }
-}
-
-struct DepartmentEditCard: View {
-    @Binding var department: DepartmentItem
-    let onRemove: () -> Void
-    
-    var body: some View {
-        HStack(spacing: DesignSystem.Spacing.medium) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text("Department")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                
-                TextField("e.g., Marketing", text: $department.name)
-                    .font(.subheadline)
-                    .padding(.horizontal, DesignSystem.Spacing.small)
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                    .background(Color(.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
-            }
-            
-            VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
-                Text("Budget")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                
-                TextField("₹0", text: $department.amount)
-                    .font(.subheadline.weight(.medium))
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, DesignSystem.Spacing.small)
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                    .background(Color(.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
-            }
-            
-            Button {
-                HapticManager.selection()
-                onRemove()
-            } label: {
-                Image(systemName: "minus.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.red)
-            }
-        }
-        .padding()
-        .background(Color(.tertiarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-    }
-}
-
-struct DepartmentDisplayCard: View {
-    let department: DepartmentItem
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "building.2.fill")
-                .font(.subheadline)
-                .foregroundStyle(.blue)
-            
-            Text(department.name)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.primary)
-            
-            Spacer()
-            
-            Text("₹\(department.amount)")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.primary)
-        }
-        .padding()
-        .background(Color(.quaternarySystemFill))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-    }
-}
-
-struct BudgetSummaryCard: View {
-    let title: String
-    let amount: Double
-    let isPreview: Bool
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "indianrupeesign.circle.fill")
-                .font(.title2)
-                .foregroundStyle(isPreview ? .orange : .green)
-            
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text(title)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-                
-                Text("₹\(String(format: "%.2f", amount))")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
-            }
-            
-            Spacer()
-            
-            if isPreview {
-                Text("PREVIEW")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, DesignSystem.Spacing.small)
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                    .background(Color.orange.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
-            }
-        }
-        .padding()
-        .background(isPreview ? Color.orange.opacity(0.05) : Color.green.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
-                .stroke(isPreview ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
-        )
     }
 }
 
