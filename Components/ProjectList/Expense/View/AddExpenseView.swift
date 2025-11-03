@@ -265,24 +265,59 @@ struct AddExpenseView: View {
     }
     
     private var categoriesView: some View {
-        ForEach(Array(viewModel.categories.enumerated()), id: \.offset) { index, category in
-            HStack {
-                TextField("Enter category name", text: $viewModel.categories[index])
-                    .textFieldStyle(.roundedBorder)
-                
-                if viewModel.categories.count > 1 {
-                    Button(action: { 
+        ForEach(Array(viewModel.categories.enumerated()), id: \.offset) { index, _ in
+            VStack(alignment: .leading, spacing: 8) {
+                // Category Dropdown
+                CategorySearchableDropdown(
+                    selectedCategory: Binding(
+                        get: { 
+                            (index >= 0 && index < viewModel.categories.count) ? viewModel.categories[index] : ""
+                        },
+                        set: { newValue in
+                            if index < viewModel.categories.count {
+                                viewModel.selectCategory(newValue, at: index)
+                            }
+                        }
+                    ),
+                    searchText: Binding(
+                        get: { viewModel.categorySearchTexts[index] ?? "" },
+                        set: { newValue in
+                            viewModel.categorySearchTexts[index] = newValue
+                        }
+                    ),
+                    filteredCategories: viewModel.filteredCategories(for: index),
+                    index: index,
+                    onSelect: { category in
+                        viewModel.selectCategory(category, at: index)
+                    },
+                    showRemoveButton: viewModel.categories.count > 1,
+                    onRemove: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             viewModel.removeCategory(at: index)
                         }
-                    }) {
-                        Image(systemName: "minus.circle.fill")
-                            .foregroundColor(.red)
-                            .font(.title3)
                     }
+                )
+                
+                // Show custom name field if "Misc / Other" is selected
+                if index >= 0 && index < viewModel.categories.count && viewModel.categories[index] == "Misc / Other (notes required)" {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Custom Category Name")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TextField("Enter custom category name", text: Binding(
+                            get: { viewModel.categoryCustomNames[index] ?? "" },
+                            set: { newValue in
+                                viewModel.setCategoryCustomName(newValue, at: index)
+                            }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.subheadline)
+                    }
+                    .padding(.leading, 8)
+                    .padding(.top, 4)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
         }
     }
     
@@ -432,6 +467,104 @@ struct DocumentPicker: UIViewControllerRepresentable {
         
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             // Handle cancellation if needed
+        }
+    }
+}
+
+// MARK: - Category Searchable Dropdown
+struct CategorySearchableDropdown: View {
+    @Binding var selectedCategory: String
+    @Binding var searchText: String
+    let filteredCategories: [String]
+    let index: Int
+    let onSelect: (String) -> Void
+    let showRemoveButton: Bool
+    let onRemove: () -> Void
+    @State private var showDropdown = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                // Search Text Field / Display
+                if selectedCategory.isEmpty || showDropdown {
+                    TextField("Search or select category", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .onTapGesture {
+                            showDropdown = true
+                        }
+                        .onChange(of: searchText) { _ in
+                            showDropdown = !searchText.isEmpty || selectedCategory.isEmpty
+                        }
+                } else {
+                    // Show selected category as a chip
+                    HStack {
+                        Text(selectedCategory)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color(.tertiarySystemFill))
+                        .cornerRadius(8)
+                        .onTapGesture {
+                            showDropdown = true
+                            searchText = ""
+                        }
+                    }
+                
+                if showRemoveButton {
+                    Button(action: onRemove) {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundColor(.red)
+                            .font(.title3)
+                    }
+                }
+            }
+            
+            // Dropdown List
+            if showDropdown && !filteredCategories.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(filteredCategories, id: \.self) { category in
+                            Button(action: {
+                                onSelect(category)
+                                searchText = ""
+                                showDropdown = false
+                            }) {
+                                HStack {
+                                    Text(category)
+                                        .foregroundColor(.primary)
+                                        .font(.subheadline)
+                                    Spacer()
+                                    if selectedCategory == category {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                            .font(.caption)
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 12)
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color(.systemGray4), lineWidth: 1)
+                )
+                .transition(.opacity)
+            }
+        }
+        .onAppear {
+            if !selectedCategory.isEmpty {
+                showDropdown = false
+            }
         }
     }
 }

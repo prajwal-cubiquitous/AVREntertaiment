@@ -163,8 +163,19 @@ struct EditExpenseView: View {
         viewModel.selectedDepartment = expense.department
         viewModel.updateDepartmentForPhase()
         
-        // Set categories
-        viewModel.categories = expense.categories
+        // Set categories and check for "Misc / Other" custom names
+        viewModel.categories = expense.categories.isEmpty ? [""] : expense.categories
+        // Initialize search texts for all categories
+        for index in 0..<viewModel.categories.count {
+            viewModel.categorySearchTexts[index] = ""
+            // Check if any category is a custom name (not in predefined list)
+            let category = viewModel.categories[index]
+            if !AddExpenseViewModel.predefinedCategories.contains(category) && category != "" {
+                // This is a custom category, treat it as "Misc / Other"
+                viewModel.categories[index] = "Misc / Other (notes required)"
+                viewModel.categoryCustomNames[index] = category
+            }
+        }
         
         // Set payment mode
         viewModel.selectedPaymentMode = expense.modeOfPayment
@@ -314,24 +325,59 @@ struct EditExpenseView: View {
     }
     
     private var categoriesView: some View {
-        ForEach(Array(viewModel.categories.enumerated()), id: \.offset) { index, category in
-            HStack {
-                TextField("Enter category name", text: $viewModel.categories[index])
-                    .textFieldStyle(.roundedBorder)
-                
-                if viewModel.categories.count > 1 {
-                    Button(action: { 
+        ForEach(Array(viewModel.categories.enumerated()), id: \.offset) { index, _ in
+            VStack(alignment: .leading, spacing: 8) {
+                // Category Dropdown
+                CategorySearchableDropdown(
+                    selectedCategory: Binding(
+                        get: { 
+                            (index >= 0 && index < viewModel.categories.count) ? viewModel.categories[index] : ""
+                        },
+                        set: { newValue in
+                            if index < viewModel.categories.count {
+                                viewModel.selectCategory(newValue, at: index)
+                            }
+                        }
+                    ),
+                    searchText: Binding(
+                        get: { viewModel.categorySearchTexts[index] ?? "" },
+                        set: { newValue in
+                            viewModel.categorySearchTexts[index] = newValue
+                        }
+                    ),
+                    filteredCategories: viewModel.filteredCategories(for: index),
+                    index: index,
+                    onSelect: { category in
+                        viewModel.selectCategory(category, at: index)
+                    },
+                    showRemoveButton: viewModel.categories.count > 1,
+                    onRemove: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             viewModel.removeCategory(at: index)
                         }
-                    }) {
-                        Image(systemName: "minus.circle.fill")
-                            .foregroundColor(.red)
-                            .font(.title3)
                     }
+                )
+                
+                // Show custom name field if "Misc / Other" is selected
+                if index >= 0 && index < viewModel.categories.count && viewModel.categories[index] == "Misc / Other (notes required)" {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Custom Category Name")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TextField("Enter custom category name", text: Binding(
+                            get: { viewModel.categoryCustomNames[index] ?? "" },
+                            set: { newValue in
+                                viewModel.setCategoryCustomName(newValue, at: index)
+                            }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.subheadline)
+                    }
+                    .padding(.leading, 8)
+                    .padding(.top, 4)
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
         }
     }
     

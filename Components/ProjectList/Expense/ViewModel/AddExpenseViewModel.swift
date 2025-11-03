@@ -14,10 +14,44 @@ class AddExpenseViewModel: ObservableObject {
     @Published var selectedPhaseId: String = ""
     @Published var selectedDepartment: String = ""
     @Published var categories: [String] = [""]
+    @Published var categoryCustomNames: [Int: String] = [:] // Store custom names for "Misc / Other" selections (keyed by index)
+    @Published var categorySearchTexts: [Int: String] = [:] // Track search text for each category field
     @Published var description: String = ""
     @Published var selectedPaymentMode: PaymentMode = .cash
     @Published var attachmentURL: String?
     @Published var attachmentName: String?
+    
+    // MARK: - Predefined Categories
+    static let predefinedCategories: [String] = [
+        "Labour",
+        "Raw Materials (cement/steel/sand/bricks)",
+        "Ready-Mix / Precast (RMC, precast items)",
+        "Equipment/Machinery Hire",
+        "Tools & Consumables (bits, blades, smalls)",
+        "Subcontractor Services",
+        "Transport & Logistics (freight, loading)",
+        "Site Utilities (power, water, fuel, internet)",
+        "Safety & Compliance (PPE, audits)",
+        "Permits & Regulatory Fees",
+        "Testing & Quality (soil/cube tests, inspections)",
+        "Waste & Disposal (debris, haulage)",
+        "Temporary Works (scaffolding, shuttering/formwork)",
+        "Finishes & Fixtures (tiles, paint, sanitary, lights)",
+        "Repairs & Rework / Snag-fix",
+        "Maintenance (post-handover window)",
+        "Misc / Other (notes required)"
+    ]
+    
+    // Filter categories based on search text
+    func filteredCategories(for index: Int) -> [String] {
+        let searchText = categorySearchTexts[index] ?? ""
+        if searchText.isEmpty {
+            return AddExpenseViewModel.predefinedCategories
+        }
+        return AddExpenseViewModel.predefinedCategories.filter { category in
+            category.localizedCaseInsensitiveContains(searchText)
+        }
+    }
     
     // MARK: - UI State
     @Published var isLoading: Bool = false
@@ -56,12 +90,28 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     var isFormValid: Bool {
-        !amount.isEmpty &&
-        amountValue > 0 &&
-        !selectedPhaseId.isEmpty &&
-        !selectedDepartment.isEmpty &&
-        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !categories.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).isEmpty
+        let hasValidAmount = !amount.isEmpty && amountValue > 0
+        let hasValidPhase = !selectedPhaseId.isEmpty
+        let hasValidDepartment = !selectedDepartment.isEmpty
+        let hasValidDescription = !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        
+        // Check categories: each must have a value, and if it's "Misc / Other", must have custom name
+        let validCategories = categories.enumerated().compactMap { index, category -> String? in
+            if category.isEmpty {
+                return nil
+            }
+            if category == "Misc / Other (notes required)" {
+                // Must have custom name
+                if let customName = categoryCustomNames[index], !customName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    return customName
+                }
+                return nil
+            }
+            return category
+        }
+        let hasValidCategories = !validCategories.isEmpty
+        
+        return hasValidAmount && hasValidPhase && hasValidDepartment && hasValidDescription && hasValidCategories
     }
     
     var selectedPhase: PhaseInfo? {
@@ -69,7 +119,12 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     var nonEmptyCategories: [String] {
-        categories.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        categories.enumerated().compactMap { index, category -> String? in
+            if category.isEmpty {
+                return nil
+            }
+            return getFinalCategoryName(at: index)
+        }
     }
     
     // MARK: - Initialization
@@ -81,6 +136,51 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Category Management
     func addCategory() {
         categories.append("")
+        categorySearchTexts[categories.count - 1] = ""
+    }
+    
+    func selectCategory(_ category: String, at index: Int) {
+        if category == "Misc / Other (notes required)" {
+            // Keep the category as is, but allow custom name entry
+            categories[index] = category
+            categorySearchTexts[index] = ""
+            // Initialize custom name if not exists
+            if categoryCustomNames[index] == nil {
+                categoryCustomNames[index] = ""
+            }
+        } else {
+            // For other categories, set directly and clear custom name
+            categories[index] = category
+            categorySearchTexts[index] = ""
+            categoryCustomNames.removeValue(forKey: index)
+        }
+    }
+    
+    func setCategoryCustomName(_ name: String, at index: Int) {
+        if index >= 0 && index < categories.count && categories[index] == "Misc / Other (notes required)" {
+            categoryCustomNames[index] = name
+        }
+    }
+    
+    func getCategoryDisplayName(at index: Int) -> String {
+        let category = (index >= 0 && index < categories.count) ? categories[index] : ""
+        if category == "Misc / Other (notes required)" {
+            if let customName = categoryCustomNames[index], !customName.isEmpty {
+                return customName
+            }
+        }
+        return category
+    }
+    
+    func getFinalCategoryName(at index: Int) -> String {
+        let category = (index >= 0 && index < categories.count) ? categories[index] : ""
+        if category == "Misc / Other (notes required)" {
+            if let customName = categoryCustomNames[index], !customName.isEmpty {
+                return customName
+            }
+            return category
+        }
+        return category
     }
 
     // MARK: - Load Phases
@@ -157,6 +257,28 @@ class AddExpenseViewModel: ObservableObject {
     func removeCategory(at index: Int) {
         guard categories.count > 1 else { return }
         categories.remove(at: index)
+        // Clean up search text and custom name for removed category
+        categorySearchTexts.removeValue(forKey: index)
+        categoryCustomNames.removeValue(forKey: index)
+        // Reindex remaining search texts and custom names
+        var newSearchTexts: [Int: String] = [:]
+        var newCustomNames: [Int: String] = [:]
+        for (oldIndex, searchText) in categorySearchTexts {
+            if oldIndex < index {
+                newSearchTexts[oldIndex] = searchText
+            } else if oldIndex > index {
+                newSearchTexts[oldIndex - 1] = searchText
+            }
+        }
+        for (oldIndex, customName) in categoryCustomNames {
+            if oldIndex < index {
+                newCustomNames[oldIndex] = customName
+            } else if oldIndex > index {
+                newCustomNames[oldIndex - 1] = customName
+            }
+        }
+        categorySearchTexts = newSearchTexts
+        categoryCustomNames = newCustomNames
     }
     
     // MARK: - File Upload
@@ -386,6 +508,8 @@ class AddExpenseViewModel: ObservableObject {
         amount = ""
         description = ""
         categories = [""]
+        categoryCustomNames = [:]
+        categorySearchTexts = [:]
         selectedPaymentMode = .cash
         attachmentURL = nil
         attachmentName = nil
