@@ -427,9 +427,26 @@ private struct CurrentPhaseView: View {
                 
                 Spacer()
                 
-                Circle()
-                    .fill(progressColor)
-                    .frame(width: 10, height: 10)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(progressColor)
+                        .frame(width: 10, height: 10)
+                    
+                    // 3-dots Menu (horizontal ellipsis)
+                    Menu {
+                        Button {
+                            // Handle Request Override action
+                            HapticManager.selection()
+                        } label: {
+                            Label("Request Override", systemImage: "exclamationmark.triangle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(6)
+                    }
+                }
             }
             
             Divider()
@@ -789,10 +806,27 @@ private struct ProjectDetailPhaseCardView: View {
                 
                 Spacer()
                 
-                // Status Indicator
-                Circle()
-                    .fill(progressColor)
-                    .frame(width: 10, height: 10)
+                HStack(spacing: 8) {
+                    // Status Indicator
+                    Circle()
+                        .fill(progressColor)
+                        .frame(width: 10, height: 10)
+                    
+                    // 3-dots Menu (horizontal ellipsis)
+                    Menu {
+                        Button {
+                            // Handle Request Override action
+                            HapticManager.selection()
+                        } label: {
+                            Label("Request Override", systemImage: "exclamationmark.triangle")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(6)
+                    }
+                }
             }
             
             Divider()

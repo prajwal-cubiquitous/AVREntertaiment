@@ -667,44 +667,46 @@ struct DashboardView: View {
 
                                 Spacer()
 
-                                if isPhaseInProgress(phase) {
-                                    Text("In Progress")
-                                        .font(DesignSystem.Typography.caption1)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.green)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.green.opacity(0.12))
-                                        .clipShape(Capsule())
-                                        .accessibilityLabel("Phase status: In Progress")
+                                HStack{
+                                    if isPhaseInProgress(phase) {
+                                        Text("In Progress")
+                                            .font(DesignSystem.Typography.caption1)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.green)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.green.opacity(0.12))
+                                            .clipShape(Capsule())
+                                            .accessibilityLabel("Phase status: In Progress")
 
-                                    if role == .ADMIN{
-                                        // Enable toggle
-                                        Toggle("", isOn: Binding(
-                                            get: { phaseEnabledMap[phase.id] ?? true },
-                                            set: { newValue in
-                                                phaseEnabledMap[phase.id] = newValue
-                                                updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                        if role == .ADMIN{
+                                            // Enable toggle
+                                            Toggle("", isOn: Binding(
+                                                get: { phaseEnabledMap[phase.id] ?? true },
+                                                set: { newValue in
+                                                    phaseEnabledMap[phase.id] = newValue
+                                                    updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                                }
+                                            ))
+                                            .labelsHidden()
+                                            .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                            .scaleEffect(0.85)
+                                            .padding(.leading, 6)
+
+                                            Button {
+                                                HapticManager.selection()
+                                                phaseForDepartmentAdd = phase
+                                                showingAddDepartment = true
+                                            } label: {
+                                                Image(systemName: "plus.circle.fill")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.accentColor)
+                                                    .accessibilityLabel("Add department to this phase")
                                             }
-                                        ))
-                                        .labelsHidden()
-                                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                        .scaleEffect(0.85)
-                                        .padding(.leading, 6)
-
-                                        Button {
-                                            HapticManager.selection()
-                                            phaseForDepartmentAdd = phase
-                                            showingAddDepartment = true
-                                        } label: {
-                                            Image(systemName: "plus.circle.fill")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.accentColor)
-                                                .accessibilityLabel("Add department to this phase")
+                                            .buttonStyle(.plain)
+                                            .padding(.leading, 2)
+                                            .padding(.vertical, 2)
                                         }
-                                        .buttonStyle(.plain)
-                                        .padding(.leading, 6)
-                                        .padding(.vertical, 2)
                                     }
                                 }
                             }
@@ -1895,59 +1897,57 @@ private struct AllPhasesView: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
-                            }
-
-                            Spacer()
-
-                            if isPhaseInProgress(phase) {
-                                Text("In Progress")
-                                    .font(DesignSystem.Typography.caption1)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.green)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.green.opacity(0.12))
-                                    .clipShape(Capsule())
-                                    .accessibilityLabel("Phase status: In Progress")
-                            }
-
-                            if role == .ADMIN {
-                                // Enable toggle (always visible in All Phases for admins)
-                                Toggle("", isOn: Binding(
-                                    get: { phaseEnabledMap[phase.id] ?? false },
-                                    set: { newValue in
-                                        phaseEnabledMap[phase.id] = newValue
-                                        if let projectId = project?.id {
-                                            Firestore.firestore()
-                                                .collection(FirebaseCollections.projects)
-                                                .document(projectId)
-                                                .collection("phases")
-                                                .document(phase.id)
-                                                .updateData([
-                                                    "isEnabled": newValue,
-                                                    "updatedAt": Timestamp()
-                                                ])
-                                        }
+                                
+                                    if isPhaseInProgress(phase) {
+                                        Text("Active")
+                                            .font(DesignSystem.Typography.caption1)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.green)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.green.opacity(0.12))
+                                            .clipShape(Capsule())
+                                            .accessibilityLabel("Phase status: In Progress")
                                     }
-                                ))
-                                .labelsHidden()
-                                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                .scaleEffect(0.85)
-//                                .padding(.leading, 6)
 
-                                Button {
-                                    HapticManager.selection()
-                                    phaseForDepartmentAdd = phase
-                                    showingAddDepartment = true
-                                } label: {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.accentColor)
-                                        .accessibilityLabel("Add department to this phase")
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.leading, 6)
-                                .padding(.vertical, 2)
+                                    if role == .ADMIN {
+                                        // Enable toggle (always visible in All Phases for admins)
+                                        Toggle("", isOn: Binding(
+                                            get: { phaseEnabledMap[phase.id] ?? false },
+                                            set: { newValue in
+                                                phaseEnabledMap[phase.id] = newValue
+                                                if let projectId = project?.id {
+                                                    Firestore.firestore()
+                                                        .collection(FirebaseCollections.projects)
+                                                        .document(projectId)
+                                                        .collection("phases")
+                                                        .document(phase.id)
+                                                        .updateData([
+                                                            "isEnabled": newValue,
+                                                            "updatedAt": Timestamp()
+                                                        ])
+                                                }
+                                            }
+                                        ))
+                                        .labelsHidden()
+                                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                        .scaleEffect(0.85)
+        //                                .padding(.leading, 6)
+
+                                        Button {
+                                            HapticManager.selection()
+                                            phaseForDepartmentAdd = phase
+                                            showingAddDepartment = true
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.accentColor)
+                                                .accessibilityLabel("Add department to this phase")
+                                        }
+                                        .buttonStyle(.plain)
+                                        .padding(.leading, 6)
+                                        .padding(.vertical, 2)
+                                    }
                             }
                         }
                         
