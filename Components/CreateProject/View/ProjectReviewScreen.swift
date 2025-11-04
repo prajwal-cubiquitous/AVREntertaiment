@@ -212,17 +212,9 @@ struct PhaseReviewCard: View {
     }
     
     private var timelineText: String {
-        var parts: [String] = []
-        if phase.hasStartDate {
-            parts.append("Start: \(dateFormatter.string(from: phase.startDate))")
-        }
-        if phase.hasEndDate {
-            parts.append("End: \(dateFormatter.string(from: phase.endDate))")
-        }
-        if parts.isEmpty {
-            return "No timeline specified"
-        }
-        return parts.joined(separator: " • ")
+        let startDate = dateFormatter.string(from: phase.startDate)
+        let endDate = dateFormatter.string(from: phase.endDate)
+        return "Start: \(startDate) • End: \(endDate)"
     }
     
     var body: some View {

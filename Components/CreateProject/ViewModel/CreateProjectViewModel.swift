@@ -42,7 +42,12 @@ class CreateProjectViewModel: ObservableObject {
     @Published var client: String = ""
     @Published var location: String = ""
     @Published var currency: String = "INR" // Only INR exposed in UI for now
-    @Published var phases: [PhaseItem] = [PhaseItem(phaseNumber: 1)]
+    @Published var phases: [PhaseItem] = {
+        var initialPhase = PhaseItem(phaseNumber: 1)
+        initialPhase.hasStartDate = true
+        initialPhase.hasEndDate = true
+        return [initialPhase]
+    }()
     @Published var allowTemplateOverrides: Bool = false
     
     // MARK: - Data Source for Dropdowns (private)
@@ -149,21 +154,19 @@ class CreateProjectViewModel: ObservableObject {
                 return false
             }
             
-            // Date validation: if both dates are set, end date must be after start date
-            if phase.hasStartDate && phase.hasEndDate && phase.endDate <= phase.startDate {
+            // Date validation: end date must be after start date (dates are now required)
+            if phase.endDate <= phase.startDate {
                 return false
             }
         }
         
-        // Validate phase timeline: next phase must start after previous phase ends
+        // Validate phase timeline: next phase must start after previous phase ends (dates are now required)
         for i in 0..<phases.count - 1 {
             let currentPhase = phases[i]
             let nextPhase = phases[i + 1]
             
-            if currentPhase.hasEndDate && nextPhase.hasStartDate {
-                if nextPhase.startDate <= currentPhase.endDate {
-                    return false
-                }
+            if nextPhase.startDate <= currentPhase.endDate {
+                return false
             }
         }
         
@@ -219,11 +222,15 @@ class CreateProjectViewModel: ObservableObject {
         let nextPhaseNumber = phases.count + 1
         var newPhase = PhaseItem(phaseNumber: nextPhaseNumber)
         
-        // If previous phase has end date, set start date to day after
-        if let lastPhase = phases.last, lastPhase.hasEndDate {
+        // If previous phase exists, set start date to day after its end date
+        if let lastPhase = phases.last {
             newPhase.startDate = Calendar.current.date(byAdding: .day, value: 1, to: lastPhase.endDate) ?? Date()
-            newPhase.hasStartDate = true
+            newPhase.endDate = Calendar.current.date(byAdding: .day, value: 31, to: newPhase.startDate) ?? Date().addingTimeInterval(86400 * 30)
         }
+        
+        // Dates are now always required
+        newPhase.hasStartDate = true
+        newPhase.hasEndDate = true
         
         phases.append(newPhase)
     }
@@ -342,9 +349,9 @@ class CreateProjectViewModel: ObservableObject {
                 for phase in phases {
                     let phaseRef = docRef.collection("phases").document()
                     
-                    // Format dates
-                    let startDateStr = phase.hasStartDate ? dateFormatter.string(from: phase.startDate) : nil
-                    let endDateStr = phase.hasEndDate ? dateFormatter.string(from: phase.endDate) : nil
+                    // Format dates (dates are now always required)
+                    let startDateStr = dateFormatter.string(from: phase.startDate)
+                    let endDateStr = dateFormatter.string(from: phase.endDate)
                     
                     // Create departments dictionary
                     let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { ($0.name, Double($0.amount) ?? 0) })
@@ -395,7 +402,10 @@ class CreateProjectViewModel: ObservableObject {
         selectedProjectTeamMembers = []
         projectManagerSearchText = ""
         projectTeamMemberSearchText = ""
-        phases = [PhaseItem(phaseNumber: 1)]
+        var initialPhase = PhaseItem(phaseNumber: 1)
+        initialPhase.hasStartDate = true
+        initialPhase.hasEndDate = true
+        phases = [initialPhase]
         allowTemplateOverrides = false
         showSuccessMessage = false
         errorMessage = nil

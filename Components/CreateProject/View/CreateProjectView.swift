@@ -395,46 +395,30 @@ struct PhaseCardView: View {
                     .font(DesignSystem.Typography.subheadline)
                     .foregroundColor(.secondary)
 
-                // Start Date
+                // Start Date (Required)
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Label("Start Date", systemImage: "calendar.badge.plus")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Toggle("", isOn: $phase.hasStartDate)
-                            .labelsHidden()
-                    }
-
-                    if phase.hasStartDate {
-                        DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
+                    Label("Start Date", systemImage: "calendar.badge.plus")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    
+                    DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
                 }
                 .padding(.vertical, 4)
 
-                // End Date
+                // End Date (Required)
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Label("End Date", systemImage: "calendar.badge.minus")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Toggle("", isOn: $phase.hasEndDate)
-                            .labelsHidden()
-                    }
-
-                    if phase.hasEndDate {
-                        DatePicker("Select end date", selection: $phase.endDate, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                    }
+                    Label("End Date", systemImage: "calendar.badge.minus")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    
+                    DatePicker("Select end date", selection: $phase.endDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
                 }
                 .padding(.vertical, 4)
 
                 // Date Validation Warnings
-                if phase.hasStartDate && phase.hasEndDate && phase.endDate <= phase.startDate {
+                if phase.endDate <= phase.startDate {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
