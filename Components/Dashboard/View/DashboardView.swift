@@ -47,8 +47,18 @@ struct DashboardView: View {
         let departments: [String: Double]
     }
     
+    struct PhaseBudget: Identifiable {
+        let id: String
+        let totalBudget: Double
+        let spent: Double
+        var remaining: Double {
+            totalBudget - spent
+        }
+    }
+    
     @State private var allPhases: [PhaseSummary] = []
     @State private var phaseEnabledMap: [String: Bool] = [:]
+    @State private var phaseBudgetMap: [String: PhaseBudget] = [:]
     
     // Permanent approver
     
@@ -693,6 +703,39 @@ struct DashboardView: View {
                                 }
                             }
                             
+                            // Phase Budget Summary
+                            if let phaseBudget = phaseBudgetMap[phase.id] {
+                                HStack(spacing: DesignSystem.Spacing.medium) {
+                                    // Total Budget
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Total Budget")
+                                            .font(DesignSystem.Typography.caption1)
+                                            .foregroundColor(.secondary)
+                                        Text(Int(phaseBudget.totalBudget).formattedCurrency)
+                                            .font(DesignSystem.Typography.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.primary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    // Remaining Amount
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        Text("Remaining")
+                                            .font(DesignSystem.Typography.caption1)
+                                            .foregroundColor(.secondary)
+                                        Text(Int(phaseBudget.remaining).formattedCurrency)
+                                            .font(DesignSystem.Typography.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(phaseBudget.remaining >= 0 ? .green : .red)
+                                    }
+                                }
+                                .padding(.horizontal, DesignSystem.Spacing.small)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemFill).opacity(0.5))
+                                .cornerRadius(DesignSystem.CornerRadius.small)
+                            }
+                            
                             // Horizontal departments scroller (cell style) with scroll hint
                             ZStack(alignment: .leading) {
                                 ScrollView(.horizontal, showsIndicators: true) {
@@ -951,8 +994,52 @@ struct DashboardView: View {
                 }
             }
             await MainActor.run { allPhases = collected }
+            // Load phase budgets after phases are loaded
+            await loadPhaseBudgets()
         } catch {
             print("Error loading phases: \(error)")
+        }
+    }
+    
+    private func loadPhaseBudgets() async {
+        guard let projectId = project?.id else { return }
+        do {
+            let db = Firestore.firestore()
+            
+            // Load all approved expenses for this project
+            let expensesSnapshot = try await db
+                .collection(FirebaseCollections.projects)
+                .document(projectId)
+                .collection("expenses")
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            // Calculate spent amount per phase
+            var phaseSpentMap: [String: Double] = [:]
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self),
+                   let phaseId = expense.phaseId {
+                    phaseSpentMap[phaseId, default: 0] += expense.amount
+                }
+            }
+            
+            // Calculate total budget and create PhaseBudget for each phase
+            var budgetMap: [String: PhaseBudget] = [:]
+            for phase in allPhases {
+                let totalBudget = phase.departments.values.reduce(0, +)
+                let spent = phaseSpentMap[phase.id] ?? 0
+                budgetMap[phase.id] = PhaseBudget(
+                    id: phase.id,
+                    totalBudget: totalBudget,
+                    spent: spent
+                )
+            }
+            
+            await MainActor.run {
+                phaseBudgetMap = budgetMap
+            }
+        } catch {
+            print("Error loading phase budgets: \(error.localizedDescription)")
         }
     }
 
@@ -1619,6 +1706,7 @@ private struct AllPhasesView: View {
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
     @State private var phaseEnabledMap: [String: Bool] = [:]
+    @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -1677,6 +1765,50 @@ private struct AllPhasesView: View {
                 }
             } catch {
                 print("Error loading phase enabled states: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func loadPhaseBudgets() {
+        guard let projectId = project?.id else { return }
+        Task {
+            do {
+                let db = Firestore.firestore()
+                
+                // Load all approved expenses for this project
+                let expensesSnapshot = try await db
+                    .collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("expenses")
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Calculate spent amount per phase
+                var phaseSpentMap: [String: Double] = [:]
+                for expenseDoc in expensesSnapshot.documents {
+                    if let expense = try? expenseDoc.data(as: Expense.self),
+                       let phaseId = expense.phaseId {
+                        phaseSpentMap[phaseId, default: 0] += expense.amount
+                    }
+                }
+                
+                // Calculate total budget and create PhaseBudget for each phase
+                var budgetMap: [String: DashboardView.PhaseBudget] = [:]
+                for phase in phases {
+                    let totalBudget = phase.departments.values.reduce(0, +)
+                    let spent = phaseSpentMap[phase.id] ?? 0
+                    budgetMap[phase.id] = DashboardView.PhaseBudget(
+                        id: phase.id,
+                        totalBudget: totalBudget,
+                        spent: spent
+                    )
+                }
+                
+                await MainActor.run {
+                    phaseBudgetMap = budgetMap
+                }
+            } catch {
+                print("Error loading phase budgets: \(error.localizedDescription)")
             }
         }
     }
@@ -1762,6 +1894,39 @@ private struct AllPhasesView: View {
                             }
                         }
                         
+                        // Phase Budget Summary
+                        if let phaseBudget = phaseBudgetMap[phase.id] {
+                            HStack(spacing: DesignSystem.Spacing.medium) {
+                                // Total Budget
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Total Budget")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                    Text(Int(phaseBudget.totalBudget).formattedCurrency)
+                                        .font(DesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.primary)
+                                }
+                                
+                                Spacer()
+                                
+                                // Remaining Amount
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("Remaining")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                    Text(Int(phaseBudget.remaining).formattedCurrency)
+                                        .font(DesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(phaseBudget.remaining >= 0 ? .green : .red)
+                                }
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.small)
+                            .padding(.vertical, DesignSystem.Spacing.small)
+                            .background(Color(.tertiarySystemFill).opacity(0.5))
+                            .cornerRadius(DesignSystem.CornerRadius.small)
+                        }
+                        
                         // Departments scroller
                         ZStack(alignment: .leading) {
                             // Card background for the horizontal scroller
@@ -1819,6 +1984,7 @@ private struct AllPhasesView: View {
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             loadPhaseEnabledStates()
+            loadPhaseBudgets()
         }
         .sheet(isPresented: $showingDepartmentDetail) {
             if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {
@@ -1833,10 +1999,8 @@ private struct AllPhasesView: View {
         }
         .sheet(isPresented: $showingAddDepartment, onDismiss: {
             Task {
-                // Reload phases if needed
-                if let projectId = project?.id {
-                    // Refresh would happen through notification
-                }
+                // Reload budgets when department is added
+                loadPhaseBudgets()
             }
         }) {
             if let phase = phaseForDepartmentAdd, let projectId = project?.id {
