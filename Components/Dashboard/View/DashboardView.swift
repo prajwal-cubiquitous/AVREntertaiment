@@ -1719,6 +1719,8 @@ private struct AllPhasesView: View {
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
     @State private var showingAddPhase = false
+    @State private var showingEditPhase = false
+    @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -1832,23 +1834,39 @@ private struct AllPhasesView: View {
                     VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                         // Phase Header with date, In Progress badge, and + icon
                         HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(phase.name)
-                                    .font(DesignSystem.Typography.headline)
-                                    .foregroundColor(.primary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.85)
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(phase.name)
+                                        .font(DesignSystem.Typography.headline)
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.85)
 
-                                HStack(spacing: 6) {
-                                    if phaseTimelineText(phase) != "" {
-                                        Image(systemName: "calendar")
-                                            .font(.caption2)
+                                    HStack(spacing: 6) {
+                                        if phaseTimelineText(phase) != "" {
+                                            Image(systemName: "calendar")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                                .accessibilityHidden(true)
+                                        }
+                                        Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
+                                            .font(DesignSystem.Typography.caption1)
                                             .foregroundColor(.secondary)
-                                            .accessibilityHidden(true)
                                     }
-                                    Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
-                                        .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
+                                }
+                                
+                                if role == .ADMIN {
+                                    Button {
+                                        HapticManager.selection()
+                                        phaseToEdit = phase
+                                        showingEditPhase = true
+                                    } label: {
+                                        Image(systemName: "pencil.circle.fill")
+                                            .font(.system(size: 18, weight: .medium))
+                                            .foregroundColor(.accentColor)
+                                            .accessibilityLabel("Edit phase")
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
 
@@ -2046,6 +2064,22 @@ private struct AllPhasesView: View {
                 AddPhaseSheet(
                     projectId: projectId,
                     existingPhaseCount: phases.count,
+                    onSaved: {
+                        // Call parent callback to reload phases
+                        onPhaseAdded?()
+                    }
+                )
+                .presentationDetents([.medium])
+            }
+        }
+        .sheet(isPresented: $showingEditPhase) {
+            if let phase = phaseToEdit, let projectId = project?.id {
+                EditPhaseSheet(
+                    projectId: projectId,
+                    phaseId: phase.id,
+                    currentPhaseName: phase.name,
+                    currentStartDate: phase.start,
+                    currentEndDate: phase.end,
                     onSaved: {
                         // Call parent callback to reload phases
                         onPhaseAdded?()
@@ -2806,6 +2840,170 @@ private struct AddPhaseDepartmentItem: Identifiable {
     let id = UUID()
     var name: String = ""
     var amount: String = "0"
+}
+
+// MARK: - Edit Phase Sheet
+private struct EditPhaseSheet: View {
+    let projectId: String
+    let phaseId: String
+    let currentPhaseName: String
+    let currentStartDate: Date?
+    let currentEndDate: Date?
+    let onSaved: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var phaseName: String = ""
+    @State private var startDate: Date = Date()
+    @State private var endDate: Date = Date().addingTimeInterval(86400 * 30)
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+    
+    private enum Field { case phaseName }
+    
+    private var dateFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateFormat = "dd/MM/yyyy"
+        return df
+    }
+    
+    private var isFormValid: Bool {
+        !phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        endDate > startDate
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("Enter phase name", text: $phaseName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .phaseName)
+                } header: {
+                    Text("Phase Name")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Section {
+                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                    
+                    DatePicker("End Date", selection: $endDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                    
+                    if endDate <= startDate {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Text("End date must be after start date")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                        .padding(.top, 4)
+                    }
+                } header: {
+                    Text("Timeline")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                if let error = errorMessage {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .navigationTitle("Edit Phase")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        savePhase()
+                    }
+                    .disabled(!isFormValid || isSaving)
+                    .fontWeight(.semibold)
+                    .foregroundColor(isFormValid && !isSaving ? .blue : .gray)
+                }
+            }
+            .onAppear {
+                // Initialize with current values
+                phaseName = currentPhaseName
+                if let start = currentStartDate {
+                    startDate = start
+                }
+                if let end = currentEndDate {
+                    endDate = end
+                } else if let start = currentStartDate {
+                    // If no end date, set it to 30 days after start
+                    endDate = Calendar.current.date(byAdding: .day, value: 30, to: start) ?? Date().addingTimeInterval(86400 * 30)
+                }
+                focusedField = .phaseName
+            }
+        }
+    }
+    
+    private func savePhase() {
+        guard isFormValid else { return }
+        
+        isSaving = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let db = Firestore.firestore()
+                let phaseRef = db.collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("phases")
+                    .document(phaseId)
+                
+                // Format dates
+                let startDateStr = dateFormatter.string(from: startDate)
+                let endDateStr = dateFormatter.string(from: endDate)
+                
+                // Update phase data
+                try await phaseRef.updateData([
+                    "phaseName": phaseName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "startDate": startDateStr,
+                    "endDate": endDateStr,
+                    "updatedAt": Timestamp()
+                ])
+                
+                await MainActor.run {
+                    isSaving = false
+                    onSaved()
+                    dismiss()
+                }
+                
+                // Post notification to refresh phases
+                NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+                
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = "Failed to update phase: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
 }
 
 #Preview {
