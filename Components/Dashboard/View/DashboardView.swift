@@ -619,7 +619,12 @@ struct DashboardView: View {
                             phases: allPhases,
                             project: project,
                             role: role,
-                            phoneNumber: phoneNumber
+                            phoneNumber: phoneNumber,
+                            onPhaseAdded: {
+                                Task {
+                                    await loadPhases()
+                                }
+                            }
                         )
                     } label: {
                         Text("View All Phases")
@@ -783,7 +788,12 @@ struct DashboardView: View {
                             phases: allPhases,
                             project: project,
                             role: role,
-                            phoneNumber: phoneNumber
+                            phoneNumber: phoneNumber,
+                            onPhaseAdded: {
+                                Task {
+                                    await loadPhases()
+                                }
+                            }
                         )
                     } label: {
                         Text("View All Phases")
@@ -1700,6 +1710,7 @@ private struct AllPhasesView: View {
     let project: Project?
     let role: UserRole?
     let phoneNumber: String
+    let onPhaseAdded: (() -> Void)?
     
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartment: String? = nil
@@ -1707,6 +1718,7 @@ private struct AllPhasesView: View {
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
+    @State private var showingAddPhase = false
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -1982,6 +1994,20 @@ private struct AllPhasesView: View {
         .listSectionSpacing(.custom(8))
         .navigationTitle("All Phases")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            if role == .ADMIN {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        HapticManager.selection()
+                        showingAddPhase = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.accentColor)
+                    }
+                }
+            }
+        }
         .onAppear {
             loadPhaseEnabledStates()
             loadPhaseBudgets()
@@ -2013,6 +2039,19 @@ private struct AllPhasesView: View {
                     }
                 )
                 .presentationDetents([.medium])
+            }
+        }
+        .sheet(isPresented: $showingAddPhase) {
+            if let projectId = project?.id {
+                AddPhaseSheet(
+                    projectId: projectId,
+                    existingPhaseCount: phases.count,
+                    onSaved: {
+                        // Call parent callback to reload phases
+                        onPhaseAdded?()
+                    }
+                )
+                .presentationDetents([.large])
             }
         }
     }
@@ -2483,6 +2522,253 @@ struct AnonymousExpenseCard: View {
         formatter.timeStyle = .none
         return formatter
     }
+}
+
+// MARK: - Add Phase Sheet
+private struct AddPhaseSheet: View {
+    let projectId: String
+    let existingPhaseCount: Int
+    let onSaved: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var phaseName: String = ""
+    @State private var startDate: Date = Date()
+    @State private var endDate: Date = Date().addingTimeInterval(86400 * 30)
+    @State private var departments: [AddPhaseDepartmentItem] = [AddPhaseDepartmentItem()]
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+    @State private var nextPhaseNumber: Int = 1
+    @FocusState private var focusedField: Field?
+    
+    private enum Field { case phaseName, departmentName, departmentBudget }
+    
+    private var dateFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateFormat = "dd/MM/yyyy"
+        return df
+    }
+    
+    private var isFormValid: Bool {
+        !phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        endDate > startDate &&
+        !departments.isEmpty &&
+        departments.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    TextField("Enter phase name", text: $phaseName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .focused($focusedField, equals: .phaseName)
+                } header: {
+                    Text("Phase Name")
+                }
+                
+                Section {
+                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                    DatePicker("End Date", selection: $endDate, displayedComponents: .date)
+                    
+                    if endDate <= startDate {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text("End date must be after start date")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                } header: {
+                    Text("Timeline")
+                }
+                
+                Section {
+                    ForEach($departments) { $dept in
+                        VStack(spacing: DesignSystem.Spacing.small) {
+                            HStack(spacing: DesignSystem.Spacing.medium) {
+                                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                                    Text("Department")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                        .textCase(.uppercase)
+                                    
+                                    TextField("e.g., Marketing", text: $dept.name)
+                                        .font(DesignSystem.Typography.callout)
+                                        .textFieldStyle(.plain)
+                                        .focused($focusedField, equals: .departmentName)
+                                }
+                                
+                                VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
+                                    Text("Budget")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                        .textCase(.uppercase)
+                                    
+                                    TextField("₹0", text: $dept.amount)
+                                        .keyboardType(.decimalPad)
+                                        .font(DesignSystem.Typography.callout)
+                                        .fontWeight(.medium)
+                                        .multilineTextAlignment(.trailing)
+                                        .textFieldStyle(.plain)
+                                        .frame(width: 100)
+                                        .focused($focusedField, equals: .departmentBudget)
+                                        .onSubmit {
+                                            if dept.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                                dept.amount = "0"
+                                            }
+                                        }
+                                }
+                            }
+                            
+                            Divider()
+                        }
+                        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                    }
+                    
+                    Button(action: {
+                        HapticManager.selection()
+                        departments.append(AddPhaseDepartmentItem())
+                    }) {
+                        Label("Add Department", systemImage: "plus.circle.fill")
+                            .foregroundColor(.accentColor)
+                            .font(DesignSystem.Typography.caption1)
+                            .fontWeight(.medium)
+                    }
+                    .buttonStyle(.plain)
+                } header: {
+                    Text("Departments")
+                } footer: {
+                    Text("At least one department with a name is required. Budget can be 0.")
+                }
+                
+                if let error = errorMessage {
+                    Section {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                    }
+                }
+            }
+            .navigationTitle("Add Phase")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        savePhase()
+                    }
+                    .disabled(!isFormValid || isSaving)
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                focusedField = .phaseName
+                loadNextPhaseNumber()
+            }
+        }
+    }
+    
+    private func loadNextPhaseNumber() {
+        Task {
+            do {
+                let db = Firestore.firestore()
+                let snapshot = try await db
+                    .collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("phases")
+                    .order(by: "phaseNumber", descending: true)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let lastPhaseDoc = snapshot.documents.first,
+                   let lastPhase = try? lastPhaseDoc.data(as: Phase.self) {
+                    await MainActor.run {
+                        nextPhaseNumber = lastPhase.phaseNumber + 1
+                    }
+                } else {
+                    await MainActor.run {
+                        nextPhaseNumber = 1
+                    }
+                }
+            } catch {
+                print("Error loading next phase number: \(error)")
+                // Fallback to count-based calculation
+                await MainActor.run {
+                    nextPhaseNumber = existingPhaseCount + 1
+                }
+            }
+        }
+    }
+    
+    private func savePhase() {
+        guard isFormValid else { return }
+        
+        isSaving = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let db = Firestore.firestore()
+                let phaseRef = db.collection(FirebaseCollections.projects)
+                    .document(projectId)
+                    .collection("phases")
+                    .document()
+                
+                // Use the calculated next phase number
+                let phaseNumber = nextPhaseNumber
+                
+                // Format dates
+                let startDateStr = dateFormatter.string(from: startDate)
+                let endDateStr = dateFormatter.string(from: endDate)
+                
+                // Create departments dictionary
+                let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { ($0.name, Double($0.amount) ?? 0) })
+                
+                let phaseData = Phase(
+                    id: phaseRef.documentID,
+                    phaseName: phaseName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    phaseNumber: phaseNumber,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
+                    departments: departmentsDict,
+                    categories: [],
+                    isEnabled: true,
+                    createdAt: Timestamp(),
+                    updatedAt: Timestamp()
+                )
+                
+                try await phaseRef.setData(from: phaseData)
+                
+                await MainActor.run {
+                    isSaving = false
+                    onSaved()
+                    dismiss()
+                }
+                
+                // Post notification to refresh phases
+                NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+                
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = "Failed to save phase: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Department Item for Add Phase Sheet
+private struct AddPhaseDepartmentItem: Identifiable {
+    let id = UUID()
+    var name: String = ""
+    var amount: String = "0"
 }
 
 #Preview {
