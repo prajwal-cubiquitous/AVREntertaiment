@@ -1933,7 +1933,7 @@ private struct AllPhasesView: View {
                                 .labelsHidden()
                                 .toggleStyle(SwitchToggleStyle(tint: .accentColor))
                                 .scaleEffect(0.85)
-                                .padding(.leading, 6)
+//                                .padding(.leading, 6)
 
                                 Button {
                                     HapticManager.selection()

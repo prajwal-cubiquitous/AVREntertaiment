@@ -184,7 +184,7 @@ class AddExpenseViewModel: ObservableObject {
     }
 
     // MARK: - Load Phases
-    private func loadPhases() {
+    func loadPhases(for date: Date? = nil) {
         guard let projectId = project.id else { return }
         let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
         phasesRef.order(by: "phaseNumber").getDocuments { [weak self] snapshot, error in
@@ -192,12 +192,13 @@ class AddExpenseViewModel: ObservableObject {
             var phasesList: [PhaseInfo] = []
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
-            let now = Date()
+            // Use the provided date or expenseDate as the reference date for filtering
+            let referenceDate = date ?? self.expenseDate
             
             if let documents = snapshot?.documents {
                 for doc in documents {
                     if let phase = try? doc.data(as: Phase.self) {
-                        // Check if phase is in timeline
+                        // Check if phase is in timeline based on the reference date (expense date)
                         let startDate = phase.startDate.flatMap { dateFormatter.date(from: $0) }
                         let endDate = phase.endDate.flatMap { dateFormatter.date(from: $0) }
                         
@@ -206,11 +207,11 @@ class AddExpenseViewModel: ObservableObject {
                             case (nil, nil):
                                 return true // Always visible if no dates
                             case (let s?, nil):
-                                return s <= now // Visible if start date passed
+                                return s <= referenceDate // Visible if start date passed
                             case (nil, let e?):
-                                return now <= e // Visible if before end date
+                                return referenceDate <= e // Visible if before end date
                             case (let s?, let e?):
-                                return s <= now && now <= e // Visible if in range
+                                return s <= referenceDate && referenceDate <= e // Visible if in range
                             }
                         }()
                         
@@ -229,13 +230,26 @@ class AddExpenseViewModel: ObservableObject {
             }
             
             DispatchQueue.main.async {
+                let previousSelectedPhaseId = self.selectedPhaseId
                 self.availablePhases = phasesList
-                // Auto-select first available phase that can add expense
-                if let firstAvailable = phasesList.first(where: { $0.canAddExpense }),
-                   self.selectedPhaseId.isEmpty {
-                    self.selectedPhaseId = firstAvailable.id
-                    if let firstDept = firstAvailable.departments.first {
-                        self.selectedDepartment = firstDept
+                
+                // If previously selected phase is still valid, keep it
+                if let previousPhase = phasesList.first(where: { $0.id == previousSelectedPhaseId && $0.canAddExpense }) {
+                    // Phase is still valid, keep selection
+                    if !previousPhase.departments.contains(self.selectedDepartment) {
+                        self.selectedDepartment = previousPhase.departments.first ?? ""
+                    }
+                } else {
+                    // Previously selected phase is no longer valid, select first available
+                    if let firstAvailable = phasesList.first(where: { $0.canAddExpense }) {
+                        self.selectedPhaseId = firstAvailable.id
+                        if let firstDept = firstAvailable.departments.first {
+                            self.selectedDepartment = firstDept
+                        }
+                    } else {
+                        // No valid phases for this date
+                        self.selectedPhaseId = ""
+                        self.selectedDepartment = ""
                     }
                 }
             }

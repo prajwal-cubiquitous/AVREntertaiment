@@ -34,10 +34,27 @@ struct AddExpenseView: View {
                 }
                 
                 // MARK: - Basic Information
-                Section(header: Text("Expense Details")) {
-                    // Date
-                    DatePicker("Date", selection: $viewModel.expenseDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Expense Date")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .fontWeight(.medium)
+                        
+                        DatePicker("Select expense date", selection: $viewModel.expenseDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                        
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                            Text("Phase selection will be filtered based on this date")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.vertical, 4)
                     
                     // Amount
                     VStack(alignment: .leading, spacing: 4) {
@@ -64,31 +81,69 @@ struct AddExpenseView: View {
                             )
                     }
                     .padding(.vertical, 4)
+                } header: {
+                    Text("Expense Details")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 // MARK: - Phase Selection
-                Section(header: Text("Phase Selection")) {
+                Section {
                     phasePickerView
+                } header: {
+                    Text("Phase Selection")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } footer: {
+                    if !viewModel.availablePhases.filter({ $0.canAddExpense }).isEmpty {
+                        Text("Phases are filtered based on the selected expense date")
+                            .font(.caption)
+                    } else {
+                        Text("No phases available for the selected date. Please select a different date.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
                 }
                 
                 // MARK: - Department Selection
-                Section(header: Text("Department Selection")) {
+                Section {
                     departmentPickerView
+                } header: {
+                    Text("Department Selection")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 // MARK: - Categories
-                Section(header: categoriesHeader, footer: categoriesFooter) {
+                Section {
                     categoriesView
+                } header: {
+                    categoriesHeader
+                } footer: {
+                    categoriesFooter
                 }
                 
                 // MARK: - Payment Mode
-                Section(header: Text("Mode of Payment")) {
+                Section {
                     paymentModeView
+                } header: {
+                    Text("Mode of Payment")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 // MARK: - Attachment
-                Section(header: Text("Attachment (Optional)")) {
+                Section {
                     attachmentView
+                } header: {
+                    Text("Attachment (Optional)")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 // MARK: - Submit Button
@@ -121,9 +176,13 @@ struct AddExpenseView: View {
                 )
             }
         }
-        .onAppear{
-            UserServices.shared.currentUserPhone
-        }
+            .onAppear{
+                UserServices.shared.currentUserPhone
+            }
+            .onChange(of: viewModel.expenseDate) { newDate in
+                // Reload phases when date changes
+                viewModel.loadPhases(for: newDate)
+            }
     }
     
     
@@ -133,14 +192,22 @@ struct AddExpenseView: View {
             Text("Phase")
                 .font(.subheadline)
                 .foregroundColor(.primary)
+                .fontWeight(.medium)
             
             Menu {
-                // Show only phases that can accept expenses
-                ForEach(viewModel.availablePhases.filter { $0.canAddExpense }) { phase in
-                    Button(phase.name) {
-                        viewModel.selectedPhaseId = phase.id
-                        viewModel.updateDepartmentForPhase()
+                // Show only phases that can accept expenses for the selected date
+                let availablePhases = viewModel.availablePhases.filter { $0.canAddExpense }
+                if !availablePhases.isEmpty {
+                    ForEach(availablePhases) { phase in
+                        Button(phase.name) {
+                            viewModel.selectedPhaseId = phase.id
+                            viewModel.updateDepartmentForPhase()
+                        }
                     }
+                } else {
+                    Text("No phases available for selected date")
+                        .foregroundColor(.secondary)
+                        .disabled(true)
                 }
                 
                 // Show disabled/out-of-timeline phases at the bottom with indicators
@@ -160,9 +227,9 @@ struct AddExpenseView: View {
                                         .font(.caption)
                                         .foregroundColor(.orange)
                                 } else {
-                                    Image(systemName: "info.circle")
+                                    Image(systemName: "calendar.badge.exclamationmark")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.orange)
                                 }
                             }
                         }
@@ -184,22 +251,24 @@ struct AddExpenseView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .padding()
-                .background(Color(UIColor.tertiarySystemFill))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.tertiarySystemFill))
                 .cornerRadius(8)
             }
             
             // Show info about disabled phases if selected phase is not available
             if let selectedPhase = viewModel.selectedPhase, !selectedPhase.canAddExpense {
                 HStack(spacing: 6) {
-                    Image(systemName: selectedPhase.isEnabled ? "info.circle" : "lock.fill")
+                    Image(systemName: selectedPhase.isEnabled ? "calendar.badge.exclamationmark" : "lock.fill")
                         .font(.caption)
                         .foregroundColor(.orange)
-                    Text(selectedPhase.isEnabled ? "This phase is not in the current timeline" : "This phase is disabled")
+                    Text(selectedPhase.isEnabled ? "This phase is not available for the selected expense date" : "This phase is disabled")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 4)
                 .padding(.top, 4)
             }
         }
