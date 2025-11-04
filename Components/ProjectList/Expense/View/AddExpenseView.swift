@@ -25,7 +25,7 @@ struct AddExpenseView: View {
                         HStack {
                             Image(systemName: "building.2")
                                 .foregroundColor(.secondary)
-                            Text("AVR Entertainment")
+                            Text("Tracura")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }

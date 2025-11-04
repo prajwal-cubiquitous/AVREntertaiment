@@ -48,8 +48,8 @@ struct ProjectDetailView: View {
                     .cardStyle()
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                 
-                // MARK: - Budget Breakdown (aggregated from phases)
-                EnhancedDepartmentBreakdownView(project: project, viewModel: viewModel)
+                // MARK: - Phase Budget Breakdown
+                PhaseBreakdownView(project: project, viewModel: viewModel)
                     .cardStyle()
                     .padding(.horizontal, DesignSystem.Spacing.medium)
                 
@@ -101,6 +101,7 @@ struct ProjectDetailView: View {
             addExpenseButton
         }
         .onAppear {
+            viewModel.loadPhases()
             viewModel.fetchApprovedExpenses()
             
             // Load notifications
@@ -126,6 +127,7 @@ struct ProjectDetailView: View {
             }
         }
         .refreshable {
+            viewModel.loadPhases()
             viewModel.fetchApprovedExpenses()
         }
     }
@@ -262,50 +264,651 @@ private struct KeyInformationView: View {
     }
 }
 
-private struct EnhancedDepartmentBreakdownView: View {
+private struct PhaseBreakdownView: View {
     let project: Project
     @ObservedObject var viewModel: ProjectDetailViewModel
-    
-    private var sortedDepartments: [(String, Double)] {
-        viewModel.allocatedBudgetsByDepartment.sorted { $0.value > $1.value }
-    }
+    @State private var showingAllPhases = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            SectionHeader(title: "Department Budget Breakdown")
+            HStack {
+                SectionHeader(title: "Phase Budget Breakdown")
+                Spacer()
+                if viewModel.phases.count > 1 {
+                    Button(action: {
+                        showingAllPhases = true
+                    }) {
+                        Text("View All Phases")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
             
             if viewModel.isLoading {
                 HStack {
                     Spacer()
                     ProgressView()
                         .scaleEffect(0.8)
-                    Text("Loading expenses...")
+                    Text("Loading phases...")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
                 }
                 .padding(.vertical, DesignSystem.Spacing.medium)
-            } else {
-                VStack(spacing: DesignSystem.Spacing.small) {
-                    ForEach(Array(sortedDepartments.enumerated()), id: \.offset) { index, department in
-                        EnhancedDepartmentRow(
-                            name: department.0,
-                            allocatedBudget: department.1,
-                            approvedAmount: viewModel.approvedAmount(for: department.0),
-                            remainingBudget: viewModel.remainingBudget(for: department.0, allocatedBudget: department.1),
-                            spentPercentage: viewModel.spentPercentage(for: department.0, allocatedBudget: department.1)
-                        )
+            } else if !viewModel.currentPhases.isEmpty {
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    ForEach(Array(viewModel.currentPhases.enumerated()), id: \.element.id) { index, phase in
+                        CurrentPhaseView(phase: phase)
                         
-                        if index < sortedDepartments.count - 1 {
+                        if index < viewModel.currentPhases.count - 1 {
                             Divider()
                         }
                     }
                 }
+            } else {
+                EmptyStateRow(
+                    icon: "calendar.badge.clock",
+                    text: "No active phase at the moment"
+                )
             }
         }
         .padding(DesignSystem.Spacing.medium)
+        .sheet(isPresented: $showingAllPhases) {
+            AllPhasesSheetView(
+                currentPhases: viewModel.currentPhases,
+                expiredPhases: viewModel.expiredPhases
+            )
+        }
     }
 }
+
+private struct CurrentPhaseView: View {
+    let phase: ProjectDetailViewModel.PhaseInfo
+    
+    @State private var isExpanded = false
+    
+    private func formatCurrency(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd MMM yyyy"
+        return formatter
+    }
+    
+    private var dateRangeText: String? {
+        guard let startDate = phase.startDate, let endDate = phase.endDate else {
+            return nil
+        }
+        let startStr = dateFormatter.string(from: startDate)
+        let endStr = dateFormatter.string(from: endDate)
+        return "Start: \(startStr) • End: \(endStr)"
+    }
+    
+    private var daysRemaining: Int? {
+        guard let endDate = phase.endDate else { return nil }
+        let calendar = Calendar.current
+        let now = Date()
+        let days = calendar.dateComponents([.day], from: now, to: endDate).day ?? 0
+        return days
+    }
+    
+    private var daysRemainingColor: Color {
+        guard let days = daysRemaining else { return .secondary }
+        if days < 0 {
+            return .red // Overdue
+        } else if days <= 7 {
+            return .red // Critical (less than 7 days)
+        } else if days <= 14 {
+            return .orange // Warning (7-14 days)
+        } else {
+            return .green // Good (more than 14 days)
+        }
+    }
+    
+    var progressColor: Color {
+        if phase.spentPercentage > 1.0 {
+            return .red
+        } else if phase.spentPercentage > 0.8 {
+            return .orange
+        } else {
+            return .blue
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Phase Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(phase.phaseName)
+                            .font(DesignSystem.Typography.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        // In Progress Tag
+                        Text("In Progress")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue)
+                            .cornerRadius(8)
+                    }
+                    
+                    if let dateRangeText = dateRangeText {
+                        Text(dateRangeText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Days Remaining
+                    if let days = daysRemaining {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.caption2)
+                                .foregroundColor(daysRemainingColor)
+                            Text(days >= 0 ? "\(days) days remaining" : "\(abs(days)) days overdue")
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(daysRemainingColor)
+                        }
+                        .padding(.top, 2)
+                    }
+                }
+                
+                Spacer()
+                
+                Circle()
+                    .fill(progressColor)
+                    .frame(width: 10, height: 10)
+            }
+            
+            Divider()
+            
+            // Phase Budget Summary
+            VStack(spacing: DesignSystem.Spacing.small) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("TOTAL BUDGET")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(phase.totalBudget))
+                            .font(DesignSystem.Typography.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .center, spacing: 2) {
+                        Text("APPROVED")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(phase.approvedAmount))
+                            .font(DesignSystem.Typography.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("REMAINING")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(phase.remainingAmount))
+                            .font(DesignSystem.Typography.footnote)
+                            .fontWeight(.semibold)
+                            .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                    }
+                }
+                
+                // Progress bar
+                ProgressView(value: min(phase.spentPercentage, 1.0))
+                    .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                    .scaleEffect(y: 0.8)
+                
+                // Percentage text
+                HStack {
+                    Text("\(Int(phase.spentPercentage * 100))% utilized")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    if phase.spentPercentage > 1.0 {
+                        Text("Over budget!")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.red)
+                            .fontWeight(.medium)
+                    }
+                }
+            }
+            
+            // Department Breakdown
+            if !phase.departments.isEmpty {
+                Divider()
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("Departments")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                if isExpanded {
+                    VStack(spacing: DesignSystem.Spacing.small) {
+                        ForEach(Array(phase.departments.enumerated()), id: \.element.id) { index, department in
+                            DepartmentRowView(department: department)
+                            
+                            if index < phase.departments.count - 1 {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(.top, DesignSystem.Spacing.small)
+                }
+            }
+        }
+    }
+}
+
+private struct DepartmentRowView: View {
+    let department: ProjectDetailViewModel.DepartmentInfo
+    
+    private func formatCurrency(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
+    var progressColor: Color {
+        if department.spentPercentage > 1.0 {
+            return .red
+        } else if department.spentPercentage > 0.8 {
+            return .orange
+        } else {
+            return .blue
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+            HStack {
+                Text(department.name)
+                    .font(DesignSystem.Typography.callout)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(progressColor)
+                    .frame(width: 6, height: 6)
+            }
+            
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ALLOCATED")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(department.allocatedBudget))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .center, spacing: 2) {
+                    Text("APPROVED")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(department.approvedAmount))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("REMAINING")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(department.remainingAmount))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(department.remainingAmount >= 0 ? .green : .red)
+                }
+            }
+            
+            ProgressView(value: min(department.spentPercentage, 1.0))
+                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                .scaleEffect(y: 0.6)
+            
+            Text("\(Int(department.spentPercentage * 100))% utilized")
+                .font(DesignSystem.Typography.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+    }
+}
+
+private struct AllPhasesSheetView: View {
+    let currentPhases: [ProjectDetailViewModel.PhaseInfo]
+    let expiredPhases: [ProjectDetailViewModel.PhaseInfo]
+    @Environment(\.dismiss) private var dismiss
+    
+    private var allPhases: [ProjectDetailViewModel.PhaseInfo] {
+        // Combine current and expired phases, sorted by phase number
+        (currentPhases + expiredPhases).sorted { $0.phaseNumber < $1.phaseNumber }
+    }
+    
+    var body: some View {
+        NavigationView {
+            List {
+                // Current Phases Section
+                if !currentPhases.isEmpty {
+                    Section {
+                        ForEach(currentPhases) { phase in
+                            ProjectDetailPhaseCardView(phase: phase, isInProgress: true)
+                        }
+                    } header: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.fill")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text("Current Phases")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                        }
+                    }
+                }
+                
+                // Expired Phases Section
+                if !expiredPhases.isEmpty {
+                    Section {
+                        ForEach(expiredPhases) { phase in
+                            ProjectDetailPhaseCardView(phase: phase, isInProgress: false)
+                        }
+                    } header: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            Text("Completed Phases")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                        }
+                    }
+                }
+                
+                // Empty State
+                if allPhases.isEmpty {
+                    Section {
+                        VStack(spacing: DesignSystem.Spacing.small) {
+                            Image(systemName: "calendar.badge.exclamationmark")
+                                .font(.system(size: 48))
+                                .foregroundColor(.secondary)
+                                .padding(.top, DesignSystem.Spacing.large)
+                            
+                            Text("No Phases Available")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                                .padding(.top, DesignSystem.Spacing.small)
+                            
+                            Text("There are no current or completed phases to display.")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, DesignSystem.Spacing.large)
+                    }
+                }
+            }
+            .navigationTitle("All Phases")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+}
+
+private struct ProjectDetailPhaseCardView: View {
+    let phase: ProjectDetailViewModel.PhaseInfo
+    let isInProgress: Bool
+    @State private var isExpanded = false
+    
+    private func formatCurrency(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd MMM yyyy"
+        return formatter
+    }
+    
+    private var dateRangeText: String? {
+        guard let startDate = phase.startDate, let endDate = phase.endDate else {
+            return nil
+        }
+        let startStr = dateFormatter.string(from: startDate)
+        let endStr = dateFormatter.string(from: endDate)
+        return "Start: \(startStr) • End: \(endStr)"
+    }
+    
+    var progressColor: Color {
+        if phase.spentPercentage > 1.0 {
+            return .red
+        } else if phase.spentPercentage > 0.8 {
+            return .orange
+        } else {
+            return .blue
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Phase Header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(phase.phaseName)
+                            .font(DesignSystem.Typography.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        // Status Badge
+                        Text(isInProgress ? "In Progress" : "Completed")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(isInProgress ? Color.blue : Color.gray)
+                            .cornerRadius(8)
+                    }
+                    
+                    if let dateRangeText = dateRangeText {
+                        Text(dateRangeText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 2)
+                    }
+                }
+                
+                Spacer()
+                
+                // Status Indicator
+                Circle()
+                    .fill(progressColor)
+                    .frame(width: 10, height: 10)
+            }
+            
+            Divider()
+                .padding(.vertical, DesignSystem.Spacing.extraSmall)
+            
+            // Budget Summary - Compact
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("TOTAL BUDGET")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(phase.totalBudget))
+                        .font(DesignSystem.Typography.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                VStack(alignment: .center, spacing: 4) {
+                    Text("APPROVED")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(phase.approvedAmount))
+                        .font(DesignSystem.Typography.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                .frame(maxWidth: .infinity)
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("REMAINING")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(phase.remainingAmount))
+                        .font(DesignSystem.Typography.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            
+            // Progress Bar
+            ProgressView(value: min(phase.spentPercentage, 1.0))
+                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                .scaleEffect(y: 0.8)
+                .padding(.top, 4)
+            
+            // Utilization Text
+            HStack {
+                Text("\(Int(phase.spentPercentage * 100))% utilized")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                if phase.spentPercentage > 1.0 {
+                    Text("Over budget!")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.red)
+                        .fontWeight(.medium)
+                }
+            }
+            
+            // Department Breakdown - Expandable
+            if !phase.departments.isEmpty {
+                Divider()
+                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("Departments")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("(\(phase.departments.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                if isExpanded {
+                    VStack(spacing: DesignSystem.Spacing.small) {
+                        ForEach(phase.departments) { department in
+                            DepartmentRowView(department: department)
+                            
+                            if department.id != phase.departments.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(.top, DesignSystem.Spacing.small)
+                }
+            }
+        }
+        .padding(.vertical, DesignSystem.Spacing.small)
+    }
+}
+
 
 private struct EnhancedDepartmentRow: View {
     let name: String
@@ -462,7 +1065,7 @@ private struct ProjectHeaderView: View {
                         .font(DesignSystem.Typography.largeTitle)
                         .foregroundColor(.primary)
                     
-                    Text("AVR Entertainment")
+                    Text("Tracura")
                         .font(DesignSystem.Typography.callout)
                         .foregroundColor(.secondary)
                 }

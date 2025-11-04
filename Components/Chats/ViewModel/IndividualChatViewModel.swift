@@ -9,7 +9,6 @@ import Foundation
 import FirebaseFirestore
 import FirebaseStorage
 import FirebaseAuth
-
 import SwiftUI
 
 @MainActor
