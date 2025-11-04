@@ -2051,7 +2051,7 @@ private struct AllPhasesView: View {
                         onPhaseAdded?()
                     }
                 )
-                .presentationDetents([.large])
+                .presentationDetents([.medium])
             }
         }
     }
@@ -2565,92 +2565,127 @@ private struct AddPhaseSheet: View {
                         .focused($focusedField, equals: .phaseName)
                 } header: {
                     Text("Phase Name")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 Section {
                     DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                    
                     DatePicker("End Date", selection: $endDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
                     
                     if endDate <= startDate {
-                        HStack {
+                        HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
                                 .foregroundColor(.orange)
                             Text("End date must be after start date")
                                 .font(.caption)
                                 .foregroundColor(.orange)
                         }
+                        .padding(.top, 4)
                     }
                 } header: {
                     Text("Timeline")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
                 
                 Section {
                     ForEach($departments) { $dept in
-                        VStack(spacing: DesignSystem.Spacing.small) {
-                            HStack(spacing: DesignSystem.Spacing.medium) {
-                                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                        VStack(spacing: 12) {
+                            HStack(alignment: .top, spacing: 16) {
+                                VStack(alignment: .leading, spacing: 6) {
                                     Text("Department")
-                                        .font(DesignSystem.Typography.caption1)
+                                        .font(.caption)
                                         .foregroundColor(.secondary)
                                         .textCase(.uppercase)
                                     
                                     TextField("e.g., Marketing", text: $dept.name)
-                                        .font(DesignSystem.Typography.callout)
+                                        .font(.body)
                                         .textFieldStyle(.plain)
                                         .focused($focusedField, equals: .departmentName)
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 
-                                VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
+                                VStack(alignment: .trailing, spacing: 6) {
                                     Text("Budget")
-                                        .font(DesignSystem.Typography.caption1)
+                                        .font(.caption)
                                         .foregroundColor(.secondary)
                                         .textCase(.uppercase)
                                     
-                                    TextField("₹0", text: $dept.amount)
-                                        .keyboardType(.decimalPad)
-                                        .font(DesignSystem.Typography.callout)
-                                        .fontWeight(.medium)
-                                        .multilineTextAlignment(.trailing)
-                                        .textFieldStyle(.plain)
-                                        .frame(width: 100)
-                                        .focused($focusedField, equals: .departmentBudget)
-                                        .onSubmit {
-                                            if dept.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                                dept.amount = "0"
-                                            }
+                                    HStack(spacing: 4) {
+                                        Text("₹")
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                        TextField("0", text: $dept.amount)
+                                            .keyboardType(.decimalPad)
+                                            .font(.body)
+                                            .fontWeight(.medium)
+                                            .multilineTextAlignment(.trailing)
+                                            .textFieldStyle(.plain)
+                                            .frame(width: 80)
+                                            .focused($focusedField, equals: .departmentBudget)
+                                    }
+                                    .onSubmit {
+                                        if dept.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            dept.amount = "0"
                                         }
+                                    }
                                 }
                             }
                             
-                            Divider()
+                            if dept.id != departments.last?.id {
+                                Divider()
+                                    .padding(.top, 4)
+                            }
                         }
-                        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                        .padding(.vertical, 4)
                     }
                     
                     Button(action: {
                         HapticManager.selection()
-                        departments.append(AddPhaseDepartmentItem())
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            departments.append(AddPhaseDepartmentItem())
+                        }
                     }) {
-                        Label("Add Department", systemImage: "plus.circle.fill")
-                            .foregroundColor(.accentColor)
-                            .font(DesignSystem.Typography.caption1)
-                            .fontWeight(.medium)
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("Add Department")
+                                .font(.body)
+                        }
+                        .foregroundColor(.accentColor)
                     }
                     .buttonStyle(.plain)
                 } header: {
                     Text("Departments")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 } footer: {
                     Text("At least one department with a name is required. Budget can be 0.")
+                        .font(.caption)
                 }
                 
                 if let error = errorMessage {
                     Section {
-                        Text(error)
-                            .foregroundColor(.red)
-                            .font(.caption)
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Add Phase")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -2658,6 +2693,7 @@ private struct AddPhaseSheet: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(.blue)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
@@ -2665,6 +2701,7 @@ private struct AddPhaseSheet: View {
                     }
                     .disabled(!isFormValid || isSaving)
                     .fontWeight(.semibold)
+                    .foregroundColor(isFormValid && !isSaving ? .blue : .gray)
                 }
             }
             .onAppear {
