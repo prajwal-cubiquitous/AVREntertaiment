@@ -110,51 +110,62 @@ struct ContentView: View {
 private struct SplashView: View {
     var body: some View {
         ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
+            // Background gradient (purple → blue)
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.44, green: 0.37, blue: 1.0),
+                    Color(red: 0.38, green: 0.82, blue: 1.0)
+                ]),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .ignoresSafeArea()
             
-            VStack(spacing: DesignSystem.Spacing.large) {
-                // App Logo
+            VStack(spacing: 24) {
+                // Logo
                 Image("TracuraLogo")
-                    .renderingMode(.original)
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 100)
-
-                VStack(spacing: DesignSystem.Spacing.small) {
-                    Text("TRACURA")
-                        .font(.system(size: 44, weight: .heavy, design: .rounded))
-                        .kerning(2)
-                        .overlay(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.24, green: 0.53, blue: 0.98), // light blue
-                                    Color(red: 0.02, green: 0.20, blue: 0.55)  // deep blue
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .mask(
-                            Text("TRACURA")
-                                .font(.system(size: 44, weight: .heavy, design: .rounded))
-                                .kerning(2)
-                        )
-                    
-                    Text("Track. Approve. Control.")
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.secondary)
-                }
+                    .frame(height: 130)
+                    .shadow(radius: 8)
                 
-                // Loading indicator
+                // Title
+                Text("TRACURA")
+                    .font(.system(size: 54, weight: .bold, design: .default))
+                    .kerning(2)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.27, green: 0.33, blue: 0.82),
+                                Color(red: 0.16, green: 0.18, blue: 0.60)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
+                
+                // Tagline
+                Text("Track. Approve. Control.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(Color.white.opacity(0.9))
+                    .padding(.top, 8)
+            }
+            // Center vertically with spacing
+            .frame(maxHeight: .infinity)
+            
+            // ProgressView fixed at bottom
+            VStack {
+                Spacer()
                 ProgressView()
-                    .scaleEffect(1.2)
-                    .padding(.top, DesignSystem.Spacing.large)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.3)
+                    .padding(.bottom, 60)
             }
         }
     }
 }
 
 #Preview {
-    ContentView()
+    SplashView()
 }

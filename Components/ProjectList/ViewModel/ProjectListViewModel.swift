@@ -99,7 +99,7 @@ class ProjectListViewModel: ObservableObject {
                             Filter.whereField("tempApproverID", isEqualTo: cleanPhone)
                         ])
                     )
-                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
+//                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
                 
             default:
                 print("🔍 Default role - fetching all projects")
