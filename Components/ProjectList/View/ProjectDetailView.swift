@@ -300,7 +300,10 @@ private struct PhaseBreakdownView: View {
             } else if !viewModel.currentPhases.isEmpty {
                 VStack(spacing: DesignSystem.Spacing.medium) {
                     ForEach(Array(viewModel.currentPhases.enumerated()), id: \.element.id) { index, phase in
-                        CurrentPhaseView(phase: phase)
+                        CurrentPhaseView(
+                            phase: phase,
+                            projectId: project.id ?? ""
+                        )
                         
                         if index < viewModel.currentPhases.count - 1 {
                             Divider()
@@ -318,7 +321,8 @@ private struct PhaseBreakdownView: View {
         .sheet(isPresented: $showingAllPhases) {
             AllPhasesSheetView(
                 currentPhases: viewModel.currentPhases,
-                expiredPhases: viewModel.expiredPhases
+                expiredPhases: viewModel.expiredPhases,
+                projectId: project.id ?? ""
             )
         }
     }
@@ -326,8 +330,10 @@ private struct PhaseBreakdownView: View {
 
 private struct CurrentPhaseView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
+    let projectId: String
     
     @State private var isExpanded = false
+    @State private var showingRequestForm = false
     
     private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
@@ -434,9 +440,9 @@ private struct CurrentPhaseView: View {
                     
                     // 3-dots Menu (horizontal ellipsis)
                     Menu {
-                        Button {
-                            // Handle Request Override action
+                        Button(role: .destructive) {
                             HapticManager.selection()
+                            showingRequestForm = true
                         } label: {
                             Label("Request Override", systemImage: "exclamationmark.triangle")
                         }
@@ -447,6 +453,13 @@ private struct CurrentPhaseView: View {
                             .padding(6)
                     }
                 }
+            }
+            .sheet(isPresented: $showingRequestForm) {
+                PhaseRequestFormView(
+                    projectId: projectId,
+                    phaseId: phase.id,
+                    phaseName: phase.phaseName
+                )
             }
             
             Divider()
@@ -650,6 +663,7 @@ private struct DepartmentRowView: View {
 private struct AllPhasesSheetView: View {
     let currentPhases: [ProjectDetailViewModel.PhaseInfo]
     let expiredPhases: [ProjectDetailViewModel.PhaseInfo]
+    let projectId: String
     @Environment(\.dismiss) private var dismiss
     
     private var allPhases: [ProjectDetailViewModel.PhaseInfo] {
@@ -664,7 +678,11 @@ private struct AllPhasesSheetView: View {
                 if !currentPhases.isEmpty {
                     Section {
                         ForEach(currentPhases) { phase in
-                            ProjectDetailPhaseCardView(phase: phase, isInProgress: true)
+                            ProjectDetailPhaseCardView(
+                                phase: phase,
+                                isInProgress: true,
+                                projectId: projectId
+                            )
                         }
                     } header: {
                         HStack(spacing: 6) {
@@ -683,7 +701,11 @@ private struct AllPhasesSheetView: View {
                 if !expiredPhases.isEmpty {
                     Section {
                         ForEach(expiredPhases) { phase in
-                            ProjectDetailPhaseCardView(phase: phase, isInProgress: false)
+                            ProjectDetailPhaseCardView(
+                                phase: phase,
+                                isInProgress: false,
+                                projectId: projectId
+                            )
                         }
                     } header: {
                         HStack(spacing: 6) {
@@ -740,7 +762,9 @@ private struct AllPhasesSheetView: View {
 private struct ProjectDetailPhaseCardView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
     let isInProgress: Bool
+    let projectId: String
     @State private var isExpanded = false
+    @State private var showingRequestForm = false
     
     private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
@@ -814,9 +838,9 @@ private struct ProjectDetailPhaseCardView: View {
                     
                     // 3-dots Menu (horizontal ellipsis)
                     Menu {
-                        Button {
-                            // Handle Request Override action
+                        Button(role: .destructive) {
                             HapticManager.selection()
+                            showingRequestForm = true
                         } label: {
                             Label("Request Override", systemImage: "exclamationmark.triangle")
                         }
@@ -827,6 +851,13 @@ private struct ProjectDetailPhaseCardView: View {
                             .padding(6)
                     }
                 }
+            }
+            .sheet(isPresented: $showingRequestForm) {
+                PhaseRequestFormView(
+                    projectId: projectId,
+                    phaseId: phase.id,
+                    phaseName: phase.phaseName
+                )
             }
             
             Divider()
@@ -1224,6 +1255,251 @@ private struct StatusViewDetial: View {
         .background(status.color.opacity(0.15))
         .foregroundColor(status.color.darker(by: 10))
         .clipShape(Capsule())
+    }
+}
+
+// MARK: - Phase Request Form View
+private struct PhaseRequestFormView: View {
+    let projectId: String
+    let phaseId: String
+    let phaseName: String
+    
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = PhaseRequestViewModel()
+    @State private var description: String = ""
+    @State private var extensionDate: Date = Date()
+    @State private var isSubmitting = false
+    @State private var showAlert = false
+    @State private var alertMessage = ""
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }
+    
+    private var isFormValid: Bool {
+        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        extensionDate > Date()
+    }
+    
+    private var minimumDate: Date {
+        Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    }
+    
+    private var dateRange: PartialRangeFrom<Date> {
+        minimumDate...
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Phase")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(phaseName)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Phase Information")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Description")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .fontWeight(.medium)
+                        
+                        TextEditor(text: $description)
+                            .frame(minHeight: 100)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(UIColor.systemGray4), lineWidth: 1)
+                            )
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Request Details")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } footer: {
+                    Text("Please provide a detailed reason for requesting a phase extension.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Extend Phase To")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .fontWeight(.medium)
+                        
+                        DatePicker(
+                            "Select extension date",
+                            selection: $extensionDate,
+                            in: dateRange,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.compact)
+                        
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.blue)
+                            Text("The phase will be extended to this date if approved")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Extension Date")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Section {
+                    submitButtonView
+                }
+            }
+            .navigationTitle("Request Override")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Request", isPresented: $showAlert) {
+                Button("OK") {
+                    if alertMessage.contains("successfully") {
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text(alertMessage)
+            }
+        }
+    }
+    
+    private var submitButtonView: some View {
+        Button(action: {
+            submitRequest()
+        }) {
+            HStack {
+                Spacer()
+                if isSubmitting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Text("Send Request")
+                        .fontWeight(.semibold)
+                }
+                Spacer()
+            }
+            .foregroundColor(.white)
+            .padding(.vertical, 12)
+        }
+        .disabled(!isFormValid || isSubmitting)
+        .frame(maxWidth: .infinity)
+        .background(buttonBackgroundColor)
+        .cornerRadius(10)
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        .listRowBackground(Color.clear)
+    }
+    
+    private var buttonBackgroundColor: Color {
+        isFormValid ? Color.red : Color.gray
+    }
+    
+    private func submitRequest() {
+        guard isFormValid else { return }
+        
+        isSubmitting = true
+        HapticManager.impact(.medium)
+        
+        Task {
+            do {
+                let formattedDate = dateFormatter.string(from: extensionDate)
+                
+                try await viewModel.submitRequest(
+                    projectId: projectId,
+                    phaseId: phaseId,
+                    phaseName: phaseName,
+                    description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+                    extensionDate: formattedDate
+                )
+                
+                await MainActor.run {
+                    isSubmitting = false
+                    alertMessage = "Request submitted successfully!"
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                    alertMessage = "Failed to submit request: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Phase Request ViewModel
+@MainActor
+class PhaseRequestViewModel: ObservableObject {
+    private let db = Firestore.firestore()
+    
+    func submitRequest(
+        projectId: String,
+        phaseId: String,
+        phaseName: String,
+        description: String,
+        extensionDate: String
+    ) async throws {
+        guard let currentUserPhone = UserServices.shared.currentUserPhone else {
+            throw NSError(domain: "AuthError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
+        }
+        
+        let requestRef = db.collection("projects_ios1")
+            .document(projectId)
+            .collection("requests")
+            .document()
+        
+        let requestData: [String: Any] = [
+            "id": requestRef.documentID,
+            "projectId": projectId,
+            "phaseId": phaseId,
+            "phaseName": phaseName,
+            "requestedBy": currentUserPhone,
+            "description": description,
+            "requestedExtensionDate": extensionDate,
+            "status": PhaseRequest.RequestStatus.pending.rawValue,
+            "remark": NSNull(),
+            "createdAt": Timestamp(),
+            "updatedAt": Timestamp()
+        ]
+        
+        try await requestRef.setData(requestData)
+        
+        // Post notification to refresh if needed
+        NotificationCenter.default.post(name: NSNotification.Name("PhaseRequestSubmitted"), object: nil)
     }
 }
 
