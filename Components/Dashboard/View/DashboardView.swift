@@ -651,16 +651,17 @@ struct DashboardView: View {
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.85)
 
-                                    HStack(spacing: 6) {
-                                        if (phaseTimelineText(phase) != ""){
-                                            Image(systemName: "calendar")
+                                    if let daysInfo = daysRemaining(for: phase) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "clock.fill")
                                                 .font(.caption2)
-                                                .foregroundColor(.secondary)
+                                                .foregroundColor(daysInfo.color)
                                                 .accessibilityHidden(true)
+                                            Text(daysInfo.text)
+                                                .font(DesignSystem.Typography.caption1)
+                                                .foregroundColor(daysInfo.color)
+                                                .fontWeight(daysInfo.color == .red || daysInfo.color == .orange ? .semibold : .regular)
                                         }
-                                        Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
-                                            .font(DesignSystem.Typography.caption1)
-                                            .foregroundColor(.secondary)
                                     }
                                 }
 
@@ -982,6 +983,32 @@ struct DashboardView: View {
             return "Until: \(phaseDateFormatter.string(from: e))"
         case (let _?, let e?):
             return "Until: \(phaseDateFormatter.string(from: e))"
+        }
+    }
+    
+    private func daysRemaining(for phase: PhaseSummary) -> (text: String, color: Color)? {
+        let current = now
+        guard let endDate = phase.end else {
+            // If no end date, check start date
+            if let startDate = phase.start {
+                let daysSince = Calendar.current.dateComponents([.day], from: startDate, to: current).day ?? 0
+                return daysSince >= 0 ? ("\(daysSince) days passed", .secondary) : nil
+            }
+            return nil
+        }
+        
+        let daysRemaining = Calendar.current.dateComponents([.day], from: current, to: endDate).day ?? 0
+        
+        if daysRemaining < 0 {
+            return ("\(abs(daysRemaining)) days overdue", Color.red)
+        } else if daysRemaining == 0 {
+            return ("Ends today", Color.red)
+        } else if daysRemaining < 5 {
+            return ("\(daysRemaining) days remaining", Color.red)
+        } else if daysRemaining < 15 {
+            return ("\(daysRemaining) days remaining", Color.orange)
+        } else {
+            return ("\(daysRemaining) days remaining", Color.secondary)
         }
     }
     
@@ -1749,11 +1776,11 @@ private struct AllPhasesView: View {
         case (nil, nil):
             return ""
         case (let s?, nil):
-            return "Since: \(phaseDateFormatter.string(from: s))"
+            return "Start: \(phaseDateFormatter.string(from: s))"
         case (nil, let e?):
-            return "Until: \(phaseDateFormatter.string(from: e))"
-        case (let _?, let e?):
-            return "Until: \(phaseDateFormatter.string(from: e))"
+            return "End: \(phaseDateFormatter.string(from: e))"
+        case (let s?, let e?):
+            return "\(phaseDateFormatter.string(from: s)) - \(phaseDateFormatter.string(from: e))"
         }
     }
     
@@ -1842,16 +1869,16 @@ private struct AllPhasesView: View {
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.85)
 
-                                    HStack(spacing: 6) {
-                                        if phaseTimelineText(phase) != "" {
+                                    if phaseTimelineText(phase) != "" {
+                                        HStack(spacing: 6) {
                                             Image(systemName: "calendar")
                                                 .font(.caption2)
                                                 .foregroundColor(.secondary)
                                                 .accessibilityHidden(true)
+                                            Text(phaseTimelineText(phase))
+                                                .font(DesignSystem.Typography.caption1)
+                                                .foregroundColor(.secondary)
                                         }
-                                        Text(phaseTimelineText(phase) != "" ? phaseTimelineText(phase) : "")
-                                            .font(DesignSystem.Typography.caption1)
-                                            .foregroundColor(.secondary)
                                     }
                                 }
                                 
