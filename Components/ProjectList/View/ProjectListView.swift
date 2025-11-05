@@ -7,6 +7,7 @@
 
 // ProjectListView.swift
 import SwiftUI
+import FirebaseFirestore
 
 struct ProjectListView: View {
     
@@ -17,8 +18,10 @@ struct ProjectListView: View {
     @State private var showingTempApproval = false
     @State private var tempApproverData: TempApprover?
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
+    @State private var businessName: String = "Your Projects"
     @StateObject var viewModel: ProjectListViewModel
     @EnvironmentObject var navigationManager: NavigationManager
+    @EnvironmentObject var authService: FirebaseAuthService
     let role: UserRole
     
     init(phoneNumber: String = "", role: UserRole = .APPROVER, customerId: String? = nil) {
@@ -36,14 +39,13 @@ struct ProjectListView: View {
                 VStack {
                     // Common Header with menu button
                     HStack(spacing: 8) {
-                        if !viewModel.projects.isEmpty {
-                            Text("Your Projects")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                        }
+                        Text(businessName)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.5)
+                            .multilineTextAlignment(.leading)
                         
                         Spacer(minLength: 4)
                         
@@ -227,6 +229,7 @@ struct ProjectListView: View {
             if role == .APPROVER {
                 loadTempApproverStatuses()
             }
+            loadBusinessName()
         }
         .sheet(isPresented: $viewModel.showingFullNotifications) {
             NotificationView(viewModel: viewModel)
@@ -261,6 +264,41 @@ struct ProjectListView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func loadBusinessName() {
+        Task {
+            guard let customerId = authService.currentCustomerId else {
+                // Fallback to default if customer ID not available
+                await MainActor.run {
+                    businessName = "Your Projects"
+                }
+                return
+            }
+            
+            do {
+                let customerDoc = try await Firestore.firestore()
+                    .collection("customers")
+                    .document(customerId)
+                    .getDocument()
+                
+                if customerDoc.exists,
+                   let customer = try? customerDoc.data(as: Customer.self) {
+                    await MainActor.run {
+                        businessName = customer.businessName.isEmpty ? "Your Projects" : customer.businessName
+                    }
+                } else {
+                    await MainActor.run {
+                        businessName = "Your Projects"
+                    }
+                }
+            } catch {
+                print("Error loading business name: \(error.localizedDescription)")
+                await MainActor.run {
+                    businessName = "Your Projects"
+                }
+            }
+        }
+    }
     
     private func loadTempApproverStatuses() {
         Task {
