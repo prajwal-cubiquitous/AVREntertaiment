@@ -7,11 +7,13 @@
 
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: DashboardViewModel
     @StateObject private var notificationViewModel = NotificationViewModel()
+    @EnvironmentObject var authService: FirebaseAuthService
     @State private var showingNotifications = false
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
@@ -37,6 +39,11 @@ struct DashboardView: View {
     
     // Accept a single project as parameter
     var project: Project?
+    
+    // Customer ID for multi-tenant support
+    private var customerId: String? {
+        authService.currentCustomerId
+    }
     
     // MARK: - Phase Data
     struct PhaseSummary: Identifiable, Hashable {
@@ -1016,11 +1023,13 @@ struct DashboardView: View {
     
     private func loadPhases() async {
         guard let projectId = project?.id else { return }
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadPhases")
+            return
+        }
         do {
-            let snapshot = try await Firestore.firestore()
-                .collection(FirebaseCollections.projects)
-                .document(projectId)
-                .collection("phases")
+            let snapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
                 .order(by: "phaseNumber")
                 .getDocuments()
             var collected: [PhaseSummary] = []
@@ -1042,14 +1051,14 @@ struct DashboardView: View {
     
     private func loadPhaseBudgets() async {
         guard let projectId = project?.id else { return }
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadPhaseBudgets")
+            return
+        }
         do {
-            let db = Firestore.firestore()
-            
             // Load all approved expenses for this project
-            let expensesSnapshot = try await db
-                .collection(FirebaseCollections.projects)
-                .document(projectId)
-                .collection("expenses")
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
@@ -1084,10 +1093,12 @@ struct DashboardView: View {
 
     private func updatePhaseEnabled(phaseId: String, enabled: Bool) {
         guard let projectId = project?.id else { return }
-        Firestore.firestore()
-            .collection(FirebaseCollections.projects)
-            .document(projectId)
-            .collection("phases")
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in updatePhaseEnabled")
+            return
+        }
+        FirebasePathHelper.shared
+            .phasesCollection(customerId: customerId, projectId: projectId)
             .document(phaseId)
             .updateData([
                 "isEnabled": enabled,
@@ -1187,12 +1198,17 @@ struct DashboardView: View {
             return
         }
         
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in fetchTempApproverData")
+            return
+        }
+        
         do {
             let db = Firestore.firestore()
             
-            // Fetch user name from users collection
-            let userDocument = try await db
-                .collection(FirebaseCollections.users)
+            // Fetch user name from customer-specific users collection
+            let userDocument = try await FirebasePathHelper.shared
+                .usersCollection(customerId: customerId)
                 .document(tempApproverID)
                 .getDocument()
             
@@ -1204,10 +1220,10 @@ struct DashboardView: View {
                 // This ensures temp approver details show for all users (admin, approver, etc.)
                 let approverPhone = user.phoneNumber
                 
-                // Fetch latest temp approver record
-                let tempApproverSnapshot = try await db
-                    .collection("projects_ios1")
-                    .document(project.id ?? "")
+                // Fetch latest temp approver record from customer-specific project
+                guard let projectId = project.id else { return }
+                let tempApproverSnapshot = try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: approverPhone)
                     .order(by: "updatedAt", descending: true)
@@ -1438,10 +1454,15 @@ private struct AddDepartmentSheet: View {
         isSaving = true
         errorMessage = nil
 
-        let db = Firestore.firestore()
-        db.collection(FirebaseCollections.projects)
-            .document(projectId)
-            .collection("phases")
+        // Get customerId from authService
+        guard let customerId = Auth.auth().currentUser?.uid else {
+            errorMessage = "Customer ID not found. Please log in again."
+            isSaving = false
+            return
+        }
+
+        FirebasePathHelper.shared
+            .phasesCollection(customerId: customerId, projectId: projectId)
             .document(phaseId)
             .setData([
                 "departments": [
@@ -1788,12 +1809,19 @@ private struct AllPhasesView: View {
     
     private func loadPhaseEnabledStates() {
         guard let projectId = project?.id else { return }
+        // Get customerId from parent view or environment
+        // For now, we'll need to pass it or get it from authService
+        // Since this is inside AllPhasesView, we need to get customerId from parent
         Task {
             do {
-                let snapshot = try await Firestore.firestore()
-                    .collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("phases")
+                // Try to get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in loadPhaseEnabledStates")
+                    return
+                }
+                
+                let snapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .getDocuments()
                 
                 var enabledMap: [String: Bool] = [:]
@@ -1816,13 +1844,15 @@ private struct AllPhasesView: View {
         guard let projectId = project?.id else { return }
         Task {
             do {
-                let db = Firestore.firestore()
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in AllPhasesView.loadPhaseBudgets")
+                    return
+                }
                 
                 // Load all approved expenses for this project
-                let expensesSnapshot = try await db
-                    .collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("expenses")
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                     .getDocuments()
                 
@@ -1899,8 +1929,8 @@ private struct AllPhasesView: View {
                                 }
                                 
                                     if isPhaseInProgress(phase) {
-                                        Text("Active")
-                                            .font(DesignSystem.Typography.caption1)
+                                        Text("In Progress")
+                                            .font(DesignSystem.Typography.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.green)
                                             .padding(.horizontal, 8)
@@ -1916,11 +1946,10 @@ private struct AllPhasesView: View {
                                             get: { phaseEnabledMap[phase.id] ?? false },
                                             set: { newValue in
                                                 phaseEnabledMap[phase.id] = newValue
-                                                if let projectId = project?.id {
-                                                    Firestore.firestore()
-                                                        .collection(FirebaseCollections.projects)
-                                                        .document(projectId)
-                                                        .collection("phases")
+                                                if let projectId = project?.id,
+                                                   let customerId = Auth.auth().currentUser?.uid {
+                                                    FirebasePathHelper.shared
+                                                        .phasesCollection(customerId: customerId, projectId: projectId)
                                                         .document(phase.id)
                                                         .updateData([
                                                             "isEnabled": newValue,
@@ -2474,9 +2503,17 @@ class AnonymousExpensesViewModel: ObservableObject {
         
         Task {
             do {
-                let expensesSnapshot = try await db.collection("projects_ios1")
-                    .document(projectId)
-                    .collection("expenses")
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    await MainActor.run {
+                        self.errorMessage = "Customer ID not found. Please log in again."
+                        self.isLoading = false
+                    }
+                    return
+                }
+                
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("isAnonymous", isEqualTo: true)
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                     .order(by: "createdAt", descending: true)
@@ -2775,11 +2812,17 @@ private struct AddPhaseSheet: View {
     private func loadNextPhaseNumber() {
         Task {
             do {
-                let db = Firestore.firestore()
-                let snapshot = try await db
-                    .collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("phases")
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in loadNextPhaseNumber")
+                    await MainActor.run {
+                        nextPhaseNumber = existingPhaseCount + 1
+                    }
+                    return
+                }
+                
+                let snapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .order(by: "phaseNumber", descending: true)
                     .limit(to: 1)
                     .getDocuments()
@@ -2812,10 +2855,17 @@ private struct AddPhaseSheet: View {
         
         Task {
             do {
-                let db = Firestore.firestore()
-                let phaseRef = db.collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("phases")
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    await MainActor.run {
+                        isSaving = false
+                        errorMessage = "Customer ID not found. Please log in again."
+                    }
+                    return
+                }
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .document()
                 
                 // Use the calculated next phase number
@@ -2996,10 +3046,17 @@ private struct EditPhaseSheet: View {
         
         Task {
             do {
-                let db = Firestore.firestore()
-                let phaseRef = db.collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection("phases")
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    await MainActor.run {
+                        isSaving = false
+                        errorMessage = "Customer ID not found. Please log in again."
+                    }
+                    return
+                }
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .document(phaseId)
                 
                 // Format dates
