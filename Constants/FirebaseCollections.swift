@@ -1,7 +1,7 @@
 import Foundation
 
 struct FirebaseCollections {
-    static let users = "users_ios"
-    static let projects = "projects_ios1"
-    static let expenses = "expenses_ios"
+    static let users = "users"
+    static let projects = "projects"
+    static let expenses = "expenses"
 } 

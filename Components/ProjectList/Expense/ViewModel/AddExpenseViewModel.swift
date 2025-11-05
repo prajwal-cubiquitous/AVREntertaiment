@@ -64,6 +64,7 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Project Data
     let project: Project
     @Published var availablePhases: [PhaseInfo] = []
+    var customerId: String? // Customer ID for multi-tenant support
     
     struct PhaseInfo: Identifiable, Equatable {
         let id: String
@@ -76,6 +77,13 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Firebase References
     private let db = Firestore.firestore()
     private let storage = Storage.storage()
+    
+    // MARK: - Update Customer ID
+    func updateCustomerId(_ newCustomerId: String) {
+        customerId = newCustomerId
+        // Reload phases with new customerId
+        loadPhases()
+    }
     
     // MARK: - Computed Properties
     var amountValue: Double {
@@ -128,9 +136,12 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     // MARK: - Initialization
-    init(project: Project) {
+    init(project: Project, customerId: String?) {
         self.project = project
-        loadPhases()
+        self.customerId = customerId
+        if customerId != nil {
+            loadPhases()
+        }
     }
     
     // MARK: - Category Management
@@ -185,8 +196,9 @@ class AddExpenseViewModel: ObservableObject {
 
     // MARK: - Load Phases
     func loadPhases(for date: Date? = nil) {
-        guard let projectId = project.id else { return }
-        let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
+        guard let projectId = project.id,
+              let customerId = customerId else { return }
+        let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
         phasesRef.order(by: "phaseNumber").getDocuments { [weak self] snapshot, error in
             guard let self = self else { return }
             var phasesList: [PhaseInfo] = []
@@ -307,9 +319,12 @@ class AddExpenseViewModel: ObservableObject {
         attachmentName = fileName
         
         // Create unique file path
+        guard let customerId = customerId else { return }
         let timestamp = Int(Date().timeIntervalSince1970)
         let storageRef = storage.reference()
-            .child("projects_ios1")
+            .child("customers")
+            .child(customerId)
+            .child("projects")
             .child(projectId)
             .child("expenses")
             .child("\(timestamp)_\(fileName)")
@@ -384,6 +399,12 @@ class AddExpenseViewModel: ObservableObject {
             return
         }
         
+        guard let customerId = customerId else {
+            alertMessage = "Customer ID not found. Please log in again."
+            showAlert = true
+            return
+        }
+        
         guard let currentUserPhone = UserServices.shared.currentUserPhone else {
             alertMessage = "User not logged in."
             showAlert = true
@@ -413,24 +434,22 @@ class AddExpenseViewModel: ObservableObject {
                     "updatedAt": Timestamp()
                 ]
                 
-                // Store in subcollection: projects_ios1/{projectId}/expenses/{expenseId}
-                try await db.collection("projects_ios1")
-                    .document(projectId)
-                    .collection("expenses")
+                // Store in subcollection: customers/{customerId}/projects/{projectId}/expenses/{expenseId}
+                try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .addDocument(data: expenseData)
                 
                 // Check if project is DRAFT and has 0 expenses (this is the first expense)
                 // Check the expenses count before adding this expense
-                let expensesSnapshot = try await db.collection("projects_ios1")
-                    .document(projectId)
-                    .collection("expenses")
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .getDocuments()
                 
                 // If project is DRAFT and this is the first expense (count == 1 after adding)
                 if project.statusType == .DRAFT && expensesSnapshot.documents.count == 1 {
                     // Update project status to ACTIVE
-                    try await db.collection("projects_ios1")
-                        .document(projectId)
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
                         .updateData(["status": ProjectStatus.ACTIVE.rawValue])
                     
                     // Notify that project was updated
@@ -467,6 +486,12 @@ class AddExpenseViewModel: ObservableObject {
             return
         }
         
+        guard let customerId = customerId else {
+            alertMessage = "Customer ID not found. Please log in again."
+            showAlert = true
+            return
+        }
+        
         isLoading = true
         
         let phase = selectedPhase
@@ -491,9 +516,8 @@ class AddExpenseViewModel: ObservableObject {
         }
         
         // Update document in Firestore
-        db.collection("projects_ios1")
-            .document(projectId)
-            .collection("expenses")
+        FirebasePathHelper.shared
+            .expensesCollection(customerId: customerId, projectId: projectId)
             .document(expenseId)
             .updateData(updateData) { [weak self] error in
                 

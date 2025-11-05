@@ -5,10 +5,15 @@ struct AddExpenseView: View {
     let project: Project
     @StateObject private var viewModel: AddExpenseViewModel
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var authService: FirebaseAuthService
     
     init(project: Project) {
         self.project = project
-        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project))
+        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project, customerId: nil))
+    }
+    
+    private var customerId: String? {
+        authService.currentCustomerId
     }
     
     var body: some View {
@@ -178,6 +183,10 @@ struct AddExpenseView: View {
         }
             .onAppear{
                 UserServices.shared.currentUserPhone
+                // Update customerId in ViewModel when it becomes available
+                if let customerId = customerId {
+                    viewModel.updateCustomerId(customerId)
+                }
             }
             .onChange(of: viewModel.expenseDate) { newDate in
                 // Reload phases when date changes

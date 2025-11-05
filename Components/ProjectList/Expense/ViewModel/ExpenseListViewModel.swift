@@ -17,19 +17,31 @@ class ExpenseListViewModel: ObservableObject {
     private let project: Project
     private let db = Firestore.firestore()
     private let currentUserPhone: String
-    init(project: Project, currentUserPhone: String) {
+    var customerId: String? // Make it mutable so we can update it
+    
+    init(project: Project, currentUserPhone: String, customerId: String?) {
         self.project = project
         self.currentUserPhone = currentUserPhone
+        self.customerId = customerId
+    }
+    
+    func updateCustomerId(_ newCustomerId: String) {
+        customerId = newCustomerId
     }
     
     func fetchExpenses() {
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            isLoading = false
+            return
+        }
+        
         isLoading = true
         
         Task {
             do {
-                let snapshot = try await db.collection("projects_ios1")
-                    .document(project.id ?? "")
-                    .collection("expenses")
+                let snapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("submittedBy", isEqualTo: currentUserPhone)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()
@@ -56,12 +68,13 @@ class ExpenseListViewModel: ObservableObject {
     
     @MainActor
     func updateExpenseStatus(_ expense: Expense, status: ExpenseStatus) async {
-        guard let expenseId = expense.id else { return }
+        guard let expenseId = expense.id,
+              let projectId = project.id,
+              let customerId = customerId else { return }
         
         do {
-            let expenseRef = db.collection("projects_ios1")
-                .document(project.id ?? "")
-                .collection("expenses")
+            let expenseRef = FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .document(expenseId)
             
             try await expenseRef.updateData([

@@ -9,6 +9,7 @@
 // ProjectDetailView.swift
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 struct ProjectDetailView: View {
     // The view takes a single project object as input.
@@ -1268,6 +1269,7 @@ private struct PhaseRequestFormView: View {
     let phaseName: String
     
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var authService: FirebaseAuthService
     @StateObject private var viewModel = PhaseRequestViewModel()
     @State private var description: String = ""
     @State private var extensionDate: Date = Date()
@@ -1440,12 +1442,23 @@ private struct PhaseRequestFormView: View {
             do {
                 let formattedDate = dateFormatter.string(from: extensionDate)
                 
+                // Get customerId from authService
+                guard let customerId = authService.currentCustomerId else {
+                    await MainActor.run {
+                        isSubmitting = false
+                        alertMessage = "Customer ID not found. Please log in again."
+                        showAlert = true
+                    }
+                    return
+                }
+                
                 try await viewModel.submitRequest(
                     projectId: projectId,
                     phaseId: phaseId,
                     phaseName: phaseName,
                     description: description.trimmingCharacters(in: .whitespacesAndNewlines),
-                    extensionDate: formattedDate
+                    extensionDate: formattedDate,
+                    customerId: customerId
                 )
                 
                 await MainActor.run {
@@ -1474,29 +1487,28 @@ class PhaseRequestViewModel: ObservableObject {
         phaseId: String,
         phaseName: String,
         description: String,
-        extensionDate: String
+        extensionDate: String,
+        customerId: String
     ) async throws {
-        guard let currentUserPhone = UserServices.shared.currentUserPhone else {
+        // Get current user UID (userID) and phone number
+        guard let currentUserUID = Auth.auth().currentUser?.uid else {
             throw NSError(domain: "AuthError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
         
-        let requestRef = db.collection("projects_ios1")
-            .document(projectId)
+        // Store request in phases/{phaseId}/requests subcollection
+        let requestRef = FirebasePathHelper.shared
+            .phasesCollection(customerId: customerId, projectId: projectId)
+            .document(phaseId)
             .collection("requests")
             .document()
         
         let requestData: [String: Any] = [
             "id": requestRef.documentID,
-            "projectId": projectId,
-            "phaseId": phaseId,
-            "phaseName": phaseName,
-            "requestedBy": currentUserPhone,
-            "description": description,
-            "requestedExtensionDate": extensionDate,
-            "status": PhaseRequest.RequestStatus.pending.rawValue,
-            "remark": NSNull(),
-            "createdAt": Timestamp(),
-            "updatedAt": Timestamp()
+            "reason": description, // Reason for the request
+            "extendedDate": extensionDate, // Extended date (dd/MM/yyyy format)
+            "status": PhaseRequest.RequestStatus.pending.rawValue, // pending, accepted, rejected
+            "userID": currentUserUID, // User UID who requested
+            "createdAt": Timestamp() // Timestamp when request was created
         ]
         
         try await requestRef.setData(requestData)

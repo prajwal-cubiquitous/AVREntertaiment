@@ -9,11 +9,16 @@ struct ExpenseListView: View {
     @State private var selectedExpenseForChat: Expense?
     @State private var showingEditExpense = false
     @State private var selectedExpenseForEdit: Expense?
+    @EnvironmentObject var authService: FirebaseAuthService
     
     init(project: Project, currentUserPhone: String) {
         self.project = project
-        self._viewModel = StateObject(wrappedValue: ExpenseListViewModel(project: project, currentUserPhone : currentUserPhone))
+        self._viewModel = StateObject(wrappedValue: ExpenseListViewModel(project: project, currentUserPhone: currentUserPhone, customerId: nil))
         self.currentUserPhone = currentUserPhone
+    }
+    
+    private var customerId: String? {
+        authService.currentCustomerId
     }
     
     var body: some View {
@@ -32,6 +37,10 @@ struct ExpenseListView: View {
         .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(12)
         .onAppear {
+            // Update customerId in ViewModel when it becomes available
+            if let customerId = customerId {
+                viewModel.updateCustomerId(customerId)
+            }
             viewModel.fetchExpenses()
         }
         .sheet(isPresented: $viewModel.showingFullList) {

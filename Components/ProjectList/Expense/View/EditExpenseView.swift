@@ -1,16 +1,19 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import FirebaseAuth
+import FirebaseFirestore
 
 struct EditExpenseView: View {
     let expense: Expense
     let project: Project
     @StateObject private var viewModel: AddExpenseViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var customerId: String?
     
     init(expense: Expense, project: Project) {
         self.expense = expense
         self.project = project
-        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project))
+        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project, customerId: nil))
     }
     
     var body: some View {
@@ -124,8 +127,14 @@ struct EditExpenseView: View {
             }
         }
         .onAppear {
-            // Wait for phases to load, then pre-fill the form
+            // Fetch customerId from users collection using current user UID
             Task {
+                await fetchCustomerId()
+                // Update customerId in ViewModel when it becomes available
+                if let customerId = customerId {
+                    viewModel.updateCustomerId(customerId)
+                }
+                // Wait for phases to load, then pre-fill the form
                 // Small delay to ensure phases are loaded
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 await MainActor.run {
@@ -495,6 +504,30 @@ struct EditExpenseView: View {
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())
         .padding(.horizontal)
+    }
+    
+    // MARK: - Fetch Customer ID
+    private func fetchCustomerId() async {
+        guard let currentUserUID = Auth.auth().currentUser?.uid else {
+            print("No current user UID found")
+            return
+        }
+        
+        let db = Firestore.firestore()
+        do {
+            // Query users collection where document ID = current user UID
+            let userDoc = try await db.collection("users").document(currentUserUID).getDocument()
+            
+            if userDoc.exists, let userData = userDoc.data(), let ownerID = userData["ownerID"] as? String {
+                await MainActor.run {
+                    self.customerId = ownerID
+                }
+            } else {
+                print("User document not found or ownerID missing")
+            }
+        } catch {
+            print("Error fetching customerId: \(error.localizedDescription)")
+        }
     }
 }
 
