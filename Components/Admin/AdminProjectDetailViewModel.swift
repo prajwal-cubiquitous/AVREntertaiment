@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 @MainActor
 class AdminProjectDetailViewModel: ObservableObject {
@@ -7,10 +8,12 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var projectName: String
     @Published var projectDescription: String
     @Published var projectStatus: String
+    @Published var client: String
+    @Published var location: String
     @Published var startDate: Date
     @Published var endDate: Date
     @Published var teamMembers: [String]
-    @Published var managerName: String
+    @Published var managerNames: [String] = []
     @Published var tempApproverID: String?
     
     // Temporary Approver Properties
@@ -21,6 +24,8 @@ class AdminProjectDetailViewModel: ObservableObject {
     // Edit States
     @Published var isEditingName = false
     @Published var isEditingDescription = false
+    @Published var isEditingClient = false
+    @Published var isEditingLocation = false
     @Published var isEditingDates = false
     @Published var isEditingTeam = false
     
@@ -28,7 +33,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var approverSearchText = ""
     @Published var teamMemberSearchText = ""
     @Published var selectedTeamMembers: Set<User> = []
-    @Published var selectedApprover: User?
+    @Published var selectedManagers: Set<User> = []
     @Published var allApprovers: [User] = []
     @Published private var allUsers: [User] = []
     
@@ -44,11 +49,18 @@ class AdminProjectDetailViewModel: ObservableObject {
     let project: Project
     private let db = Firestore.firestore()
     
+    // Customer ID for multi-tenant support
+    var customerId: String? {
+        Auth.auth().currentUser?.uid
+    }
+    
     init(project: Project) {
         self.project = project
         self.projectName = project.name
         self.projectDescription = project.description
         self.projectStatus = project.status
+        self.client = project.client
+        self.location = project.location
         
         // Convert string dates to Date objects
         let dateFormatter = DateFormatter()
@@ -69,7 +81,6 @@ class AdminProjectDetailViewModel: ObservableObject {
         }
         
         self.teamMembers = project.teamMembers
-        self.managerName = project.managerIds.first ?? ""
         self.tempApproverID = project.tempApproverID
         
         Task {
@@ -87,10 +98,12 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     var filteredApprovers: [User] {
         if approverSearchText.isEmpty { return [] }
-        return allApprovers.filter {
-            $0.isActive &&
-            ($0.name.localizedCaseInsensitiveContains(approverSearchText) ||
-             $0.phoneNumber.localizedCaseInsensitiveContains(approverSearchText))
+        return allApprovers.filter { approver in
+            let isNotSelected = !selectedManagers.contains(approver)
+            let isActive = approver.isActive
+            let matchesSearch = approver.name.localizedCaseInsensitiveContains(approverSearchText) ||
+                              approver.phoneNumber.localizedCaseInsensitiveContains(approverSearchText)
+            return isNotSelected && isActive && matchesSearch
         }
     }
     
@@ -106,8 +119,14 @@ class AdminProjectDetailViewModel: ObservableObject {
     }
     
     func fetchUsers() async {
+        guard let customerId = customerId else {
+            errorMessage = "Customer ID not found. Please log in again."
+            showError = true
+            return
+        }
+        
         do {
-            let querySnapshot = try await db.collection(FirebaseCollections.users)
+            let querySnapshot = try await FirebasePathHelper.shared.usersCollection(customerId: customerId)
                 .whereField("role", in: [UserRole.USER.rawValue, UserRole.APPROVER.rawValue])
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
@@ -124,9 +143,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                         }
                     } else if user.role == .APPROVER {
                         loadedApprovers.append(user)
-                        if let firstManager = project.managerIds.first, user.phoneNumber == firstManager {
-                            selectedApprover = user
-                            managerName = user.name
+                        // Support multiple managers
+                        if project.managerIds.contains(user.phoneNumber) {
+                            selectedManagers.insert(user)
                         }
                     }
                 }
@@ -135,6 +154,9 @@ class AdminProjectDetailViewModel: ObservableObject {
             allUsers = loadedUsers.sorted { $0.name < $1.name }
             allApprovers = loadedApprovers.sorted { $0.name < $1.name }
             
+            // Update manager names
+            managerNames = selectedManagers.map { $0.name }.sorted()
+            
         } catch {
             errorMessage = "Failed to load users: \(error.localizedDescription)"
             showError = true
@@ -142,15 +164,16 @@ class AdminProjectDetailViewModel: ObservableObject {
     }
     
     func fetchTempApprover() async {
-        guard let tempApproverID = project.tempApproverID else {
+        guard let tempApproverID = project.tempApproverID,
+              let customerId = customerId else {
             self.tempApprover = nil
             return
         }
         
         do {
-            // Fetch the user from users collection using tempApproverID as document ID
-            let userDocument = try await db
-                .collection(FirebaseCollections.users)
+            // Fetch the user from customer-specific users collection using tempApproverID as document ID
+            let userDocument = try await FirebasePathHelper.shared
+                .usersCollection(customerId: customerId)
                 .document(tempApproverID)
                 .getDocument()
             
@@ -182,8 +205,15 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func updateProjectName(_ newName: String) {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(["name": newName])
                 
                 projectName = newName
@@ -201,8 +231,15 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func updateProjectDescription(_ newDescription: String) {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(["description": newDescription])
                 
                 projectDescription = newDescription
@@ -218,10 +255,69 @@ class AdminProjectDetailViewModel: ObservableObject {
         }
     }
     
+    func updateProjectClient(_ newClient: String) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(["client": newClient])
+                
+                client = newClient
+                isEditingClient = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update project client: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func updateProjectLocation(_ newLocation: String) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(["location": newLocation])
+                
+                location = newLocation
+                isEditingLocation = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update project location: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
     func updateProjectStatus(_ newStatus: ProjectStatus) {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(["status": newStatus.rawValue])
                 
                 projectStatus = newStatus.rawValue
@@ -238,6 +334,12 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func updateProjectDates() {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "dd/MM/yyyy"
@@ -247,7 +349,8 @@ class AdminProjectDetailViewModel: ObservableObject {
                     "endDate": dateFormatter.string(from: endDate)
                 ]
                 
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(data)
                 
                 isEditingDates = false
@@ -264,21 +367,30 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func updateProjectTeam() {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
-                
                 if tempApprover != nil {
                     saveTempApprover()
                 }
+                
+                // Support multiple managers
+                let managerIds = Array(selectedManagers).map { $0.phoneNumber }
                 let data: [String: Any] = [
-                    "managerIds": [selectedApprover?.phoneNumber ?? (project.managerIds.first ?? "")],
+                    "managerIds": managerIds,
                     "teamMembers": Array(selectedTeamMembers).map { $0.phoneNumber }
                 ]
                 
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(data)
                 
                 teamMembers = Array(selectedTeamMembers).map { $0.phoneNumber }
-                managerName = selectedApprover?.name ?? managerName
+                managerNames = selectedManagers.map { $0.name }.sorted()
                 isEditingTeam = false
                 showSuccess = true
                 
@@ -293,8 +405,15 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func updateTempApproverID(_ newTempApproverID: String?) {
         Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
             do {
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "")
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData(["tempApproverID": newTempApproverID as Any])
                 
                 tempApproverID = newTempApproverID
@@ -311,9 +430,15 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     // MARK: - Team Management
     
-    func selectApprover(_ user: User) {
-        selectedApprover = user
+    func selectManager(_ user: User) {
+        selectedManagers.insert(user)
         approverSearchText = ""
+        managerNames = selectedManagers.map { $0.name }.sorted()
+    }
+    
+    func removeManager(_ user: User) {
+        selectedManagers.remove(user)
+        managerNames = selectedManagers.map { $0.name }.sorted()
     }
     
     func selectTeamMember(_ user: User) {
@@ -346,12 +471,23 @@ class AdminProjectDetailViewModel: ObservableObject {
     
     func saveTempApprover() {
         Task {
+            guard let customerId = customerId, let projectId = project.id, let tempApprover = tempApprover else {
+                errorMessage = "Customer ID, Project ID, or Temp Approver not found."
+                showError = true
+                return
+            }
+            
             do {
                 let newApproverID = UUID().uuidString
-                // In a real implementation, this would save to Firestore
-                try await db.collection(FirebaseCollections.projects).document(project.id ?? "").collection("tempApprover").document(newApproverID).setData(from: tempApprover)
+                // Save to customer-specific project's tempApprover subcollection
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .collection("tempApprover")
+                    .document(newApproverID)
+                    .setData(from: tempApprover)
+                
                 // Update the local state
-                updateTempApproverID(tempApprover?.approverId)
+                updateTempApproverID(tempApprover.approverId)
                 
                 // Fetch the updated temp approver from Firebase
                 await fetchTempApprover()
@@ -370,12 +506,11 @@ class AdminProjectDetailViewModel: ObservableObject {
     // MARK: - Expenses Count Check
     
     func checkExpensesCount() async {
-        guard let projectId = project.id else { return }
+        guard let customerId = customerId, let projectId = project.id else { return }
         
         do {
-            let expensesSnapshot = try await db.collection("projects_ios1")
-                .document(projectId)
-                .collection("expenses")
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .getDocuments()
             
             await MainActor.run {
@@ -393,8 +528,8 @@ class AdminProjectDetailViewModel: ObservableObject {
     }
     
     func deleteProject() {
-        guard let projectId = project.id else {
-            errorMessage = "Project ID not found."
+        guard let customerId = customerId, let projectId = project.id else {
+            errorMessage = "Customer ID or Project ID not found."
             showError = true
             return
         }
@@ -403,9 +538,9 @@ class AdminProjectDetailViewModel: ObservableObject {
         
         Task {
             do {
-                // Delete the project document from projects_ios1 collection
-                try await db.collection("projects_ios1")
-                    .document(projectId)
+                // Delete the project document from customer-specific projects collection
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                     .delete()
                 
                 // Also delete all subcollections (phases, expenses, etc.) if they exist

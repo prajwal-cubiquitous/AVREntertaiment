@@ -116,6 +116,24 @@ struct AdminProjectDetailView: View {
                 onSave: viewModel.updateProjectDescription
             )
             
+            // Client
+            ModernEditableCard(
+                title: "Client",
+                value: viewModel.client,
+                isEditing: $viewModel.isEditingClient,
+                icon: "person.2.fill",
+                onSave: viewModel.updateProjectClient
+            )
+            
+            // Location
+            ModernEditableCard(
+                title: "Location",
+                value: viewModel.location,
+                isEditing: $viewModel.isEditingLocation,
+                icon: "mappin.circle.fill",
+                onSave: viewModel.updateProjectLocation
+            )
+            
             // Status
             ModernStatusCard(
                 title: "Project Status",
@@ -177,15 +195,25 @@ struct AdminProjectDetailView: View {
             
             if viewModel.isEditingTeam {
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Project Manager Selection
-                    TeamMemberSelectionCard(
-                        title: "Project Manager",
-                        subtitle: "Select the project approver",
-                        searchText: $viewModel.approverSearchText,
-                        items: viewModel.filteredApprovers,
-                        onSelect: viewModel.selectApprover,
-                        icon: "person.badge.key.fill"
-                    )
+                    // Project Managers Selection (Multiple)
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        TeamMemberSelectionCard(
+                            title: "Project Managers",
+                            subtitle: "Select project approvers (multiple allowed)",
+                            searchText: $viewModel.approverSearchText,
+                            items: viewModel.filteredApprovers,
+                            onSelect: viewModel.selectManager,
+                            icon: "person.badge.key.fill"
+                        )
+                        
+                        // Selected Managers Display
+                        if !viewModel.selectedManagers.isEmpty {
+                            SelectedManagersCard(
+                                managers: viewModel.selectedManagers,
+                                onRemove: viewModel.removeManager
+                            )
+                        }
+                    }
                     
                     // Team Members Selection
                     TeamMemberSelectionCard(
@@ -258,13 +286,21 @@ struct AdminProjectDetailView: View {
                 }
             } else {
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Manager Display
-                    TeamMemberDisplayCard(
-                        title: "Project Manager",
-                        member: viewModel.managerName,
-                        icon: "person.badge.key.fill",
-                        color: .blue
-                    )
+                    // Managers Display (Multiple)
+                    if !viewModel.managerNames.isEmpty {
+                        TeamManagersListCard(
+                            managers: viewModel.managerNames,
+                            icon: "person.badge.key.fill",
+                            color: .blue
+                        )
+                    } else {
+                        TeamMemberDisplayCard(
+                            title: "Project Manager",
+                            member: "No manager assigned",
+                            icon: "person.badge.key.fill",
+                            color: .gray
+                        )
+                    }
                     
                     // Team Members Display
                     if !viewModel.teamMembers.isEmpty {
@@ -683,6 +719,106 @@ struct TeamMembersListCard: View {
                             )
                         
                         Text(member)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                        
+                        Spacer()
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.small)
+                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+                }
+            }
+        }
+        .padding()
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+    }
+}
+
+// MARK: - Selected Managers Card
+struct SelectedManagersCard: View {
+    let managers: Set<User>
+    let onRemove: (User) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            Text("Selected Managers")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.small) {
+                ForEach(managers.sorted(by: { $0.name < $1.name })) { manager in
+                    HStack {
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 20, height: 20)
+                            .overlay(
+                                Text(String(manager.name.prefix(1)))
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.blue)
+                            )
+                        
+                        Text(manager.name)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Button {
+                            HapticManager.selection()
+                            onRemove(manager)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.small)
+                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+                }
+            }
+        }
+        .padding()
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+    }
+}
+
+// MARK: - Team Managers List Card
+struct TeamManagersListCard: View {
+    let managers: [String]
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.subheadline)
+                    .foregroundStyle(color)
+                
+                Text("Project Managers")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.small) {
+                ForEach(managers, id: \.self) { manager in
+                    HStack {
+                        Circle()
+                            .fill(color.opacity(0.2))
+                            .frame(width: 20, height: 20)
+                            .overlay(
+                                Text(String(manager.prefix(1)))
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(color)
+                            )
+                        
+                        Text(manager)
                             .font(.caption.weight(.medium))
                             .lineLimit(1)
                         
