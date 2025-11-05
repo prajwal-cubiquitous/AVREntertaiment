@@ -22,14 +22,120 @@ struct PhaseRequestItem: Identifiable {
     let createdAt: Timestamp
 }
 
+enum RequestAction {
+    case accept
+    case reject
+}
+
 @MainActor
 class PhaseRequestNotificationViewModel: ObservableObject {
     @Published var pendingRequests: [PhaseRequestItem] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var reasonToReact: String = ""
     
     var pendingRequestsCount: Int {
         pendingRequests.count
+    }
+    
+    func handleRequestAction(
+        request: PhaseRequestItem,
+        projectId: String,
+        customerId: String?,
+        action: RequestAction,
+        reason: String
+    ) async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in handleRequestAction")
+            return
+        }
+        
+        guard let currentUserUID = Auth.auth().currentUser?.uid else {
+            print("❌ Current user UID not found")
+            return
+        }
+        
+        do {
+            let db = Firestore.firestore()
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            // Update request status
+            let requestRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(request.phaseId)
+                .collection("requests")
+                .document(request.id)
+            
+            let status = action == .accept ? "ACCEPTED" : "REJECTED"
+            
+            // Update request document
+            try await requestRef.updateData([
+                "status": status,
+                "reasonToReact": reason.isEmpty ? nil : reason,
+                "updatedAt": Timestamp()
+            ])
+            
+            // If accepted, update phase end date and log to changes collection
+            if action == .accept {
+                // Parse the extended date from request
+                guard let extendedDate = dateFormatter.date(from: request.extendedDate) else {
+                    print("⚠️ Invalid extended date format: \(request.extendedDate)")
+                    return
+                }
+                
+                let extendedDateStr = dateFormatter.string(from: extendedDate)
+                
+                // Get current phase to get previous end date
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(request.phaseId)
+                
+                let phaseDoc = try await phaseRef.getDocument()
+                
+                if let phaseData = phaseDoc.data(),
+                   let previousEndDate = phaseData["endDate"] as? String {
+                    
+                    // Update phase end date
+                    try await phaseRef.updateData([
+                        "endDate": extendedDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+                    
+                    // Log to changes collection
+                    let changeLog = PhaseTimelineChange(
+                        phaseId: request.phaseId,
+                        projectId: projectId,
+                        previousStartDate: phaseData["startDate"] as? String,
+                        previousEndDate: previousEndDate,
+                        newStartDate: phaseData["startDate"] as? String,
+                        newEndDate: extendedDateStr,
+                        changedBy: currentUserUID
+                    )
+                    
+                    let changesRef = phaseRef.collection("changes").document()
+                    try await changesRef.setData(from: changeLog)
+                    
+                    print("✅ Phase end date updated and logged to changes collection")
+                } else {
+                    // If phase doesn't exist, create it with the new end date
+                    try await phaseRef.setData([
+                        "endDate": extendedDateStr,
+                        "updatedAt": Timestamp()
+                    ], merge: true)
+                    
+                    print("✅ Phase end date set (new phase)")
+                }
+            }
+            
+            print("✅ Request \(action == .accept ? "accepted" : "rejected") successfully")
+            
+        } catch {
+            print("❌ Error handling request action: \(error)")
+            await MainActor.run {
+                self.errorMessage = "Failed to \(action == .accept ? "accept" : "reject") request: \(error.localizedDescription)"
+            }
+        }
     }
     
     func loadPendingRequests(projectId: String, customerId: String?) async {

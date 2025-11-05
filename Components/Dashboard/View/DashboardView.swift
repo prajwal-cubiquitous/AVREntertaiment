@@ -34,6 +34,8 @@ struct DashboardView: View {
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: PhaseSummary? = nil
     @State private var showingPhaseRequestNotifications = false
+    @State private var selectedRequest: PhaseRequestItem? = nil
+    @State private var showingRequestActionSheet = false
     @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
     let role: UserRole?
     let phoneNumber: String
@@ -315,9 +317,10 @@ struct DashboardView: View {
                             PhaseRequestNotificationFloatingView(
                                 requests: phaseRequestNotificationViewModel.pendingRequests,
                                 onRequestTap: { request in
-                                    // Handle request tap - could navigate to edit phase sheet
+                                    // Handle request tap - show accept/reject sheet
+                                    selectedRequest = request
                                     showingPhaseRequestNotifications = false
-                                    // TODO: Navigate to edit phase sheet with request details
+                                    showingRequestActionSheet = true
                                 },
                                 onDismiss: {
                                     withAnimation(.spring(response: 0.3)) {
@@ -536,6 +539,57 @@ struct DashboardView: View {
                 PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
             } else {
                 ProgressView("Loading project...")
+            }
+        }
+        .sheet(isPresented: $showingRequestActionSheet) {
+            if let request = selectedRequest, let projectId = project?.id {
+                PhaseRequestActionSheet(
+                    request: request,
+                    projectId: projectId,
+                    customerId: customerId,
+                    onAccept: {
+                        Task {
+                            await phaseRequestNotificationViewModel.handleRequestAction(
+                                request: request,
+                                projectId: projectId,
+                                customerId: customerId,
+                                action: .accept,
+                                reason: phaseRequestNotificationViewModel.reasonToReact
+                            )
+                            // Reload pending requests
+                            await phaseRequestNotificationViewModel.loadPendingRequests(
+                                projectId: projectId,
+                                customerId: customerId
+                            )
+                            // Reload phases
+                            await loadPhases()
+                        }
+                        showingRequestActionSheet = false
+                    },
+                    onReject: {
+                        Task {
+                            await phaseRequestNotificationViewModel.handleRequestAction(
+                                request: request,
+                                projectId: projectId,
+                                customerId: customerId,
+                                action: .reject,
+                                reason: phaseRequestNotificationViewModel.reasonToReact
+                            )
+                            // Reload pending requests
+                            await phaseRequestNotificationViewModel.loadPendingRequests(
+                                projectId: projectId,
+                                customerId: customerId
+                            )
+                        }
+                        showingRequestActionSheet = false
+                    },
+                    onDismiss: {
+                        showingRequestActionSheet = false
+                        phaseRequestNotificationViewModel.reasonToReact = ""
+                    },
+                    reasonToReact: $phaseRequestNotificationViewModel.reasonToReact
+                )
+                .presentationDetents([.medium])
             }
         }
 
