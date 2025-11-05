@@ -338,6 +338,10 @@ private struct CurrentPhaseView: View {
     
     @State private var isExpanded = false
     @State private var showingRequestForm = false
+    @State private var showingRequestStatus = false
+    @State private var hasUserRequests = false
+    @StateObject private var requestStatusViewModel = UserPhaseRequestStatusViewModel()
+    @EnvironmentObject var authService: FirebaseAuthService
     
     // Helper to check if phase is in progress
     private func isPhaseInProgress(_ phase: ProjectDetailViewModel.PhaseInfo) -> Bool {
@@ -407,6 +411,36 @@ private struct CurrentPhaseView: View {
         }
     }
     
+    private func checkUserRequests() async {
+        guard var currentUserUID = Auth.auth().currentUser?.phoneNumber,
+              let customerId = authService.currentCustomerId else {
+            hasUserRequests = false
+            return
+        }
+        
+        if currentUserUID.hasPrefix("+91") {
+            currentUserUID = currentUserUID.replacingOccurrences(of: "+91", with: "")
+        }
+        
+        do {
+            let requestsSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .collection("requests")
+                .whereField("userID", isEqualTo: currentUserUID)
+                .getDocuments()
+            
+            await MainActor.run {
+                hasUserRequests = !requestsSnapshot.documents.isEmpty
+            }
+        } catch {
+            print("Error checking user requests: \(error)")
+            await MainActor.run {
+                hasUserRequests = false
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
             // Phase Header
@@ -461,6 +495,15 @@ private struct CurrentPhaseView: View {
                     
                     // 3-dots Menu (horizontal ellipsis)
                     Menu {
+                        if hasUserRequests {
+                            Button {
+                                HapticManager.selection()
+                                showingRequestStatus = true
+                            } label: {
+                                Label("See Request Status", systemImage: "info.circle")
+                            }
+                        }
+                        
                         Button(role: .destructive) {
                             HapticManager.selection()
                             showingRequestForm = true
@@ -481,6 +524,25 @@ private struct CurrentPhaseView: View {
                     phaseId: phase.id,
                     phaseName: phase.phaseName
                 )
+            }
+            .sheet(isPresented: $showingRequestStatus) {
+                UserPhaseRequestStatusView(
+                    phaseId: phase.id,
+                    phaseName: phase.phaseName,
+                    projectId: projectId,
+                    customerId: authService.currentCustomerId
+                )
+                .presentationDetents([.medium])
+            }
+            .onAppear {
+                Task {
+                    await checkUserRequests()
+                }
+            }
+            .onChange(of: phase.id) { _ in
+                Task {
+                    await checkUserRequests()
+                }
             }
             
             Divider()
@@ -786,6 +848,9 @@ private struct ProjectDetailPhaseCardView: View {
     let projectId: String
     @State private var isExpanded = false
     @State private var showingRequestForm = false
+    @State private var showingRequestStatus = false
+    @State private var hasUserRequests = false
+    @EnvironmentObject var authService: FirebaseAuthService
     
     private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
@@ -816,6 +881,36 @@ private struct ProjectDetailPhaseCardView: View {
             return .orange
         } else {
             return .blue
+        }
+    }
+    
+    private func checkUserRequests() async {
+        guard var currentUserUID = Auth.auth().currentUser?.phoneNumber,
+              let customerId = authService.currentCustomerId else {
+            hasUserRequests = false
+            return
+        }
+        
+        if currentUserUID.hasPrefix("+91") {
+            currentUserUID = currentUserUID.replacingOccurrences(of: "+91", with: "")
+        }
+        
+        do {
+            let requestsSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .collection("requests")
+                .whereField("userID", isEqualTo: currentUserUID)
+                .getDocuments()
+            
+            await MainActor.run {
+                hasUserRequests = !requestsSnapshot.documents.isEmpty
+            }
+        } catch {
+            print("Error checking user requests: \(error)")
+            await MainActor.run {
+                hasUserRequests = false
+            }
         }
     }
     
@@ -861,6 +956,15 @@ private struct ProjectDetailPhaseCardView: View {
                     
                     // 3-dots Menu (horizontal ellipsis)
                     Menu {
+                        if hasUserRequests {
+                            Button {
+                                HapticManager.selection()
+                                showingRequestStatus = true
+                            } label: {
+                                Label("See Request Status", systemImage: "info.circle")
+                            }
+                        }
+                        
                         Button(role: .destructive) {
                             HapticManager.selection()
                             showingRequestForm = true
@@ -881,6 +985,25 @@ private struct ProjectDetailPhaseCardView: View {
                     phaseId: phase.id,
                     phaseName: phase.phaseName
                 )
+            }
+            .sheet(isPresented: $showingRequestStatus) {
+                UserPhaseRequestStatusView(
+                    phaseId: phase.id,
+                    phaseName: phase.phaseName,
+                    projectId: projectId,
+                    customerId: authService.currentCustomerId
+                )
+                .presentationDetents([.medium])
+            }
+            .onAppear {
+                Task {
+                    await checkUserRequests()
+                }
+            }
+            .onChange(of: phase.id) { _ in
+                Task {
+                    await checkUserRequests()
+                }
             }
             
             Divider()
@@ -1514,6 +1637,14 @@ class PhaseRequestViewModel: ObservableObject {
             throw NSError(domain: "AuthError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
         }
         
+        guard var currentUserPhone = Auth.auth().currentUser?.phoneNumber else {
+            throw NSError(domain: "AuthError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
+        }
+        
+        if currentUserPhone.hasPrefix("+91") {
+            currentUserPhone = currentUserPhone.replacingOccurrences(of: "+91", with: "")
+        }
+        
         // Store request in phases/{phaseId}/requests subcollection
         let requestRef = FirebasePathHelper.shared
             .phasesCollection(customerId: customerId, projectId: projectId)
@@ -1526,7 +1657,7 @@ class PhaseRequestViewModel: ObservableObject {
             "reason": description, // Reason for the request
             "extendedDate": extensionDate, // Extended date (dd/MM/yyyy format)
             "status": PhaseRequest.RequestStatus.pending.rawValue, // pending, accepted, rejected
-            "userID": currentUserUID, // User UID who requested
+            "userID": currentUserPhone, // User UID who requested
             "createdAt": Timestamp() // Timestamp when request was created
         ]
         
@@ -1534,6 +1665,247 @@ class PhaseRequestViewModel: ObservableObject {
         
         // Post notification to refresh if needed
         NotificationCenter.default.post(name: NSNotification.Name("PhaseRequestSubmitted"), object: nil)
+    }
+}
+
+// MARK: - User Phase Request Status ViewModel
+@MainActor
+class UserPhaseRequestStatusViewModel: ObservableObject {
+    @Published var userRequests: [UserPhaseRequestStatus] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    func loadUserRequests(phaseId: String, projectId: String, customerId: String?) async {
+        guard let customerId = customerId,
+              var currentUserUID = Auth.auth().currentUser?.phoneNumber else {
+            errorMessage = "User not logged in"
+            return
+        }
+        
+        if currentUserUID.hasPrefix("+91") {
+            currentUserUID = currentUserUID.replacingOccurrences(of: "+91", with: "")
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let requestsSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phaseId)
+                .collection("requests")
+                .whereField("userID", isEqualTo: currentUserUID)
+                .order(by: "createdAt", descending: true)
+                .getDocuments()
+            
+            var requests: [UserPhaseRequestStatus] = []
+            
+            for requestDoc in requestsSnapshot.documents {
+                let requestData = requestDoc.data()
+                let requestId = requestDoc.documentID
+                
+                if let reason = requestData["reason"] as? String,
+                   let status = requestData["status"] as? String,
+                   let extendedDate = requestData["extendedDate"] as? String,
+                   let createdAt = requestData["createdAt"] as? Timestamp {
+                    
+                    let requestStatus = UserPhaseRequestStatus(
+                        id: requestId,
+                        reason: reason,
+                        status: status,
+                        extendedDate: extendedDate,
+                        createdAt: createdAt
+                    )
+                    requests.append(requestStatus)
+                }
+            }
+            
+            self.userRequests = requests
+            self.isLoading = false
+            
+        } catch {
+            self.errorMessage = "Failed to load requests: \(error.localizedDescription)"
+            self.isLoading = false
+            print("Error loading user requests: \(error)")
+        }
+    }
+}
+
+// MARK: - User Phase Request Status Model
+struct UserPhaseRequestStatus: Identifiable {
+    let id: String
+    let reason: String
+    let status: String // "PENDING", "APPROVED", "REJECTED"
+    let extendedDate: String
+    let createdAt: Timestamp
+    
+    var statusColor: Color {
+        switch status {
+        case "PENDING": return .orange
+        case "APPROVED": return .green
+        case "REJECTED": return .red
+        default: return .gray
+        }
+    }
+    
+    var statusIcon: String {
+        switch status {
+        case "PENDING": return "clock.fill"
+        case "APPROVED": return "checkmark.circle.fill"
+        case "REJECTED": return "xmark.circle.fill"
+        default: return "questionmark.circle.fill"
+        }
+    }
+}
+
+// MARK: - User Phase Request Status View
+struct UserPhaseRequestStatusView: View {
+    let phaseId: String
+    let phaseName: String
+    let projectId: String
+    let customerId: String?
+    
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = UserPhaseRequestStatusViewModel()
+    
+    var body: some View {
+        NavigationView {
+            Group {
+                if viewModel.isLoading {
+                    ProgressView("Loading requests...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.userRequests.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary)
+                        
+                        Text("No Requests Found")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("You haven't submitted any requests for this phase yet.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        Section {
+                            HStack {
+                                Text("Total Requests")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("\(viewModel.userRequests.count)")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                            }
+                        } header: {
+                            Text("Request Summary")
+                                .textCase(.none)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Section {
+                            ForEach(viewModel.userRequests) { request in
+                                RequestStatusRow(request: request)
+                            }
+                        } header: {
+                            Text("Request Details")
+                                .textCase(.none)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Request Status")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .onAppear {
+            Task {
+                await viewModel.loadUserRequests(
+                    phaseId: phaseId,
+                    projectId: projectId,
+                    customerId: customerId
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Request Status Row
+private struct RequestStatusRow: View {
+    let request: UserPhaseRequestStatus
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd MMM yyyy"
+        return formatter
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Status Badge
+            HStack {
+                Image(systemName: request.statusIcon)
+                    .foregroundColor(request.statusColor)
+                    .font(.caption)
+                
+                Text(request.status)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(request.statusColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(request.statusColor.opacity(0.15))
+                    .cornerRadius(8)
+                
+                Spacer()
+                
+                Text(dateFormatter.string(from: request.createdAt.dateValue()))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
+            // Reason
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Reason")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.medium)
+                
+                Text(request.reason)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            // Extension Date
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                
+                Text("Extend to: \(request.extendedDate)")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }
 
