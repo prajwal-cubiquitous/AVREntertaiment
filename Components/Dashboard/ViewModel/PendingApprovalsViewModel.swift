@@ -35,6 +35,13 @@ class PendingApprovalsViewModel: ObservableObject {
         !selectedExpenses.isEmpty
     }
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+
+    
     var filteredExpenses: [Expense] {
         var filtered = pendingExpenses
         
@@ -89,8 +96,13 @@ class PendingApprovalsViewModel: ObservableObject {
     private func loadExpensesFromFirebase() async {
         do {
             guard let projectId = project.id else{ return }
+            
+            let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
             // Get all projects where current user is the manager or temp approver
-            let projectsSnapshot = try await db.collection("projects_ios1").document(projectId)
+            let projectsSnapshot = try await db.collection("customers")
+                .document(customerID)
+                .collection("projects")
+                .document(projectId)
                 .getDocument()
             
             var expenses: [Expense] = []
@@ -121,7 +133,9 @@ class PendingApprovalsViewModel: ObservableObject {
             guard let projectId = project.id else{ return }
             
             // Get all projects where current user is the manager
-            let projectsSnapshot = try await db.collection("projects_ios1").document(projectId)
+            let projectsSnapshot = try await db.collection("customers")
+                .document(customerID)
+                .collection("projects").document(projectId)
                 .getDocument()
             
             var expenses: [Expense] = []
@@ -151,7 +165,9 @@ class PendingApprovalsViewModel: ObservableObject {
             
             guard let projectId = project.id else{ return }
             
-            let phasesSnapshot = try await db.collection("projects_ios1")
+            let phasesSnapshot = try await db.collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
@@ -174,7 +190,9 @@ class PendingApprovalsViewModel: ObservableObject {
         do {
             guard let projectId = project.id else{ return }
             
-            let phasesSnapshot = try await db.collection("projects_ios1")
+            let phasesSnapshot = try await db.collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
@@ -236,7 +254,9 @@ class PendingApprovalsViewModel: ObservableObject {
             for expenseId in selectedExpenses {
                 // Find the project and update the expense
                 
-                let projectsSnapshot = try await db.collection("projects_ios1")
+                let projectsSnapshot = try await db.collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .getDocument()
                 
@@ -286,6 +306,7 @@ class PendingApprovalsViewModel: ObservableObject {
     
     func loadUserData(userId: String) async throws -> String {
         // 1. Throw an error for an invalid user ID
+        
         guard !userId.isEmpty else {
             throw UserDataError.invalidUserId
         }
@@ -293,7 +314,7 @@ class PendingApprovalsViewModel: ObservableObject {
         let updatedUserId = userId.replacingOccurrences(of: "+91", with: "")
         
         // 2. Fetch the document
-        let userSnapshot = try await db.collection("users_ios").document(updatedUserId).getDocument()
+        let userSnapshot = try await db.collection("users").document(updatedUserId).getDocument()
                 
         // 3. Safely unwrap the document data
         guard let data = userSnapshot.data() else {

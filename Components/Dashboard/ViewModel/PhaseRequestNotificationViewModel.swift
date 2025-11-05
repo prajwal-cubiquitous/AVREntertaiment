@@ -69,6 +69,8 @@ class PhaseRequestNotificationViewModel: ObservableObject {
             
             let status = action == .accept ? "ACCEPTED" : "REJECTED"
             
+            print("DEBUG 4 : printing status : \(status)")
+            
             // Update request document
             try await requestRef.updateData([
                 "status": status,

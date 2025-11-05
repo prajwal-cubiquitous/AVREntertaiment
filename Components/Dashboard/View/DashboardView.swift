@@ -1247,9 +1247,7 @@ struct DashboardView: View {
             var extensionMap: [String: Bool] = [:]
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
-            
-            print("🔍 Checking extensions for \(allPhases.count) phases")
-            
+                        
             // Check each phase for accepted extension requests
             for phase in allPhases {
                 // Get phase end date from Firebase directly (as String)
@@ -1263,9 +1261,7 @@ struct DashboardView: View {
                     print("⚠️ Phase \(phase.id) has no endDate")
                     continue
                 }
-                
-                print("📅 Phase \(phase.name) endDate: \(phaseEndDateStr)")
-                
+                                
                 // Query requests collection for accepted requests
                 let requestsSnapshot = try await FirebasePathHelper.shared
                     .phasesCollection(customerId: customerId, projectId: projectId)

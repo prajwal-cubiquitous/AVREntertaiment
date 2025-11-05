@@ -344,15 +344,21 @@ struct ExpenseDetailView: View {
         
         Task {
             do {
+                
+                var customerID: String {
+                    get async throws {
+                        try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                    }
+                }
                 // Find the project and update the expense
                 let projectsSnapshot: QuerySnapshot
                 
                 if currentUserRole == .ADMIN {
                     // Admin can approve expenses from all projects
-                    projectsSnapshot = try await db.collection("projects_ios1").getDocuments()
+                    projectsSnapshot = try await db.collection("customers").document(customerID).collection("projects").getDocuments()
                 } else {
                     // Regular users can approve expenses from their managed projects or where they are temp approver
-                    projectsSnapshot = try await db.collection("projects_ios1")
+                    projectsSnapshot = try await db.collection("customers").document(customerID).collection("projects")
                         .whereFilter(
                             Filter.orFilter([
                                 Filter.whereField("managerIds", arrayContains: currentUserPhone),
