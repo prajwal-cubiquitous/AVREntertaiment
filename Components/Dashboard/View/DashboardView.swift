@@ -675,8 +675,9 @@ struct DashboardView: View {
                                 Spacer()
 
                                 HStack{
-                                    if isPhaseInProgress(phase) {
-                                        Text("In Progress")
+                                    // Only show "In Progress" badge if phase is in progress AND enabled
+                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                        Text("Active")
                                             .font(DesignSystem.Typography.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.green)
@@ -955,7 +956,8 @@ struct DashboardView: View {
     
     private var filteredCurrentPhases: [PhaseSummary] {
         allPhases.filter { phase in
-            isPhaseInProgress(phase)
+            // Only show phases that are in progress AND enabled
+            isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true)
         }
     }
 
@@ -1927,9 +1929,11 @@ private struct AllPhasesView: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
+                                Spacer()
                                 
-                                    if isPhaseInProgress(phase) {
-                                        Text("In Progress")
+                                    // Only show "In Progress" badge if phase is in progress AND enabled
+                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                        Text("Active")
                                             .font(DesignSystem.Typography.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.green)
