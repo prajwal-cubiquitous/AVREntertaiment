@@ -126,9 +126,12 @@ class AdminProjectDetailViewModel: ObservableObject {
         }
         
         do {
-            let querySnapshot = try await FirebasePathHelper.shared.usersCollection(customerId: customerId)
+            // Filter users by ownerID to match the current customer/admin's UID
+            // This ensures each customer only sees their own users/approvers
+            let querySnapshot = try await db.collection("users")
                 .whereField("role", in: [UserRole.USER.rawValue, UserRole.APPROVER.rawValue])
                 .whereField("isActive", isEqualTo: true)
+                .whereField("ownerID", isEqualTo: customerId)
                 .getDocuments()
             
             var loadedUsers: [User] = []

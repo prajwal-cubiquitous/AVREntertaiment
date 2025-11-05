@@ -55,7 +55,8 @@ class FirebaseAuthService: ObservableObject {
         if let email = firebaseUser.email, !email.isEmpty {
             // This is an admin user - customer ID is the Firebase Auth UID
             currentCustomerId = firebaseUser.uid
-            let adminUser = User.adminUser(email: email, name: firebaseUser.displayName ?? "Admin")
+            // For admin users, ownerID is their own UID (they created their own account)
+            let adminUser = User.adminUser(email: email, name: firebaseUser.displayName ?? "Admin", ownerID: firebaseUser.uid)
             updateUserState(user: adminUser)
         } else {
             // This is an OTP-based user (APPROVER or USER)
@@ -83,7 +84,7 @@ class FirebaseAuthService: ObservableObject {
             
             for customerDoc in customersSnapshot.documents {
                 let customerId = customerDoc.documentID
-                let userDoc = try await db.collection("customers").document(customerId).collection("users").document(cleanPhoneNumber).getDocument()
+                let userDoc = try await db.collection("users").document(cleanPhoneNumber).getDocument()
                 
                 if userDoc.exists, let userData = try? userDoc.data(as: User.self) {
                     foundUser = userData
@@ -238,7 +239,7 @@ class FirebaseAuthService: ObservableObject {
             let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
             
             // Use customer-specific users collection
-            let userRef = db.collection("customers").document(customerId).collection("users").document(cleanPhoneNumber)
+            let userRef = db.collection("users").document(cleanPhoneNumber)
             
             // Check if user exists
             if !overwrite {
@@ -249,10 +250,16 @@ class FirebaseAuthService: ObservableObject {
                 }
             }
             
+            // Get the current logged-in user's UID as ownerID (required field)
+            // Use the current user's UID if available, otherwise fall back to customerId
+            let ownerID = auth.currentUser?.uid ?? customerId
+            
             let newUser = User(
                 phoneNumber: cleanPhoneNumber,
                 name: name,
-                role: role
+                role: role,
+                email: nil,
+                ownerID: ownerID
             )
             
             try await userRef.setData(from: newUser, merge: overwrite)
@@ -268,7 +275,7 @@ class FirebaseAuthService: ObservableObject {
         guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection("customers").document(customerId).collection("users")
+            let snapshot = try await db.collection("users")
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
             return snapshot.documents.compactMap { document in
@@ -284,7 +291,7 @@ class FirebaseAuthService: ObservableObject {
         guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection("customers").document(customerId).collection("users")
+            let snapshot = try await db.collection("users")
                 .whereField("role", isEqualTo: UserRole.APPROVER.rawValue)
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
@@ -303,7 +310,7 @@ class FirebaseAuthService: ObservableObject {
         guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection("customers").document(customerId).collection("users")
+            let snapshot = try await db.collection("users")
                 .whereField("role", isEqualTo: UserRole.USER.rawValue)
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()

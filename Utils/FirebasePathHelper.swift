@@ -26,7 +26,7 @@ class FirebasePathHelper {
     /// - Parameter customerId: The customer ID (Firebase Auth UID for admin users)
     /// - Returns: CollectionReference for customers/{customerId}/users
     func usersCollection(customerId: String) -> CollectionReference {
-        return db.collection("customers").document(customerId).collection("users")
+        return db.collection("users")
     }
     
     /// Get a project document reference
@@ -74,4 +74,3 @@ class FirebasePathHelper {
         return db.collection("customers").document(customerId).collection("projects").document(projectId).collection("chats")
     }
 }
-

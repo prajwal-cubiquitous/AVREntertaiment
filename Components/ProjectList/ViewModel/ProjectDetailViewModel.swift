@@ -6,6 +6,7 @@
 //
 import SwiftUI
 import FirebaseFirestore
+import FirebaseAuth
 
 
 // MARK: - Project Detail ViewModel
@@ -57,6 +58,11 @@ class ProjectDetailViewModel: ObservableObject {
     private let db = Firestore.firestore()
     private let CurrentUserPhone : String
     
+    // Customer ID for multi-tenant support
+    private var customerId: String? {
+        Auth.auth().currentUser?.uid
+    }
+    
     private var dateFormatter: DateFormatter {
         let df = DateFormatter()
         df.dateFormat = "dd/MM/yyyy"
@@ -75,10 +81,15 @@ class ProjectDetailViewModel: ObservableObject {
     
     // MARK: - Load Phases
     func loadPhases() {
-        guard let projectId = project.id else { return }
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            print("❌ Customer ID or Project ID not found in loadPhases")
+            isLoading = false
+            return
+        }
         isLoading = true
         
-        let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
+        let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
         phasesRef.order(by: "phaseNumber").getDocuments { [weak self] snapshot, error in
             guard let self = self else { return }
             
@@ -88,14 +99,15 @@ class ProjectDetailViewModel: ObservableObject {
                 }
                 return
             }
+            print("DEBUG 1 : Count documents : \(documents.count)")
             
-            // Load all approved expenses once
-            self.db.collection("projects_ios1")
-                .document(projectId)
-                .collection("expenses")
+            // Load all approved expenses once using customer-specific path
+            FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments { [weak self] expensesSnapshot, _ in
                     guard let self = self else { return }
+                    
                     
                     var expensesByPhaseId: [String: [Expense]] = [:]
                     var expensesByPhaseAndDepartment: [String: [String: Double]] = [:]
@@ -235,11 +247,14 @@ class ProjectDetailViewModel: ObservableObject {
     
     // MARK: - Legacy Methods (for backward compatibility)
     func fetchApprovedExpenses()  {
-        guard let projectId = project.id else { return }
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            print("❌ Customer ID or Project ID not found in fetchApprovedExpenses")
+            return
+        }
         
-        db.collection("projects_ios1")
-            .document(projectId)
-            .collection("expenses")
+        FirebasePathHelper.shared
+            .expensesCollection(customerId: customerId, projectId: projectId)
             .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
             .getDocuments { [weak self] snapshot, error in
                 DispatchQueue.main.async {
@@ -264,8 +279,12 @@ class ProjectDetailViewModel: ObservableObject {
     }
 
     func fetchAllocatedBudgets() {
-        guard let projectId = project.id else { return }
-        let phasesRef = db.collection("projects_ios1").document(projectId).collection("phases")
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            print("❌ Customer ID or Project ID not found in fetchAllocatedBudgets")
+            return
+        }
+        let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
         phasesRef.getDocuments { [weak self] snapshot, error in
             var totals: [String: Double] = [:]
             if let documents = snapshot?.documents {

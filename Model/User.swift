@@ -35,22 +35,24 @@ struct User: Identifiable, Codable, Hashable {
     var role: UserRole
     var createdAt: Date
     var isActive: Bool
+    var ownerID: String // UID of the customer/admin who created this user
     
     // Only for ADMIN users (email-based login)
     var email: String?
     
-    init(phoneNumber: String, name: String, role: UserRole, email: String? = nil) {
+    init(phoneNumber: String, name: String, role: UserRole, email: String? = nil, ownerID: String) {
         self.phoneNumber = phoneNumber
         self.name = name
         self.role = role
         self.email = email
+        self.ownerID = ownerID
         self.createdAt = Date()
         self.isActive = true
     }
     
     // Admin initializer (no Firebase document needed)
-    static func adminUser(email: String, name: String = "Admin") -> User {
-        return User(phoneNumber: "", name: name, role: .ADMIN, email: email)
+    static func adminUser(email: String, name: String = "Admin", ownerID: String) -> User {
+        return User(phoneNumber: "", name: name, role: .ADMIN, email: email, ownerID: ownerID)
     }
     
     func hash(into hasher: inout Hasher) {
@@ -72,8 +74,8 @@ struct User: Identifiable, Codable, Hashable {
     
     // Sample data for preview
     static let sampleData: [User] = [
-        User(phoneNumber: "9876543210", name: "John Doe", role: .APPROVER),
-        User(phoneNumber: "9876543211", name: "Jane Smith", role: .APPROVER),
-        User(phoneNumber: "9876543212", name: "Mike Johnson", role: .USER)
+        User(phoneNumber: "9876543210", name: "John Doe", role: .APPROVER, ownerID: "sample_owner_1"),
+        User(phoneNumber: "9876543211", name: "Jane Smith", role: .APPROVER, ownerID: "sample_owner_1"),
+        User(phoneNumber: "9876543212", name: "Mike Johnson", role: .USER, ownerID: "sample_owner_1")
     ]
 }
