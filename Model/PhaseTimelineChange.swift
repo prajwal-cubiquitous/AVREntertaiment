@@ -26,6 +26,9 @@ struct PhaseTimelineChange: Identifiable, Codable {
     // User who made the change
     let changedBy: String          // User UID
     
+    // Request ID (if change was made via an accepted request)
+    let requestID: String?          // Optional request ID
+    
     // Timestamp
     let updatedAt: Timestamp
     
@@ -36,7 +39,8 @@ struct PhaseTimelineChange: Identifiable, Codable {
         previousEndDate: String?,
         newStartDate: String?,
         newEndDate: String?,
-        changedBy: String
+        changedBy: String,
+        requestID: String? = nil
     ) {
         self.phaseId = phaseId
         self.projectId = projectId
@@ -45,6 +49,7 @@ struct PhaseTimelineChange: Identifiable, Codable {
         self.newStartDate = newStartDate
         self.newEndDate = newEndDate
         self.changedBy = changedBy
+        self.requestID = requestID
         self.updatedAt = Timestamp()
     }
 }

@@ -108,6 +108,11 @@ struct ProjectDetailView: View {
             viewModel.loadPhases()
             viewModel.fetchApprovedExpenses()
             
+            // Load phase extensions
+            Task {
+                await viewModel.loadPhaseExtensions()
+            }
+            
             // Load notifications
             Task {
                 if let projectId = project.id {
@@ -133,6 +138,9 @@ struct ProjectDetailView: View {
         .refreshable {
             viewModel.loadPhases()
             viewModel.fetchApprovedExpenses()
+            Task {
+                await viewModel.loadPhaseExtensions()
+            }
         }
     }
     
@@ -306,7 +314,8 @@ private struct PhaseBreakdownView: View {
                     ForEach(Array(viewModel.currentPhases.enumerated()), id: \.element.id) { index, phase in
                         CurrentPhaseView(
                             phase: phase,
-                            projectId: project.id ?? ""
+                            projectId: project.id ?? "",
+                            phaseExtensionMap: viewModel.phaseExtensionMap
                         )
                         
                         if index < viewModel.currentPhases.count - 1 {
@@ -326,7 +335,8 @@ private struct PhaseBreakdownView: View {
             AllPhasesSheetView(
                 currentPhases: viewModel.currentPhases,
                 expiredPhases: viewModel.expiredPhases,
-                projectId: project.id ?? ""
+                projectId: project.id ?? "",
+                phaseExtensionMap: viewModel.phaseExtensionMap
             )
         }
     }
@@ -335,6 +345,7 @@ private struct PhaseBreakdownView: View {
 private struct CurrentPhaseView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
     let projectId: String
+    let phaseExtensionMap: [String: Bool]
     
     @State private var isExpanded = false
     @State private var showingRequestForm = false
@@ -451,6 +462,23 @@ private struct CurrentPhaseView: View {
                             .font(DesignSystem.Typography.title3)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
+                        
+                        // Extension Badge - Show if phase has accepted extension
+                        if phaseExtensionMap[phase.id] == true {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise.circle.fill")
+                                    .font(.caption2)
+                                Text("Extended")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(Capsule())
+                            .accessibilityLabel("Phase extended via accepted request")
+                        }
                         
                         // In Progress Tag - only show if phase is enabled and in progress
                         if phase.isEnabled && isPhaseInProgress(phase) {
@@ -747,6 +775,7 @@ private struct AllPhasesSheetView: View {
     let currentPhases: [ProjectDetailViewModel.PhaseInfo]
     let expiredPhases: [ProjectDetailViewModel.PhaseInfo]
     let projectId: String
+    let phaseExtensionMap: [String: Bool]
     @Environment(\.dismiss) private var dismiss
     
     private var allPhases: [ProjectDetailViewModel.PhaseInfo] {
@@ -764,7 +793,8 @@ private struct AllPhasesSheetView: View {
                             ProjectDetailPhaseCardView(
                                 phase: phase,
                                 isInProgress: true,
-                                projectId: projectId
+                                projectId: projectId,
+                                phaseExtensionMap: phaseExtensionMap
                             )
                         }
                     } header: {
@@ -787,7 +817,8 @@ private struct AllPhasesSheetView: View {
                             ProjectDetailPhaseCardView(
                                 phase: phase,
                                 isInProgress: false,
-                                projectId: projectId
+                                projectId: projectId,
+                                phaseExtensionMap: phaseExtensionMap
                             )
                         }
                     } header: {
@@ -846,6 +877,7 @@ private struct ProjectDetailPhaseCardView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
     let isInProgress: Bool
     let projectId: String
+    let phaseExtensionMap: [String: Bool]
     @State private var isExpanded = false
     @State private var showingRequestForm = false
     @State private var showingRequestStatus = false
@@ -924,6 +956,23 @@ private struct ProjectDetailPhaseCardView: View {
                             .font(DesignSystem.Typography.title3)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
+                        
+                        // Extension Badge - Show if phase has accepted extension
+                        if phaseExtensionMap[phase.id] == true {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise.circle.fill")
+                                    .font(.caption2)
+                                Text("Extended")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(Capsule())
+                            .accessibilityLabel("Phase extended via accepted request")
+                        }
                         
                         // Status Badge - removed "In Progress", only show "Completed" for expired phases
                         if !isInProgress {

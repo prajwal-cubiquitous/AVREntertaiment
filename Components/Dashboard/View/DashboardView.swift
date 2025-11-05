@@ -70,6 +70,7 @@ struct DashboardView: View {
     @State private var allPhases: [PhaseSummary] = []
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: PhaseBudget] = [:]
+    @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
     
     // Permanent approver
     
@@ -561,8 +562,9 @@ struct DashboardView: View {
                                 projectId: projectId,
                                 customerId: customerId
                             )
-                            // Reload phases
+                            // Reload phases and extensions
                             await loadPhases()
+                            await loadPhaseExtensions()
                         }
                         showingRequestActionSheet = false
                     },
@@ -818,7 +820,24 @@ struct DashboardView: View {
 
                                 Spacer()
 
-                                HStack{
+                                HStack(spacing: 6){
+                                    // Extension Badge - Show if phase has accepted extension
+                                    if phaseExtensionMap[phase.id] == true {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.clockwise.circle.fill")
+                                                .font(.caption2)
+                                            Text("Extended")
+                                                .font(DesignSystem.Typography.caption2)
+                                                .fontWeight(.semibold)
+                                        }
+                                        .foregroundColor(.orange)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.orange.opacity(0.12))
+                                        .clipShape(Capsule())
+                                        .accessibilityLabel("Phase extended via accepted request")
+                                    }
+                                    
                                     // Only show "In Progress" badge if phase is in progress AND enabled
                                     if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
                                         Text("Active")
@@ -1203,8 +1222,62 @@ struct DashboardView: View {
             await MainActor.run { allPhases = collected }
             // Load phase budgets after phases are loaded
             await loadPhaseBudgets()
+            // Load extension status for phases
+            await loadPhaseExtensions()
         } catch {
             print("Error loading phases: \(error)")
+        }
+    }
+    
+    private func loadPhaseExtensions() async {
+        guard let projectId = project?.id else { return }
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadPhaseExtensions")
+            return
+        }
+        
+        do {
+            var extensionMap: [String: Bool] = [:]
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            // Check each phase for accepted extension requests
+            for phase in allPhases {
+                // Get phase end date
+                guard let phaseEndDate = phase.end else { continue }
+                
+                // Format phase end date for comparison
+                let phaseEndDateStr = dateFormatter.string(from: phaseEndDate)
+                
+                // Query requests collection for accepted requests
+                let requestsSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                    .collection("requests")
+                    .whereField("status", isEqualTo: "ACCEPTED")
+                    .getDocuments()
+                
+                // Check if any accepted request's extendedDate matches phase endDate
+                var hasExtension = false
+                for requestDoc in requestsSnapshot.documents {
+                    let requestData = requestDoc.data()
+                    if let extendedDate = requestData["extendedDate"] as? String {
+                        // Compare extendedDate with phase endDate
+                        if extendedDate == phaseEndDateStr {
+                            hasExtension = true
+                            break
+                        }
+                    }
+                }
+                
+                extensionMap[phase.id] = hasExtension
+            }
+            
+            await MainActor.run {
+                phaseExtensionMap = extensionMap
+            }
+        } catch {
+            print("Error loading phase extensions: \(error)")
         }
     }
     
@@ -1927,6 +2000,7 @@ private struct AllPhasesView: View {
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
+    @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
     @State private var showingAddPhase = false
     @State private var showingEditPhase = false
     @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
@@ -2045,6 +2119,61 @@ private struct AllPhasesView: View {
         }
     }
     
+    private func loadPhaseExtensions() {
+        guard let projectId = project?.id else { return }
+        Task {
+            do {
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in AllPhasesView.loadPhaseExtensions")
+                    return
+                }
+                
+                var extensionMap: [String: Bool] = [:]
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                // Check each phase for accepted extension requests
+                for phase in phases {
+                    // Get phase end date
+                    guard let phaseEndDate = phase.end else { continue }
+                    
+                    // Format phase end date for comparison
+                    let phaseEndDateStr = dateFormatter.string(from: phaseEndDate)
+                    
+                    // Query requests collection for accepted requests
+                    let requestsSnapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .document(phase.id)
+                        .collection("requests")
+                        .whereField("status", isEqualTo: "ACCEPTED")
+                        .getDocuments()
+                    
+                    // Check if any accepted request's extendedDate matches phase endDate
+                    var hasExtension = false
+                    for requestDoc in requestsSnapshot.documents {
+                        let requestData = requestDoc.data()
+                        if let extendedDate = requestData["extendedDate"] as? String {
+                            // Compare extendedDate with phase endDate
+                            if extendedDate == phaseEndDateStr {
+                                hasExtension = true
+                                break
+                            }
+                        }
+                    }
+                    
+                    extensionMap[phase.id] = hasExtension
+                }
+                
+                await MainActor.run {
+                    phaseExtensionMap = extensionMap
+                }
+            } catch {
+                print("Error loading phase extensions: \(error)")
+            }
+        }
+    }
+    
     var body: some View {
         List {
             ForEach(phases) { phase in
@@ -2087,6 +2216,24 @@ private struct AllPhasesView: View {
                                 }
                                 Spacer()
                                 
+                                HStack(spacing: 6) {
+                                    // Extension Badge - Show if phase has accepted extension
+                                    if phaseExtensionMap[phase.id] == true {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.clockwise.circle.fill")
+                                                .font(.caption2)
+                                            Text("Extended")
+                                                .font(DesignSystem.Typography.caption2)
+                                                .fontWeight(.semibold)
+                                        }
+                                        .foregroundColor(.orange)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.orange.opacity(0.12))
+                                        .clipShape(Capsule())
+                                        .accessibilityLabel("Phase extended via accepted request")
+                                    }
+                                    
                                     // Only show "In Progress" badge if phase is in progress AND enabled
                                     if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
                                         Text("Active")
@@ -2099,6 +2246,7 @@ private struct AllPhasesView: View {
                                             .clipShape(Capsule())
                                             .accessibilityLabel("Phase status: In Progress")
                                     }
+                                }
 
                                     if role == .ADMIN {
                                         // Enable toggle (always visible in All Phases for admins)
@@ -2257,6 +2405,7 @@ private struct AllPhasesView: View {
         .onAppear {
             loadPhaseEnabledStates()
             loadPhaseBudgets()
+            loadPhaseExtensions()
         }
         .sheet(isPresented: $showingDepartmentDetail) {
             if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {

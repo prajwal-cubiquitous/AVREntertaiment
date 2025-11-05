@@ -102,7 +102,7 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                         "updatedAt": Timestamp()
                     ])
                     
-                    // Log to changes collection
+                    // Log to changes collection with requestID
                     let changeLog = PhaseTimelineChange(
                         phaseId: request.phaseId,
                         projectId: projectId,
@@ -110,7 +110,8 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                         previousEndDate: previousEndDate,
                         newStartDate: phaseData["startDate"] as? String,
                         newEndDate: extendedDateStr,
-                        changedBy: currentUserUID
+                        changedBy: currentUserUID,
+                        requestID: request.id
                     )
                     
                     let changesRef = phaseRef.collection("changes").document()
