@@ -57,11 +57,7 @@ class ProjectDetailViewModel: ObservableObject {
     private let project: Project
     private let db = Firestore.firestore()
     private let CurrentUserPhone : String
-    
-    // Customer ID for multi-tenant support
-    private var customerId: String? {
-        Auth.auth().currentUser?.uid
-    }
+    private let customerId: String? // Customer ID passed from parent view
     
     private var dateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -71,9 +67,10 @@ class ProjectDetailViewModel: ObservableObject {
     
     private var now: Date { Date() }
     
-    init(project: Project, CurrentUserPhone : String) {
+    init(project: Project, CurrentUserPhone : String, customerId: String?) {
         self.project = project
         self.CurrentUserPhone = CurrentUserPhone
+        self.customerId = customerId
         self.fetchAllocatedBudgets()
         self.fetchApprovedExpenses()
         self.loadPhases()

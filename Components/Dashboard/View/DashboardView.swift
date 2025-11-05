@@ -85,12 +85,12 @@ struct DashboardView: View {
         return formatter
     }
     
-    init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "") {
+    init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil) {
         self.project = project
         self.role = role
         self.phoneNumber = phoneNumber
-        self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber))
-        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0], CurrentUserPhone: phoneNumber))
+        self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber, customerId: customerId))
+        self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0], CurrentUserPhone: phoneNumber, customerId: customerId))
     }
     
     var body: some View {

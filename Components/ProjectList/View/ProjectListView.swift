@@ -153,13 +153,14 @@ struct ProjectListView: View {
                     if let project = viewModel.project(for: projectId) {
                         ProjectDetailView(project: project,
                                           role: role,
-                                          phoneNumber: viewModel.phoneNumber)
+                                          phoneNumber: viewModel.phoneNumber,
+                                          customerId: authService.currentCustomerId)
                     } else {
                         Text("Project not found")
                     }
                 }else{
                     if let project = viewModel.project(for: projectId) {
-                        DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
+                        DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId)
                     } else {
                         Text("Project not found")
                     }
@@ -407,7 +408,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else if role == .ADMIN {
-                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber).environmentObject(navigationManager)) {
+                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -419,7 +420,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else {
-                            NavigationLink(destination: ProjectDetailView(project: project,role: role, phoneNumber: viewModel.phoneNumber).environmentObject(navigationManager)) {
+                            NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -440,7 +441,7 @@ struct ProjectListView: View {
             .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjectsForTempApprover)
             .navigationDestination(isPresented: $shouldNavigateToDashboard) {
                 if let project = selectedProject {
-                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber)
+                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId)
                 }
             }
             

@@ -75,36 +75,38 @@ class FirebaseAuthService: ObservableObject {
         do {
             let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // First, find which customer this user belongs to
-            // Search across all customers for this user
-            let customersSnapshot = try await db.collection("customers").getDocuments()
+            // Fetch user document from users collection using phone number as document ID
+            let userDoc = try await db.collection("users").document(cleanPhoneNumber).getDocument()
             
-            var foundUser: User?
-            var foundCustomerId: String?
-            
-            for customerDoc in customersSnapshot.documents {
-                let customerId = customerDoc.documentID
-                let userDoc = try await db.collection("users").document(cleanPhoneNumber).getDocument()
+            if userDoc.exists, let userData = try? userDoc.data(as: User.self) {
+                // Get ownerID from user document - this is the customer document ID
+                let ownerID = userData.ownerID
                 
-                if userDoc.exists, let userData = try? userDoc.data(as: User.self) {
-                    foundUser = userData
-                    foundCustomerId = customerId
-                    break
+                // Use ownerID as the customer ID (customer document ID in customers collection)
+                currentCustomerId = ownerID
+                
+                // Verify that the customer document exists
+                let customerDoc = try await db.collection("customers").document(ownerID).getDocument()
+                if !customerDoc.exists {
+                    print("⚠️ Warning: Customer document not found for ownerID: \(ownerID)")
+                    // Still allow login, but log a warning
                 }
-            }
-            
-            if let user = foundUser, let customerId = foundCustomerId {
-                currentCustomerId = customerId
-                updateUserState(user: user)
+                
+                updateUserState(user: userData)
             } else {
                 // Fallback: try old collection structure for backward compatibility
                 let document = try await db.collection(FirebaseCollections.users).document(cleanPhoneNumber).getDocument()
                 
                 if document.exists, let userData = try? document.data(as: User.self) {
-                    // Try to find customer from user's customerId field if it exists
-                    // For now, use first customer as fallback (legacy users)
-                    if let firstCustomer = customersSnapshot.documents.first {
-                        currentCustomerId = firstCustomer.documentID
+                    // Try to use ownerID if available, otherwise fallback to first customer
+                    if !userData.ownerID.isEmpty {
+                        currentCustomerId = userData.ownerID
+                    } else {
+                        // Legacy fallback: use first customer
+                        let customersSnapshot = try await db.collection("customers").getDocuments()
+                        if let firstCustomer = customersSnapshot.documents.first {
+                            currentCustomerId = firstCustomer.documentID
+                        }
                     }
                     updateUserState(user: userData)
                 } else {

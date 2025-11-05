@@ -20,14 +20,17 @@ struct ProjectDetailView: View {
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
+    let customerId: String?
     @EnvironmentObject var navigationManager: NavigationManager
+    @EnvironmentObject var authService: FirebaseAuthService
 
 
-    init(project: Project, role: UserRole? = nil, phoneNumber: String = ""){
+    init(project: Project, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil){
         self.project = project
         self.role = role
         self.phoneNumber = phoneNumber
-        self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project,CurrentUserPhone :phoneNumber))
+        self.customerId = customerId
+        self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project, CurrentUserPhone: phoneNumber, customerId: customerId))
     }
 
     var body: some View {

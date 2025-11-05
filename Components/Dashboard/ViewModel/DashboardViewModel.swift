@@ -41,10 +41,12 @@ class DashboardViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     private let currentUserPhone: String
+    private let customerId: String? // Customer ID for multi-tenant support
     private var project: Project?
     
-    init(project: Project? = nil, phoneNumber: String = "") {
+    init(project: Project? = nil, phoneNumber: String = "", customerId: String? = nil) {
         self.project = project
+        self.customerId = customerId
         // Use passed phone number or fallback to UserDefaults
         self.currentUserPhone = phoneNumber.isEmpty ? (UserDefaults.standard.string(forKey: "currentUserPhone") ?? "") : phoneNumber
         
@@ -114,11 +116,11 @@ class DashboardViewModel: ObservableObject {
         
         // Aggregate department budgets from phases subcollection
         Task {
-            guard let projectId = project.id else { return }
+            guard let projectId = project.id,
+                  let customerId = customerId else { return }
             do {
-                let phasesSnapshot = try await db.collection("projects_ios1")
-                    .document(projectId)
-                    .collection("phases")
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .getDocuments()
                 for doc in phasesSnapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
@@ -159,12 +161,12 @@ class DashboardViewModel: ObservableObject {
     }
     
     private func loadApprovedExpensesForProject(_ project: Project) async {
-        guard let projectId = project.id else { return }
+        guard let projectId = project.id,
+              let customerId = customerId else { return }
         
         do {
-            let expensesSnapshot = try await db.collection("projects_ios1")
-                .document(projectId)
-                .collection("expenses")
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
@@ -175,9 +177,8 @@ class DashboardViewModel: ObservableObject {
             // Get list of valid departments by aggregating phases
             var validDepartments = Set<String>()
             do {
-                let phasesSnapshot = try await db.collection("projects_ios1")
-                    .document(projectId)
-                    .collection("phases")
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
                     .getDocuments()
                 for doc in phasesSnapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
@@ -248,9 +249,14 @@ class DashboardViewModel: ObservableObject {
     }
     
     private func loadProjectForApprover() async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadProjectForApprover")
+            return
+        }
         do {
             // Query project where current user is the manager or temp approver
-            let snapshot = try await db.collection("projects_ios1")
+            let snapshot = try await FirebasePathHelper.shared
+                .projectsCollection(customerId: customerId)
                 .whereFilter(
                     Filter.orFilter([
                         Filter.whereField("managerIds", arrayContains: currentUserPhone),
@@ -268,8 +274,8 @@ class DashboardViewModel: ObservableObject {
             
             // Aggregate department budgets from phases
             do {
-                let phasesSnapshot = try await document.reference
-                    .collection("phases")
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: document.documentID)
                     .getDocuments()
                 for phaseDoc in phasesSnapshot.documents {
                     if let phase = try? phaseDoc.data(as: Phase.self) {
@@ -287,8 +293,8 @@ class DashboardViewModel: ObservableObject {
             let validDepartments = Set(departmentBudgetDict.keys)
             
             // Fetch and calculate approved amounts from expenses
-            let expensesSnapshot = try await document.reference
-                .collection("expenses")
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: document.documentID)
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
@@ -340,9 +346,14 @@ class DashboardViewModel: ObservableObject {
     }
     
     private func loadNotifications() async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadNotifications")
+            return
+        }
         do {
             // Load pending expenses for approval
-            let projectsSnapshot = try await db.collection("projects_ios1")
+            let projectsSnapshot = try await FirebasePathHelper.shared
+                .projectsCollection(customerId: customerId)
                 .whereFilter(
                     Filter.orFilter([
                         Filter.whereField("managerIds", arrayContains: currentUserPhone),
@@ -354,8 +365,8 @@ class DashboardViewModel: ObservableObject {
             var notificationItems: [NotificationItem] = []
             
             for projectDoc in projectsSnapshot.documents {
-                let expensesSnapshot = try await projectDoc.reference
-                    .collection("expenses")
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectDoc.documentID)
                     .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()
@@ -500,7 +511,10 @@ class DashboardViewModel: ObservableObject {
         return currentAndPreviousBudgets / totalBudget
     }
     func fetchProject(byId projectId: String) async throws -> Project? {
-        let docRef = db.collection("projects_ios1").document(projectId)
+        guard let customerId = customerId else {
+            throw NSError(domain: "DashboardViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Customer ID not found"])
+        }
+        let docRef = FirebasePathHelper.shared.projectDocument(customerId: customerId, projectId: projectId)
         let snapshot = try await docRef.getDocument()
         
         guard let project = try? snapshot.data(as: Project.self) else {
