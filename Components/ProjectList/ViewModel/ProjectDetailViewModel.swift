@@ -189,15 +189,17 @@ class ProjectDetailViewModel: ObservableObject {
     
     // MARK: - Phase Filtering
     private func getCurrentPhase(from phases: [PhaseInfo]) -> PhaseInfo? {
-        return phases.first { isPhaseInProgress($0) }
+        return phases.first { isPhaseInProgress($0) && $0.isEnabled }
     }
     
     private func getCurrentPhases(from phases: [PhaseInfo]) -> [PhaseInfo] {
-        return phases.filter { isPhaseInProgress($0) }
+        // Only show phases that are enabled AND in progress
+        return phases.filter { isPhaseInProgress($0) && $0.isEnabled }
     }
     
     private func getExpiredPhases(from phases: [PhaseInfo]) -> [PhaseInfo] {
-        return phases.filter { isPhaseExpired($0) }
+        // Only show phases that are enabled AND expired
+        return phases.filter { isPhaseExpired($0) && $0.isEnabled }
     }
     
     private func isPhaseUpcoming(_ phase: PhaseInfo) -> Bool {

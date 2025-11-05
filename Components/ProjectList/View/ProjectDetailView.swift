@@ -339,6 +339,21 @@ private struct CurrentPhaseView: View {
     @State private var isExpanded = false
     @State private var showingRequestForm = false
     
+    // Helper to check if phase is in progress
+    private func isPhaseInProgress(_ phase: ProjectDetailViewModel.PhaseInfo) -> Bool {
+        let current = Date()
+        switch (phase.startDate, phase.endDate) {
+        case (nil, nil):
+            return true // Always visible if no dates
+        case (let s?, nil):
+            return s <= current // Visible if start date passed
+        case (nil, let e?):
+            return current <= e // Visible if before end date
+        case (let s?, let e?):
+            return s <= current && current <= e // Visible if in range
+        }
+    }
+    
     private func formatCurrency(_ amount: Double) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -403,15 +418,17 @@ private struct CurrentPhaseView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                         
-                        // In Progress Tag
-                        Text("In Progress")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue)
-                            .cornerRadius(8)
+                        // In Progress Tag - only show if phase is enabled and in progress
+                        if phase.isEnabled && isPhaseInProgress(phase) {
+                            Text("In Progress")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.blue)
+                                .cornerRadius(8)
+                        }
                     }
                     
                     if let dateRangeText = dateRangeText {
@@ -813,15 +830,17 @@ private struct ProjectDetailPhaseCardView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                         
-                        // Status Badge
-                        Text(isInProgress ? "In Progress" : "Completed")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(isInProgress ? Color.blue : Color.gray)
-                            .cornerRadius(8)
+                        // Status Badge - removed "In Progress", only show "Completed" for expired phases
+                        if !isInProgress {
+                            Text("Completed")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.gray)
+                                .cornerRadius(8)
+                        }
                     }
                     
                     if let dateRangeText = dateRangeText {
