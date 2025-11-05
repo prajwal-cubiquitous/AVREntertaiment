@@ -836,6 +836,7 @@ struct DashboardView: View {
                                         .background(Color.orange.opacity(0.12))
                                         .clipShape(Capsule())
                                         .accessibilityLabel("Phase extended via accepted request")
+                                        .transition(.opacity.combined(with: .scale))
                                     }
                                     
                                     // Only show "In Progress" badge if phase is in progress AND enabled
@@ -1236,18 +1237,34 @@ struct DashboardView: View {
             return
         }
         
+        // Wait for phases to be loaded
+        guard !allPhases.isEmpty else {
+            print("⚠️ No phases loaded yet, skipping extension check")
+            return
+        }
+        
         do {
             var extensionMap: [String: Bool] = [:]
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
             
+            print("🔍 Checking extensions for \(allPhases.count) phases")
+            
             // Check each phase for accepted extension requests
             for phase in allPhases {
-                // Get phase end date
-                guard let phaseEndDate = phase.end else { continue }
+                // Get phase end date from Firebase directly (as String)
+                let phaseDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                    .getDocument()
                 
-                // Format phase end date for comparison
-                let phaseEndDateStr = dateFormatter.string(from: phaseEndDate)
+                guard let phaseData = phaseDoc.data(),
+                      let phaseEndDateStr = phaseData["endDate"] as? String else {
+                    print("⚠️ Phase \(phase.id) has no endDate")
+                    continue
+                }
+                
+                print("📅 Phase \(phase.name) endDate: \(phaseEndDateStr)")
                 
                 // Query requests collection for accepted requests
                 let requestsSnapshot = try await FirebasePathHelper.shared
@@ -1257,27 +1274,35 @@ struct DashboardView: View {
                     .whereField("status", isEqualTo: "ACCEPTED")
                     .getDocuments()
                 
+                print("📋 Found \(requestsSnapshot.documents.count) accepted requests for phase \(phase.name)")
+                
                 // Check if any accepted request's extendedDate matches phase endDate
                 var hasExtension = false
                 for requestDoc in requestsSnapshot.documents {
                     let requestData = requestDoc.data()
                     if let extendedDate = requestData["extendedDate"] as? String {
+                        print("🔍 Comparing: extendedDate='\(extendedDate)' vs phaseEndDate='\(phaseEndDateStr)'")
                         // Compare extendedDate with phase endDate
                         if extendedDate == phaseEndDateStr {
                             hasExtension = true
+                            print("✅ Match found! Phase \(phase.name) has extension")
                             break
                         }
                     }
                 }
                 
                 extensionMap[phase.id] = hasExtension
+                if hasExtension {
+                    print("✅ Extension badge will be shown for phase: \(phase.name)")
+                }
             }
             
             await MainActor.run {
                 phaseExtensionMap = extensionMap
+                print("📊 Extension map updated: \(extensionMap)")
             }
         } catch {
-            print("Error loading phase extensions: \(error)")
+            print("❌ Error loading phase extensions: \(error)")
         }
     }
     

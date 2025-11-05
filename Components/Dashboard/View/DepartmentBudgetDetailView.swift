@@ -848,6 +848,12 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         totalBudget - totalSpent
     }
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+
     var budgetUtilizationPercentage: Double {
         guard totalBudget > 0 else { return 0 }
         return (totalSpent / totalBudget) * 100
@@ -884,7 +890,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 
                 // Load expenses for the department
                 let expensesSnapshot = try await db
-                    .collection("projects_ios1")
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("expenses")
                     .whereField("department", isEqualTo: department)
@@ -905,7 +913,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 var phaseIdsWithDepartment: [String] = []
                 var phasesOnlyWithThisDepartment: [(id: String, name: String)] = []
                 let phasesSnapshot = try await db
-                    .collection("projects_ios1")
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("phases")
                     .getDocuments()
@@ -987,7 +997,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             
             // Get all phases
             let phasesSnapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
@@ -1017,6 +1029,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         do {
             let db = Firestore.firestore()
             
+            let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
+            
             // Update budget in all phases that contain this department
             // We need to distribute the new budget across all phases
             // For simplicity, we'll set the same budget in each phase
@@ -1024,7 +1039,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             
             // First, get all phases with this department
             let phasesSnapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
@@ -1046,7 +1063,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             // Update each phase proportionally
             for phaseData in phasesWithDepartment {
                 let phaseRef = db
-                    .collection("projects_ios1")
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("phases")
                     .document(phaseData.id)
@@ -1078,9 +1097,13 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         do {
             let db = Firestore.firestore()
             
+            let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            
             // Get all phases
             let phasesSnapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
@@ -1090,7 +1113,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 if let phase = try? doc.data(as: Phase.self) {
                     if phase.departments[department] != nil {
                         let phaseRef = db
-                            .collection("projects_ios1")
+                            .collection("customers")
+                            .document(customerID)
+                            .collection("projects")
                             .document(projectId)
                             .collection("phases")
                             .document(doc.documentID)
@@ -1119,8 +1144,12 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         do {
             let db = Firestore.firestore()
             
+            let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            
             let phaseRef = db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("phases")
                 .document(phaseId)

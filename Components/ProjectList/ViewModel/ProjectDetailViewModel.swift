@@ -329,18 +329,34 @@ class ProjectDetailViewModel: ObservableObject {
             return
         }
         
+        // Wait for phases to be loaded
+        guard !phases.isEmpty else {
+            print("⚠️ No phases loaded yet, skipping extension check")
+            return
+        }
+        
         do {
             var extensionMap: [String: Bool] = [:]
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
             
+            print("🔍 Checking extensions for \(phases.count) phases")
+            
             // Check each phase for accepted extension requests
             for phase in phases {
-                // Get phase end date
-                guard let phaseEndDate = phase.endDate else { continue }
+                // Get phase end date from Firebase directly (as String)
+                let phaseDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                    .getDocument()
                 
-                // Format phase end date for comparison
-                let phaseEndDateStr = dateFormatter.string(from: phaseEndDate)
+                guard let phaseData = phaseDoc.data(),
+                      let phaseEndDateStr = phaseData["endDate"] as? String else {
+                    print("⚠️ Phase \(phase.id) has no endDate")
+                    continue
+                }
+                
+                print("📅 Phase \(phase.phaseName) endDate: \(phaseEndDateStr)")
                 
                 // Query requests collection for accepted requests
                 let requestsSnapshot = try await FirebasePathHelper.shared
@@ -350,27 +366,35 @@ class ProjectDetailViewModel: ObservableObject {
                     .whereField("status", isEqualTo: "ACCEPTED")
                     .getDocuments()
                 
+                print("📋 Found \(requestsSnapshot.documents.count) accepted requests for phase \(phase.phaseName)")
+                
                 // Check if any accepted request's extendedDate matches phase endDate
                 var hasExtension = false
                 for requestDoc in requestsSnapshot.documents {
                     let requestData = requestDoc.data()
                     if let extendedDate = requestData["extendedDate"] as? String {
+                        print("🔍 Comparing: extendedDate='\(extendedDate)' vs phaseEndDate='\(phaseEndDateStr)'")
                         // Compare extendedDate with phase endDate
                         if extendedDate == phaseEndDateStr {
                             hasExtension = true
+                            print("✅ Match found! Phase \(phase.phaseName) has extension")
                             break
                         }
                     }
                 }
                 
                 extensionMap[phase.id] = hasExtension
+                if hasExtension {
+                    print("✅ Extension badge will be shown for phase: \(phase.phaseName)")
+                }
             }
             
             await MainActor.run {
                 self.phaseExtensionMap = extensionMap
+                print("📊 Extension map updated: \(extensionMap)")
             }
         } catch {
-            print("Error loading phase extensions: \(error)")
+            print("❌ Error loading phase extensions: \(error)")
         }
     }
 }
