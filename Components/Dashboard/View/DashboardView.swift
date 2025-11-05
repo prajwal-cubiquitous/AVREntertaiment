@@ -825,6 +825,19 @@ struct DashboardView: View {
                                     
                                     Spacer()
                                     
+                                    // Approved Amount
+                                    VStack(alignment: .center, spacing: 4) {
+                                        Text("Approved")
+                                            .font(DesignSystem.Typography.caption1)
+                                            .foregroundColor(.secondary)
+                                        Text(Int(phaseBudget.spent).formattedCurrency)
+                                            .font(DesignSystem.Typography.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.blue)
+                                    }
+                                    
+                                    Spacer()
+                                    
                                     // Remaining Amount
                                     VStack(alignment: .trailing, spacing: 4) {
                                         Text("Remaining")
@@ -2084,6 +2097,19 @@ private struct AllPhasesView: View {
                                         .font(DesignSystem.Typography.subheadline)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.primary)
+                                }
+                                
+                                Spacer()
+                                
+                                // Approved Amount
+                                VStack(alignment: .center, spacing: 4) {
+                                    Text("Approved")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                    Text(Int(phaseBudget.spent).formattedCurrency)
+                                        .font(DesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.blue)
                                 }
                                 
                                 Spacer()

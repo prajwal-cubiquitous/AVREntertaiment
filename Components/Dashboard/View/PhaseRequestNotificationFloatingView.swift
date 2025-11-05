@@ -125,6 +125,43 @@ private struct PhaseRequestItemRow: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
                     
+                    // User name and phone number - Make it more prominent
+                    if let userName = request.userName, !userName.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(userName)
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                if let phoneNumber = request.userPhoneNumber, !phoneNumber.isEmpty {
+                                    Text(phoneNumber)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    } else if let phoneNumber = request.userPhoneNumber, !phoneNumber.isEmpty {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                                .symbolRenderingMode(.hierarchical)
+                            
+                            Text(phoneNumber)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    
                     // Reason/Description
                     Text(request.reason)
                         .font(.caption)

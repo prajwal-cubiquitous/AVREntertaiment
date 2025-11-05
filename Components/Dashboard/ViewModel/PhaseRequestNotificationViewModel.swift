@@ -17,6 +17,8 @@ struct PhaseRequestItem: Identifiable {
     let reason: String
     let extendedDate: String // Format: "dd/MM/yyyy"
     let userID: String
+    let userName: String?
+    let userPhoneNumber: String?
     let createdAt: Timestamp
 }
 
@@ -71,6 +73,83 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                        let userID = requestData["userID"] as? String,
                        let createdAt = requestData["createdAt"] as? Timestamp {
                         
+                        // Fetch user details from users collection
+                        var userName: String? = nil
+                        var userPhoneNumber: String? = nil
+                        
+                        do {
+                            let db = Firestore.firestore()
+                            var userDoc: DocumentSnapshot? = nil
+                            
+                            // Clean phone number if needed
+                            var cleanUserID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if cleanUserID.hasPrefix("+91") {
+                                cleanUserID = String(cleanUserID.dropFirst(3))
+                            }
+                            cleanUserID = cleanUserID.trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Try multiple approaches to find the user
+                            // 1. Try document ID with cleaned phone number
+                            userDoc = try await db.collection("users")
+                                .document(cleanUserID)
+                                .getDocument()
+                            
+                            // 2. If not found, try original userID as document ID
+                            if userDoc == nil || !userDoc!.exists {
+                                userDoc = try await db.collection("users")
+                                    .document(userID)
+                                    .getDocument()
+                            }
+                            
+                            // 3. If still not found, query by phoneNumber field
+                            if userDoc == nil || !userDoc!.exists {
+                                let userQuery = try await db.collection("users")
+                                    .whereField("phoneNumber", isEqualTo: cleanUserID)
+                                    .limit(to: 1)
+                                    .getDocuments()
+                                
+                                if let firstDoc = userQuery.documents.first {
+                                    userDoc = try await db.collection("users")
+                                        .document(firstDoc.documentID)
+                                        .getDocument()
+                                }
+                            }
+                            
+                            // 4. Try querying by phoneNumber field with original userID
+                            if userDoc == nil || !userDoc!.exists {
+                                let userQuery = try await db.collection("users")
+                                    .whereField("phoneNumber", isEqualTo: userID)
+                                    .limit(to: 1)
+                                    .getDocuments()
+                                
+                                if let firstDoc = userQuery.documents.first {
+                                    userDoc = try await db.collection("users")
+                                        .document(firstDoc.documentID)
+                                        .getDocument()
+                                }
+                            }
+                            
+                            if let userDoc = userDoc, userDoc.exists {
+                                // Try to decode as User model first
+                                if let user = try? userDoc.data(as: User.self) {
+                                    userName = user.name
+                                    userPhoneNumber = user.phoneNumber
+                                } else if let userData = userDoc.data() {
+                                    // Fallback to manual field extraction
+                                    userName = userData["name"] as? String
+                                    userPhoneNumber = userData["phoneNumber"] as? String ?? cleanUserID
+                                }
+                                
+                                // Debug: Print to verify user data is fetched
+                                print("✅ Fetched user for \(userID): name=\(userName ?? "nil"), phone=\(userPhoneNumber ?? "nil")")
+                            } else {
+                                print("⚠️ User document not found for userID: \(userID) (tried: \(cleanUserID), \(userID))")
+                            }
+                        } catch {
+                            print("❌ Error fetching user details for \(userID): \(error)")
+                            // Continue without user details
+                        }
+                        
                         let requestItem = PhaseRequestItem(
                             id: requestId,
                             phaseId: phaseId,
@@ -78,6 +157,8 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                             reason: reason,
                             extendedDate: extendedDate,
                             userID: userID,
+                            userName: userName,
+                            userPhoneNumber: userPhoneNumber,
                             createdAt: createdAt
                         )
                         allRequests.append(requestItem)

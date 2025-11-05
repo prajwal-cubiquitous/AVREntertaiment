@@ -7,6 +7,7 @@
 
 import Foundation
 import FirebaseFirestore
+import FirebaseAuth
 
 /// Helper class to build customer-specific Firebase collection paths
 class FirebasePathHelper {
@@ -73,4 +74,30 @@ class FirebasePathHelper {
     func chatsCollection(customerId: String, projectId: String) -> CollectionReference {
         return db.collection("customers").document(customerId).collection("projects").document(projectId).collection("chats")
     }
+    func fetchEffectiveUserID() async throws -> String {
+            guard let currentUser = Auth.auth().currentUser else {
+                throw NSError(domain: "AuthHelper", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
+            }
+            
+            // If the user logged in via phone number
+            if let phoneNumber = currentUser.phoneNumber {
+                let formattedPhone = phoneNumber.replacingOccurrences(of: "+91", with: "")
+                
+                let docRef = Firestore.firestore()
+                    .collection("users")
+                    .document(formattedPhone)
+                
+                let document = try await docRef.getDocument()
+                
+                if let data = document.data(),
+                   let ownerID = data["ownerID"] as? String {
+                    return ownerID
+                } else {
+                    throw NSError(domain: "AuthHelper", code: 404, userInfo: [NSLocalizedDescriptionKey: "OwnerID not found for phone user"])
+                }
+            }
+            
+            // If email/password or other provider → return UID directly
+            return currentUser.uid
+        }
 }
