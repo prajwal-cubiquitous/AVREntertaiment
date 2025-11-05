@@ -12,14 +12,20 @@ import FirebaseFirestore
 struct Customer: Identifiable, Codable, Hashable {
     @DocumentID var id: String?
     var name: String
-    var email: String?
-    var createdAt: Date
+    var email: String
+    var phoneNumber: String?
+    var businessName: String
+    var location: String?
+    var createdAt: Timestamp
+    var updatedAt: Timestamp
 
-    init(name: String, email: String? = nil, createdAt: Date = Date()) {
+    init(name: String, email: String, phoneNumber: String? = nil, businessName: String, location: String? = nil) {
         self.name = name
         self.email = email
-        self.createdAt = createdAt
+        self.phoneNumber = phoneNumber
+        self.businessName = businessName
+        self.location = location
+        self.createdAt = Timestamp()
+        self.updatedAt = Timestamp()
     }
 }
-
-

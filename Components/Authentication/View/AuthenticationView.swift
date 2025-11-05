@@ -14,6 +14,7 @@ struct AuthenticationView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var selectedAuthMethod: AuthMethod = .otp
+    @State private var showingSignUp = false
     
     // MARK: - UI Configuration
     // 🎨 EASY TO MODIFY UI VALIDATION SETTINGS 🎨
@@ -250,6 +251,27 @@ struct AuthenticationView: View {
             }
             .disabled(!isEmailFormValid || isLoading)
             .animation(.easeInOut(duration: 0.2), value: isEmailFormValid)
+            
+            // Navigation to Sign Up
+            HStack(spacing: 4) {
+                Text("Don't have an account?")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary)
+                
+                Button(action: {
+                    HapticManager.selection()
+                    showingSignUp = true
+                }) {
+                    Text("Create Account")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.black)
+                }
+            }
+            .padding(.top, DesignSystem.Spacing.small)
+        }
+        .sheet(isPresented: $showingSignUp) {
+            SignUpView()
+                .environmentObject(authService)
         }
     }
     
