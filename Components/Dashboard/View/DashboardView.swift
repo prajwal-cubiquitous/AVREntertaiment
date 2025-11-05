@@ -1920,7 +1920,6 @@ private struct AllPhasesView: View {
                                     Button {
                                         HapticManager.selection()
                                         phaseToEdit = phase
-                                        showingEditPhase = true
                                     } label: {
                                         Image(systemName: "pencil.circle.fill")
                                             .font(.system(size: 18, weight: .medium))
@@ -1970,7 +1969,6 @@ private struct AllPhasesView: View {
                                         Button {
                                             HapticManager.selection()
                                             phaseForDepartmentAdd = phase
-                                            showingAddDepartment = true
                                         } label: {
                                             Image(systemName: "plus.circle.fill")
                                                 .font(.system(size: 16, weight: .medium))
@@ -2101,19 +2099,16 @@ private struct AllPhasesView: View {
                 .presentationDetents([.large])
             }
         }
-        .sheet(isPresented: $showingAddDepartment, onDismiss: {
-            Task {
-                // Reload budgets when department is added
-                loadPhaseBudgets()
-            }
-        }) {
-            if let phase = phaseForDepartmentAdd, let projectId = project?.id {
+        .sheet(item: $phaseForDepartmentAdd) { phase in
+            if let projectId = project?.id {
                 AddDepartmentSheet(
                     projectId: projectId,
                     phaseId: phase.id,
                     phaseName: phase.name,
                     onSaved: {
                         HapticManager.impact(.light)
+                        // Optional: reload budgets when department is added
+                        loadPhaseBudgets()
                     }
                 )
                 .presentationDetents([.medium])
@@ -2132,21 +2127,16 @@ private struct AllPhasesView: View {
                 .presentationDetents([.medium])
             }
         }
-        .sheet(isPresented: $showingEditPhase) {
-            if let phase = phaseToEdit, let projectId = project?.id {
-                EditPhaseSheet(
-                    projectId: projectId,
-                    phaseId: phase.id,
-                    currentPhaseName: phase.name,
-                    currentStartDate: phase.start,
-                    currentEndDate: phase.end,
-                    onSaved: {
-                        // Call parent callback to reload phases
-                        onPhaseAdded?()
-                    }
-                )
-                .presentationDetents([.medium])
-            }
+        .sheet(item: $phaseToEdit) { phase in
+            EditPhaseSheet(
+                projectId: project?.id ?? "",
+                phaseId: phase.id,
+                currentPhaseName: phase.name,
+                currentStartDate: phase.start,
+                currentEndDate: phase.end,
+                onSaved: { onPhaseAdded?() }
+            )
+            .presentationDetents([.medium])
         }
     }
 }
