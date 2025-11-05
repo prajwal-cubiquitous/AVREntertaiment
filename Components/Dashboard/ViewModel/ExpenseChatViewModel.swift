@@ -99,7 +99,7 @@ class ExpenseChatViewModel: ObservableObject {
     }
     
     func loadUserData(_ userId: String) async throws -> String {
-        let userDoc = try await db.collection("users_ios").document(userId).getDocument()
+        let userDoc = try await db.collection("users").document(userId).getDocument()
         
         guard userDoc.exists else {
             throw UserDataError.userNotFound

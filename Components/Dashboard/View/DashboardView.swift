@@ -1280,7 +1280,6 @@ struct DashboardView: View {
                     .whereField("status", isEqualTo: "ACCEPTED")
                     .getDocuments()
                 
-                print("📋 Found \(requestsSnapshot.documents.count) accepted requests for phase \(phase.name)")
                 
                 // Check if any accepted request's extendedDate matches phase endDate
                 var hasExtension = false
@@ -1307,7 +1306,6 @@ struct DashboardView: View {
             
             await MainActor.run {
                 phaseExtensionMap = extensionMap
-                print("📊 Extension map updated: \(extensionMap)")
             }
         } catch {
             print("❌ Error loading phase extensions: \(error)")

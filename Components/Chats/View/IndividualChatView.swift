@@ -411,6 +411,12 @@ struct IndividualChatView: View {
     private func markMessagesAsRead() async {
         guard let projectId = project.id else { return }
         
+        var customerID: String {
+            get async throws {
+                try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            }
+        }
+        
         // Determine current user identifier
         let currentUserPhone = (role == .ADMIN) ? "Admin" : currentUserPhoneNumber
         
@@ -423,7 +429,9 @@ struct IndividualChatView: View {
         do {
             // Update all unread messages from this participant
             let messagesSnapshot = try await Firestore.firestore()
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)

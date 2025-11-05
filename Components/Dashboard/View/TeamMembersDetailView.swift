@@ -315,7 +315,7 @@ class TeamMembersDetailViewModel: ObservableObject {
     private func fetchUserDetails(userId: String, db: Firestore) async -> User? {
         do {
             let document = try await db
-                .collection("users_ios")
+                .collection("users")
                 .document(userId)
                 .getDocument()
             
@@ -692,6 +692,12 @@ class MemberExpensesViewModel: ObservableObject {
         return "\(Int(total).formattedCurrency)"
     }
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func loadExpenses(for project: Project, memberId: String) {
         guard let projectId = project.id else { return }
         
@@ -701,7 +707,9 @@ class MemberExpensesViewModel: ObservableObject {
         Task {
             do {
                 let snapshot = try await db
-                    .collection("projects_ios1")
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("expenses")
                     .whereField("submittedBy", isEqualTo: memberId)

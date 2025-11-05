@@ -10,10 +10,16 @@ class UserListViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func fetchUsers() async {
         isLoading = true
         do {
-            let snapshot = try await db.collection("users_ios").getDocuments()
+            let snapshot = try await db.collection("users").whereField("ownerID", isEqualTo: customerID).getDocuments()
             users = snapshot.documents.compactMap { document -> User? in
                 try? document.data(as: User.self)
             }.sorted { $0.name < $1.name } // Sort by name
@@ -35,7 +41,7 @@ class UserListViewModel: ObservableObject {
         }
         
         do {
-            try await db.collection("users_ios").document(userId).updateData([
+            try await db.collection("users").document(userId).updateData([
                 "isActive": !user.isActive
             ])
             // No need to refresh the entire list since we already updated the UI

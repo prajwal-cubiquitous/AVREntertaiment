@@ -623,6 +623,12 @@ class DelegateViewModel: ObservableObject {
     
     private let db = Firestore.firestore()
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func loadDelegateDetails(for project: Project) {
         self.tempApprover = nil
         guard let projectId = project.id,
@@ -649,8 +655,9 @@ class DelegateViewModel: ObservableObject {
                     let documentId = tempApproverDoc.documentID
                     if let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
                         // Fetch user details using tempApproverID (which is the user's phone number)
-                        let userQuery = try await db.collection("users_ios")
+                        let userQuery = try await db.collection("users")
                             .whereField("phoneNumber", isEqualTo: tempApproverID)
+                            .whereField("ownerID", isEqualTo: customerID)
                             .getDocuments()
                         
                         let approverUser: User? = {
@@ -688,8 +695,9 @@ class DelegateViewModel: ObservableObject {
     
     func loadAllApprovers() async {
         do {
-            let query = try await db.collection("users_ios")
+            let query = try await db.collection("users")
                 .whereField("role", isEqualTo: "APPROVER")
+                .whereField("ownerID", isEqualTo: customerID)
                 .getDocuments()
             
             let approvers = query.documents.compactMap { doc in

@@ -85,6 +85,12 @@ class ChatsViewModel: ObservableObject {
         self.currentUserRole = currentUserRole
     }
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func loadChatParticipants() async {
         // Check if we have valid cached data
         if let lastLoad = lastLoadTime,
@@ -261,7 +267,9 @@ class ChatsViewModel: ObservableObject {
             
             // Get chat document
             let chatDoc = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -293,7 +301,9 @@ class ChatsViewModel: ObservableObject {
     
     private func countUnreadMessages(projectId: String, chatId: String, currentUserPhone: String) async throws -> Int {
         let messagesSnapshot = try await db
-            .collection("projects_ios1")
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -315,7 +325,9 @@ class ChatsViewModel: ObservableObject {
         do {
             // Update all unread messages from this participant
             let messagesSnapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -417,9 +429,12 @@ class ChatsViewModel: ObservableObject {
             print("error fetching project id")
             return nil
         }
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
 
         return try await withCheckedThrowingContinuation { continuation in
-            db.collection("projects_ios1").document(projectId).collection("tempApprover")
+            db.collection("customers")
+                .document(customerID)
+                .collection("projects").document(projectId).collection("tempApprover")
                 .whereField("approverId", isEqualTo: approverId)
                 .whereField("status", isEqualTo: "active")
                 .whereField("endDate", isGreaterThanOrEqualTo: Timestamp(date: currentDate))

@@ -366,7 +366,6 @@ class ProjectDetailViewModel: ObservableObject {
                     .whereField("status", isEqualTo: "ACCEPTED")
                     .getDocuments()
                 
-                print("📋 Found \(requestsSnapshot.documents.count) accepted requests for phase \(phase.phaseName)")
                 
                 // Check if any accepted request's extendedDate matches phase endDate
                 var hasExtension = false
@@ -391,7 +390,6 @@ class ProjectDetailViewModel: ObservableObject {
             
             await MainActor.run {
                 self.phaseExtensionMap = extensionMap
-                print("📊 Extension map updated: \(extensionMap)")
             }
         } catch {
             print("❌ Error loading phase extensions: \(error)")
