@@ -31,12 +31,18 @@ class PredictiveAnalysisViewModel: ObservableObject {
     init(project: Project) {
         self.project = project
         Task{
-            await fetchData()
+           try await fetchData()
         }
     }
     
-    func fetchData() async{
-        guard let projectId = project.id else { 
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
+    func fetchData() async throws{
+        guard let projectId = project.id else {
             print("❌ Project ID is nil, cannot fetch data")
             isLoading = false
             return 
@@ -44,7 +50,7 @@ class PredictiveAnalysisViewModel: ObservableObject {
         
         isLoading = true
         await fetchExpenses(for: projectId)
-        fetchExpensesFromFirestore(projectId: projectId)
+        try await fetchExpensesFromFirestore(projectId: projectId)
     }
     
     let db = Firestore.firestore()
@@ -80,7 +86,9 @@ class PredictiveAnalysisViewModel: ObservableObject {
 
         do {
             let snapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("expenses")
                 .whereField("status", isEqualTo: "APPROVED")
@@ -228,7 +236,11 @@ class PredictiveAnalysisViewModel: ObservableObject {
     
     func fetchStartDate(projectId: String) async -> (Date?, Date?)?{
         do{
-            let doc = try await db.collection("projects_ios1").document(projectId).getDocument()
+            let doc = try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
+                .document(projectId).getDocument()
             
             guard let data = doc.data() else {
                 print("❌ No project data found.")
@@ -270,7 +282,11 @@ class PredictiveAnalysisViewModel: ObservableObject {
     func fetchProjectDurationAndMonthlyBudget(projectId: String) async -> (Int, Double)? {
         
         do {
-            let doc = try await db.collection("projects_ios1").document(projectId).getDocument()
+            let doc = try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
+                .document(projectId).getDocument()
             
             guard let data = doc.data() else {
                 print("❌ No project data found.")
@@ -321,8 +337,14 @@ class PredictiveAnalysisViewModel: ObservableObject {
 
     
     
-    private func fetchExpensesFromFirestore(projectId: String) {
-        db.collection("projects_ios1").document(projectId).collection("expenses")
+    private func fetchExpensesFromFirestore(projectId: String) async throws{
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
+            db.collection("customers")
+            .document(customerID)
+            .collection("projects")
+            .document(projectId).collection("expenses")
             .getDocuments { [weak self] (snapshot, error) in
             DispatchQueue.main.async {
                 self?.isLoading = false

@@ -67,8 +67,12 @@ struct PredictiveAnalysisScreen: View {
         }
         .task {
             // Only fetch data if project has a valid ID
-            if project.id != nil {
-                await vm.fetchData()
+            do{
+                if project.id != nil {
+                   try await vm.fetchData()
+                }
+            }catch{
+                print("error")
             }
         }
     }

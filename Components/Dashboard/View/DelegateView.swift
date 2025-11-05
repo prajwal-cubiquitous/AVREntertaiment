@@ -629,6 +629,7 @@ class DelegateViewModel: ObservableObject {
         }
     }
     
+
     func loadDelegateDetails(for project: Project) {
         self.tempApprover = nil
         guard let projectId = project.id,
@@ -642,7 +643,10 @@ class DelegateViewModel: ObservableObject {
                 await loadAllApprovers()
                 
                 // Fetch temp approver details from subcollection
-                let tempApproverDoc = try await db.collection("projects_ios1")
+                let tempApproverDoc = try await db
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("tempApprover")
                     .whereField("approverId", isEqualTo: tempApproverID)
@@ -721,14 +725,20 @@ class DelegateViewModel: ObservableObject {
         
         do {
             // Update the project's tempApproverID
-            try await db.collection("projects_ios1")
+            try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .updateData([
                     "tempApproverID": newTempApprover.approverId
                 ])
             
             // Create new temp approver document
-            let docRef = try await db.collection("projects_ios1")
+            let docRef = try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("tempApprover")
                 .addDocument(data: [
@@ -764,7 +774,10 @@ class DelegateViewModel: ObservableObject {
         
         do {
             
-            try await db.collection("projects_ios1")
+            try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("tempApprover")
                 .document(tempDocumentId) // the known document ID
@@ -773,14 +786,20 @@ class DelegateViewModel: ObservableObject {
                 ])
             
             // Update the project's tempApproverID
-            try await db.collection("projects_ios1")
+            try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .updateData([
                     "tempApproverID": newTempApprover.approverId
                 ])
             
             // Create new temp approver document
-            try await db.collection("projects_ios1")
+            try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("tempApprover")
                 .addDocument(data: [
@@ -819,7 +838,10 @@ class DelegateViewModel: ObservableObject {
         }
         
         do {
-            try await db.collection("projects_ios1")
+            try await db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("tempApprover")
                 .document(tempDocumentId)

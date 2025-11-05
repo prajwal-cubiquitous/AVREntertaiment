@@ -243,6 +243,13 @@ struct NotificationPopupView: View {
     // MARK: - Helper Methods
     
     private func openExpenseChat() async {
+        
+        var customerID: String {
+            get async throws {
+                try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            }
+        }
+        
         guard let projectId = project.id else { return }
         
         let db = Firestore.firestore()
@@ -250,7 +257,9 @@ struct NotificationPopupView: View {
         do {
             // Fetch expenses with recent chat messages
             let expensesSnapshot = try await db
-                .collection("projects_ios1")
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("expenses")
                 .getDocuments()
@@ -262,7 +271,9 @@ struct NotificationPopupView: View {
                 
                 // Check for recent expense chat messages
                 let expenseChatSnapshot = try await db
-                    .collection("projects_ios1")
+                    .collection("customers")
+                    .document(customerID)
+                    .collection("projects")
                     .document(projectId)
                     .collection("expenses")
                     .document(expenseDoc.documentID)

@@ -36,15 +36,17 @@ class ExpenseChatViewModel: ObservableObject {
     
     // MARK: - Public Methods
     
-    func loadChatMessages() {
+    func loadChatMessages() async throws {
         isLoading = true
         errorMessage = nil
         guard let ExpenseId = expense.id else {
             self.isLoading = false
             return
         }
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
         
-        let chatCollection = db.collection("projects_ios1").document(projectID).collection("expenses").document(ExpenseId).collection("expenseChats")
+        let chatCollection = db.collection("customers").document(customerID)
+            .collection("projects").document(projectID).collection("expenses").document(ExpenseId).collection("expenseChats")
             .order(by: "timeStamp", descending: false)
         
         listener = chatCollection.addSnapshotListener { [weak self] snapshot, error in
@@ -68,17 +70,21 @@ class ExpenseChatViewModel: ObservableObject {
         }
     }
     
-    func sendMessage(_ message: ExpenseChat) {
+    func sendMessage(_ message: ExpenseChat) async throws {
+        
         guard let ExpenseId = expense.id else {
             return
         }
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
         
         // Set sending state to true
         isSendingMessage = true
         
         let chatData = message
         
-        let docRef = db.collection("projects_ios1").document(projectID)
+        let docRef = db.collection("customers").document(customerID)
+            .collection("projects").document(projectID)
                             .collection("expenses").document(ExpenseId)
                             .collection("expenseChats").document() // Let Firestore generate the ID
 

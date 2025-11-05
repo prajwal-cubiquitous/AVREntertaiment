@@ -1515,49 +1515,7 @@ struct DashboardView: View {
             tempApproverEndDate = nil
         }
     }
-    
-    //    private func fetchApproverData() async {
-    //        guard let project = project else {
-    //            return
-    //        }
-    //
-    //        do {
-    //            let db = Firestore.firestore()
-    //
-    //            // Fetch user name from users collection
-    //            let userDocument = try await db
-    //                .collection(FirebaseCollections.users)
-    //                .document(project.managerId)
-    //                .getDocument()
-    //
-    //            if userDocument.exists, let user = try? userDocument.data(as: User.self) {
-    //                tempApproverName = user.name
-    //
-    //                // Fetch temp approver end date from subcollection
-    //                let tempApproverSnapshot = try await db
-    //                    .collection("projects_ios")
-    //                    .document(project.id ?? "")
-    //                    .collection("tempApprover")
-    //                    .whereField("approverId", isEqualTo: user.phoneNumber)
-    //                    .limit(to: 1)
-    //                    .getDocuments()
-    //
-    //                if let tempApproverDoc = tempApproverSnapshot.documents.first,
-    //                   let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
-    //                    tempApproverEndDate = tempApprover.endDate
-    //                } else {
-    //                    tempApproverEndDate = nil
-    //                }
-    //            } else {
-    //                tempApproverName = nil
-    //                tempApproverEndDate = nil
-    //            }
-    //        } catch {
-    //            print("Error fetching temp approver data: \(error)")
-    //            tempApproverName = nil
-    //            tempApproverEndDate = nil
-    //        }
-    //    }
+
     
     // MARK: - Budget Comparison Chart
     private var budgetComparisonChart: some View {

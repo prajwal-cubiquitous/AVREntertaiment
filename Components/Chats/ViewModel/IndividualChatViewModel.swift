@@ -26,6 +26,7 @@ class IndividualChatViewModel: ObservableObject {
     private var project: Project?
     private var authService: FirebaseAuthService?
     
+    
     init(currentUserPhone: String?, role: UserRole, authService: FirebaseAuthService? = nil) {
         self.currentUserPhone = currentUserPhone
         self.role = role
@@ -40,40 +41,12 @@ class IndividualChatViewModel: ObservableObject {
         messageListener?.remove()
     }
     
-//    func sendMessage(_ message: Message) {
-//        messages.append(message)
-//        // TODO: Send to Firebase and update chat
-//    }
-//    
-//    private func createOrGetChat(participant: ChatParticipant, project: Project) async {
-//        // Create chat ID based on participants
-//        let participants = [currentUserPhone ?? "Admin", participant.phoneNumber].sorted()
-//        let chatId = "\(participants[0])_\(participants[1])_\(project.id ?? "")"
-//        
-//        do {
-//            // Try to get existing chat
-//            let chatDoc = try await db.collection("chats").document(chatId).getDocument()
-//            
-//            if chatDoc.exists {
-//                self.chat = try chatDoc.data(as: Chat.self)
-//            } else {
-//                // Create new chat
-//                let newChat = Chat(
-//                    type: .individual,
-//                    participants: participants,
-//                    lastMessage: nil,
-//                    lastTimestamp: nil
-//                )
-//                
-//                try db.collection("chats").document(chatId).setData(from: newChat)
-//                self.chat = newChat
-//            }
-//        } catch {
-//            print("Error creating/getting chat: \(error)")
-//            errorMessage = "Failed to load chat"
-//        }
-//    }
-
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func startOrFetchChatAsync(
         with phoneNumber: String,
         currentUserPhone: String?,   // current user's phone
@@ -81,6 +54,9 @@ class IndividualChatViewModel: ObservableObject {
         project: Project,
         role: UserRole
     ) async throws -> Chat? {
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
         let db = Firestore.firestore()
         
         guard let projectId = project.id else { return nil }
@@ -118,7 +94,10 @@ class IndividualChatViewModel: ObservableObject {
         
         // 3️⃣ Deterministic Chat Document ID using phone identifiers
         let chatId = participantPhones.joined(separator: "_")
-        let chatRef = db.collection("projects_ios1")
+        let chatRef = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -159,8 +138,14 @@ class IndividualChatViewModel: ObservableObject {
         mentions: [String]? = nil,
         isGroupMessage: Bool = false
     ) async throws {
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
         let db = Firestore.firestore()
-        let messageRef = db.collection("projects_ios1")
+        let messageRef = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -183,7 +168,10 @@ class IndividualChatViewModel: ObservableObject {
         try messageRef.setData(from: message)
         
         // Update last message in chat
-        try await db.collection("projects_ios1")
+        try await db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -195,7 +183,10 @@ class IndividualChatViewModel: ObservableObject {
     
     func loadMessagesAsync(projectId: String, chatId: String) async throws -> [Message] {
         let db = Firestore.firestore()
-        let snapshot = try await db.collection("projects_ios1")
+        let snapshot = try await db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -210,11 +201,17 @@ class IndividualChatViewModel: ObservableObject {
         return messages
     }
     
-    func listenToMessages(projectId: String, chatId: String) -> AsyncStream<[Message]> {
+    func listenToMessages(projectId: String, chatId: String) async throws-> AsyncStream<[Message]> {
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
         let db = Firestore.firestore()
         
         return AsyncStream { continuation in
-            let listener = db.collection("projects_ios1")
+            let listener = db
+                .collection("customers")
+                .document(customerID)
+                .collection("projects")
                 .document(projectId)
                 .collection("chats")
                 .document(chatId)
@@ -342,7 +339,7 @@ class IndividualChatViewModel: ObservableObject {
                     }
                     
                     // Start listening for new messages after loading existing ones
-                    startListeningToMessages(projectId: projectId, chatId: chatId)
+                    try await startListeningToMessages(projectId: projectId, chatId: chatId)
                 } catch {
                     await MainActor.run {
                         self.errorMessage = "Failed to load messages: \(error.localizedDescription)"
@@ -388,10 +385,16 @@ class IndividualChatViewModel: ObservableObject {
         }
     }
     
-    private func startListeningToMessages(projectId: String, chatId: String) {
+    private func startListeningToMessages(projectId: String, chatId: String) async throws {
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
         messageListener?.remove()
         
-        messageListener = db.collection("projects_ios1")
+        messageListener = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)

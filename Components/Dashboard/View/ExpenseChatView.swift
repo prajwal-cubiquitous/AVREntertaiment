@@ -54,8 +54,12 @@ struct ExpenseChatView: View {
             }
             .navigationBarHidden(true)
         }
-        .onAppear {
-            viewModel.loadChatMessages()
+        .task {
+            do{
+                try await viewModel.loadChatMessages()
+            }catch{
+                print("error")
+            }
         }
         .onChange(of: selectedPhotos) { _, newPhotos in
             Task {
@@ -199,7 +203,9 @@ struct ExpenseChatView: View {
                     
                     if !messageText.isEmpty || !selectedImages.isEmpty {
                         Button {
-                            sendMessage()
+                            task{
+                                await sendMessage()
+                            }
                         } label: {
                             if viewModel.isSendingMessage || isUploadingImage {
                                 ProgressView()
@@ -248,7 +254,7 @@ struct ExpenseChatView: View {
     }
     
     // MARK: - Helper Methods
-    private func sendMessage() {
+    private func sendMessage() async {
         guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty else { return }
         
         if !selectedImages.isEmpty {
@@ -264,7 +270,11 @@ struct ExpenseChatView: View {
                 senderRole: role
             )
             
-            viewModel.sendMessage(message)
+            do{
+                try await viewModel.sendMessage(message)
+            }catch{
+                print("Error sending message: \(error.localizedDescription)")
+            }
             messageText = ""
         }
     }
@@ -324,7 +334,11 @@ struct ExpenseChatView: View {
                 senderRole: role
             )
             
-            viewModel.sendMessage(message)
+            do{
+                try await viewModel.sendMessage(message)
+            }catch{
+                print("Error sending message: \(error.localizedDescription)")
+            }
             messageText = ""
             
             // Clear images after sending

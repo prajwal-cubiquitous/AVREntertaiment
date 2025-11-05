@@ -34,6 +34,12 @@ class GroupChatViewModel: ObservableObject {
         messageListener?.remove()
     }
     
+    var customerID: String {
+        get async throws {
+            try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        }
+    }
+    
     func loadGroupMessages() async {
         isLoading = true
         errorMessage = nil
@@ -57,7 +63,7 @@ class GroupChatViewModel: ObservableObject {
             self.messages = existingMessages
             
             // Start listening for new messages
-            startListeningToMessages(projectId: projectId, chatId: chatId)
+            try await startListeningToMessages(projectId: projectId, chatId: chatId)
             
             isLoading = false
         } catch {
@@ -180,7 +186,13 @@ class GroupChatViewModel: ObservableObject {
     }
     
     private func createOrGetGroupChat(projectId: String, chatId: String) async throws -> Chat {
-        let chatRef = db.collection("projects_ios1")
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
+        let chatRef = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -221,7 +233,12 @@ class GroupChatViewModel: ObservableObject {
         mentions: [String]? = nil,
         isGroupMessage: Bool = true
     ) async throws {
-        let messageRef = db.collection("projects_ios1")
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+        
+        let messageRef = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -244,7 +261,10 @@ class GroupChatViewModel: ObservableObject {
         try messageRef.setData(from: message)
         
         // Update last message in chat
-        try await db.collection("projects_ios1")
+        try await db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -255,7 +275,10 @@ class GroupChatViewModel: ObservableObject {
     }
     
     private func loadMessagesAsync(projectId: String, chatId: String) async throws -> [Message] {
-        let snapshot = try await db.collection("projects_ios1")
+        let snapshot = try await db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
@@ -270,10 +293,16 @@ class GroupChatViewModel: ObservableObject {
         return messages
     }
     
-    private func startListeningToMessages(projectId: String, chatId: String) {
+    private func startListeningToMessages(projectId: String, chatId: String) async throws{
+        
+        let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+
         messageListener?.remove()
         
-        messageListener = db.collection("projects_ios1")
+        messageListener = db
+            .collection("customers")
+            .document(customerID)
+            .collection("projects")
             .document(projectId)
             .collection("chats")
             .document(chatId)
