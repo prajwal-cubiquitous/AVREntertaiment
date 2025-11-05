@@ -670,7 +670,7 @@ struct DashboardView: View {
                                 HStack{
                                     if isPhaseInProgress(phase) {
                                         Text("In Progress")
-                                            .font(DesignSystem.Typography.caption1)
+                                            .font(DesignSystem.Typography.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.green)
                                             .padding(.horizontal, 8)
