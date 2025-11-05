@@ -828,35 +828,39 @@ struct DashboardView: View {
 
                                 HStack(spacing: 6){
                                     // Extension Badge - Show if phase has accepted extension
-                                    if phaseExtensionMap[phase.id] == true {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "arrow.clockwise.circle.fill")
-                                                .font(.caption2)
-                                            Text("Extended")
+                                    VStack{
+                                        
+                                        // Only show "In Progress" badge if phase is in progress AND enabled
+                                        if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                            Text("Active")
                                                 .font(DesignSystem.Typography.caption2)
                                                 .fontWeight(.semibold)
+                                                .foregroundColor(.green)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.green.opacity(0.12))
+                                                .clipShape(Capsule())
+                                                .accessibilityLabel("Phase status: In Progress")
                                         }
-                                        .foregroundColor(.orange)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.orange.opacity(0.12))
-                                        .clipShape(Capsule())
-                                        .accessibilityLabel("Phase extended via accepted request")
-                                        .transition(.opacity.combined(with: .scale))
-                                    }
-                                    
-                                    // Only show "In Progress" badge if phase is in progress AND enabled
-                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                        Text("Active")
-                                            .font(DesignSystem.Typography.caption2)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.green)
+                                        
+                                        if phaseExtensionMap[phase.id] == true {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "arrow.clockwise.circle.fill")
+                                                    .font(.caption2)
+                                                Text("Extended")
+                                                    .font(DesignSystem.Typography.caption2)
+                                                    .fontWeight(.semibold)
+                                            }
+                                            .foregroundColor(.orange)
                                             .padding(.horizontal, 8)
                                             .padding(.vertical, 4)
-                                            .background(Color.green.opacity(0.12))
+                                            .background(Color.orange.opacity(0.12))
                                             .clipShape(Capsule())
-                                            .accessibilityLabel("Phase status: In Progress")
-
+                                            .accessibilityLabel("Phase extended via accepted request")
+                                            .transition(.opacity.combined(with: .scale))
+                                        }
+                                    }
+                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
                                         if role == .ADMIN{
                                             // Enable toggle
                                             Toggle("", isOn: Binding(
@@ -2245,7 +2249,21 @@ private struct AllPhasesView: View {
                                 }
                                 Spacer()
                                 
-                                HStack(spacing: 6) {
+                                VStack() {
+                                    
+                                    // Only show "In Progress" badge if phase is in progress AND enabled
+                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                        Text("Active")
+                                            .font(DesignSystem.Typography.caption2)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.green)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.green.opacity(0.12))
+                                            .clipShape(Capsule())
+                                            .accessibilityLabel("Phase status: In Progress")
+                                    }
+                                    
                                     // Extension Badge - Show if phase has accepted extension
                                     if phaseExtensionMap[phase.id] == true {
                                         HStack(spacing: 4) {
@@ -2261,19 +2279,6 @@ private struct AllPhasesView: View {
                                         .background(Color.orange.opacity(0.12))
                                         .clipShape(Capsule())
                                         .accessibilityLabel("Phase extended via accepted request")
-                                    }
-                                    
-                                    // Only show "In Progress" badge if phase is in progress AND enabled
-                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                        Text("Active")
-                                            .font(DesignSystem.Typography.caption2)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.green)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color.green.opacity(0.12))
-                                            .clipShape(Capsule())
-                                            .accessibilityLabel("Phase status: In Progress")
                                     }
                                 }
 
