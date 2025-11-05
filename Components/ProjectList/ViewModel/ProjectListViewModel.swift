@@ -19,6 +19,7 @@ class ProjectListViewModel: ObservableObject {
     @StateObject private var userPhone = UserServices.shared
     @Published var role: UserRole
     @Published var selectedStatusFilter: ProjectStatus? = nil
+    @Published var customerId: String? // Customer ID for multi-tenant support
     
     // Temporary Approver Status
     @Published var tempApproverStatus: TempApproverStatus? = nil
@@ -30,14 +31,15 @@ class ProjectListViewModel: ObservableObject {
     private var projectListener: ListenerRegistration?
     private let tempApproverService = TempApproverService()
     
-    init(phoneNumber: String = "", role: UserRole) {
+    init(phoneNumber: String = "", role: UserRole, customerId: String? = nil) {
         self.phoneNumber = phoneNumber
         self.role = role
+        self.customerId = customerId
         Task {
             await setupProjectListener()
         }
         setupNotificationObservers()
-        print("Initialized with phone: \(self.phoneNumber), role: \(self.role)")
+        print("Initialized with phone: \(self.phoneNumber), role: \(self.role), customerId: \(customerId ?? "nil")")
     }
     
     deinit {
@@ -68,18 +70,25 @@ class ProjectListViewModel: ObservableObject {
         
         isLoading = true
         
+        // Get customer ID - required for customer-specific queries
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found")
+            isLoading = false
+            return
+        }
+        
         // Clean phone number - remove +91 prefix if it exists
         let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
-        print("🔍 Setting up listener for user: \(cleanPhone) with role: \(role)")
+        print("🔍 Setting up listener for user: \(cleanPhone) with role: \(role), customerId: \(customerId)")
         
-        // Start with the base collection reference
-        let projectsRef = db.collection(FirebaseCollections.projects)
+        // Start with the customer-specific projects collection
+        let projectsRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId)
         
         // Create the appropriate query based on role and user
         let query: Query
         
-        if phoneNumber == "admin@avr.com" {
-            print("👑 Admin user - listening to all projects")
+        if phoneNumber == "admin@avr.com" || role == .ADMIN {
+            print("👑 Admin user - listening to all projects for customer: \(customerId)")
             query = projectsRef
         } else {
             switch role {
@@ -178,13 +187,13 @@ class ProjectListViewModel: ObservableObject {
         do {
             var allPendingExpenses: [Expense] = []
             
+            guard let customerId = customerId else { return }
+            
             for project in projects {
                 guard let projectId = project.id else { continue }
                 
-                let expensesSnapshot = try await db
-                    .collection(FirebaseCollections.projects)
-                    .document(projectId)
-                    .collection(FirebaseCollections.expenses)
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()

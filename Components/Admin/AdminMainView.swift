@@ -63,7 +63,11 @@ struct AdminMainView: View {
         VStack(spacing: 0) {
             // Projects list
             if let currentUser = authService.currentUser {
-                ProjectListView(phoneNumber: currentUser.email ?? "", role: currentUser.role)
+                ProjectListView(
+                    phoneNumber: currentUser.email ?? "",
+                    role: currentUser.role,
+                    customerId: authService.currentCustomerId
+                )
                     .environmentObject(authService)
             } else {
                 VStack(spacing: 16) {

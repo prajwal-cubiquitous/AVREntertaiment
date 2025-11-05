@@ -186,8 +186,14 @@ class CreateProjectViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
+        guard let customerId = authService?.currentCustomerId else {
+            errorMessage = "Customer ID not found"
+            isLoading = false
+            return
+        }
+        
         do {
-            let querySnapshot = try await db.collection(FirebaseCollections.users)
+            let querySnapshot = try await db.collection("customers").document(customerId).collection("users")
                 .whereField("role", in: [UserRole.USER.rawValue, UserRole.APPROVER.rawValue])
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
@@ -313,12 +319,18 @@ class CreateProjectViewModel: ObservableObject {
                     total + phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
                 }
                 
+                // Get customer ID from auth service
+                guard let customerId = authService?.currentCustomerId else {
+                    throw NSError(domain: "CreateProjectError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Customer ID not found. Please log in again."])
+                }
+                
                 // Project-level team members and managers
                 let allTeamMembers = Set(selectedProjectTeamMembers.map { $0.phoneNumber })
                 let managerIds = selectedProjectManagers.map { $0.email ?? $0.phoneNumber }.filter { !$0.isEmpty }
                 
                 // Create project data (without departments, they're in phases now)
-                let docRef = db.collection(FirebaseCollections.projects).document()
+                // Use customer-specific projects collection
+                let docRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId).document()
                 
                 let projectData = Project(
                     id: docRef.documentID,

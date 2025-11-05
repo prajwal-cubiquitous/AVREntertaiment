@@ -57,7 +57,11 @@ struct ContentView: View {
                 }else if authService.isUser || authService.isApprover{
                     // USER: OTP-based login, goes to ProjectListView
                     if let currentUser = authService.currentUser {
-                        ProjectListView(phoneNumber: currentUser.phoneNumber, role: currentUser.role)
+                        ProjectListView(
+                            phoneNumber: currentUser.phoneNumber,
+                            role: currentUser.role,
+                            customerId: authService.currentCustomerId
+                        )
                             .environmentObject(authService)
                             .environmentObject(navigationManager)
                             .transition(.asymmetric(

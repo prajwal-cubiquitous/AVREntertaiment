@@ -11,6 +11,7 @@ class FirebaseAuthService: ObservableObject {
     @Published var isUser = false
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var currentCustomerId: String? // Customer ID for multi-tenant support
     
     private let auth = Auth.auth()
     private let db = Firestore.firestore()
@@ -38,6 +39,7 @@ class FirebaseAuthService: ObservableObject {
     
     private func resetAuthState() {
         currentUser = nil
+        currentCustomerId = nil
         isAuthenticated = false
         isAdmin = false
         isApprover = false
@@ -51,7 +53,8 @@ class FirebaseAuthService: ObservableObject {
         
         // Check if this is an admin user (email-based)
         if let email = firebaseUser.email, !email.isEmpty {
-            // This is an admin user
+            // This is an admin user - customer ID is the Firebase Auth UID
+            currentCustomerId = firebaseUser.uid
             let adminUser = User.adminUser(email: email, name: firebaseUser.displayName ?? "Admin")
             updateUserState(user: adminUser)
         } else {
@@ -70,13 +73,43 @@ class FirebaseAuthService: ObservableObject {
     public func loadOTPUser(phoneNumber: String) async {
         do {
             let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let document = try await db.collection(FirebaseCollections.users).document(cleanPhoneNumber).getDocument()
             
-            if document.exists, let userData = try? document.data(as: User.self) {
-                updateUserState(user: userData)
+            // First, find which customer this user belongs to
+            // Search across all customers for this user
+            let customersSnapshot = try await db.collection("customers").getDocuments()
+            
+            var foundUser: User?
+            var foundCustomerId: String?
+            
+            for customerDoc in customersSnapshot.documents {
+                let customerId = customerDoc.documentID
+                let userDoc = try await db.collection("customers").document(customerId).collection("users").document(cleanPhoneNumber).getDocument()
+                
+                if userDoc.exists, let userData = try? userDoc.data(as: User.self) {
+                    foundUser = userData
+                    foundCustomerId = customerId
+                    break
+                }
+            }
+            
+            if let user = foundUser, let customerId = foundCustomerId {
+                currentCustomerId = customerId
+                updateUserState(user: user)
             } else {
-                errorMessage = "User not found. Please contact admin for access."
-                resetAuthState()
+                // Fallback: try old collection structure for backward compatibility
+                let document = try await db.collection(FirebaseCollections.users).document(cleanPhoneNumber).getDocument()
+                
+                if document.exists, let userData = try? document.data(as: User.self) {
+                    // Try to find customer from user's customerId field if it exists
+                    // For now, use first customer as fallback (legacy users)
+                    if let firstCustomer = customersSnapshot.documents.first {
+                        currentCustomerId = firstCustomer.documentID
+                    }
+                    updateUserState(user: userData)
+                } else {
+                    errorMessage = "User not found. Please contact admin for access."
+                    resetAuthState()
+                }
             }
         } catch {
             errorMessage = "Failed to load user: \(error.localizedDescription)"
@@ -195,12 +228,17 @@ class FirebaseAuthService: ObservableObject {
             return false
         }
         
+        guard let customerId = currentCustomerId else {
+            errorMessage = "Customer ID not found. Please log in again."
+            return false
+        }
+        
         do {
             // Clean phone number of any potential prefixes
             let cleanPhoneNumber = phoneNumber.replacingOccurrences(of: "+91", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
             
-            // Use phone number as document ID
-            let userRef = db.collection(FirebaseCollections.users).document(cleanPhoneNumber)
+            // Use customer-specific users collection
+            let userRef = db.collection("customers").document(customerId).collection("users").document(cleanPhoneNumber)
             
             // Check if user exists
             if !overwrite {
@@ -227,9 +265,10 @@ class FirebaseAuthService: ObservableObject {
     
     func getAllUsers() async -> [User] {
         guard isAdmin else { return [] }
+        guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection(FirebaseCollections.users)
+            let snapshot = try await db.collection("customers").document(customerId).collection("users")
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
             return snapshot.documents.compactMap { document in
@@ -242,10 +281,10 @@ class FirebaseAuthService: ObservableObject {
     }
     
     func getApprovers() async -> [User] {
-        guard isAdmin else { return [] }
+        guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection("users")
+            let snapshot = try await db.collection("customers").document(customerId).collection("users")
                 .whereField("role", isEqualTo: UserRole.APPROVER.rawValue)
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()
@@ -261,9 +300,10 @@ class FirebaseAuthService: ObservableObject {
     
     func getUsers() async -> [User] {
         guard isAdmin else { return [] }
+        guard let customerId = currentCustomerId else { return [] }
         
         do {
-            let snapshot = try await db.collection("users")
+            let snapshot = try await db.collection("customers").document(customerId).collection("users")
                 .whereField("role", isEqualTo: UserRole.USER.rawValue)
                 .whereField("isActive", isEqualTo: true)
                 .getDocuments()

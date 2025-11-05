@@ -21,8 +21,8 @@ struct ProjectListView: View {
     @EnvironmentObject var navigationManager: NavigationManager
     let role: UserRole
     
-    init(phoneNumber: String = "", role: UserRole = .APPROVER) {
-        _viewModel = StateObject(wrappedValue: ProjectListViewModel(phoneNumber: phoneNumber, role: role))
+    init(phoneNumber: String = "", role: UserRole = .APPROVER, customerId: String? = nil) {
+        _viewModel = StateObject(wrappedValue: ProjectListViewModel(phoneNumber: phoneNumber, role: role, customerId: customerId))
         self.role = role
     }
     
@@ -325,7 +325,7 @@ struct ProjectListView: View {
     private var emptyStateMessage: String {
         switch role {
         case .ADMIN:
-            return "Start by creating your first project to organize and track your entertainment productions"
+            return "You have not created any project yet. Start by creating your first project to organize and track your entertainment productions."
         case .APPROVER:
             return "You haven't been assigned as a manager to any projects yet. Please contact the admin to get assigned to projects."
         case .USER:
