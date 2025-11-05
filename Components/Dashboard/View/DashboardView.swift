@@ -2923,6 +2923,7 @@ private struct EditPhaseSheet: View {
     let onSaved: () -> Void
     
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var authService: FirebaseAuthService
     @State private var phaseName: String = ""
     @State private var startDate: Date = Date()
     @State private var endDate: Date = Date().addingTimeInterval(86400 * 30)
@@ -3040,8 +3041,9 @@ private struct EditPhaseSheet: View {
         
         Task {
             do {
-                // Get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
+                // Get customerId and current user UID
+                guard let customerId = authService.currentCustomerId,
+                      let currentUserUID = Auth.auth().currentUser?.uid else {
                     await MainActor.run {
                         isSaving = false
                         errorMessage = "Customer ID not found. Please log in again."
@@ -3053,9 +3055,17 @@ private struct EditPhaseSheet: View {
                     .phasesCollection(customerId: customerId, projectId: projectId)
                     .document(phaseId)
                 
-                // Format dates
+                // Format new dates
                 let startDateStr = dateFormatter.string(from: startDate)
                 let endDateStr = dateFormatter.string(from: endDate)
+                
+                // Format previous dates for comparison
+                let previousStartDateStr: String? = currentStartDate != nil ? dateFormatter.string(from: currentStartDate!) : nil
+                let previousEndDateStr: String? = currentEndDate != nil ? dateFormatter.string(from: currentEndDate!) : nil
+                
+                // Check if timeline (start or end date) has changed
+                let startDateChanged = previousStartDateStr != startDateStr
+                let endDateChanged = previousEndDateStr != endDateStr
                 
                 // Update phase data
                 try await phaseRef.updateData([
@@ -3064,6 +3074,23 @@ private struct EditPhaseSheet: View {
                     "endDate": endDateStr,
                     "updatedAt": Timestamp()
                 ])
+                
+                // Log timeline change if dates were modified
+                if startDateChanged || endDateChanged {
+                    let changeLog = PhaseTimelineChange(
+                        phaseId: phaseId,
+                        projectId: projectId,
+                        previousStartDate: previousStartDateStr,
+                        previousEndDate: previousEndDateStr,
+                        newStartDate: startDateStr,
+                        newEndDate: endDateStr,
+                        changedBy: currentUserUID
+                    )
+                    
+                    // Save change log to phases/{phaseId}/changes subcollection
+                    let changesRef = phaseRef.collection("changes").document()
+                    try await changesRef.setData(from: changeLog)
+                }
                 
                 await MainActor.run {
                     isSaving = false
