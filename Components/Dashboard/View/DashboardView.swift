@@ -33,6 +33,8 @@ struct DashboardView: View {
     @State private var showProjectDetail = false
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: PhaseSummary? = nil
+    @State private var showingPhaseRequestNotifications = false
+    @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -294,6 +296,51 @@ struct DashboardView: View {
                     }
                     .padding(.top, geometry.safeAreaInsets.top + 60) // Account for navigation bar
                 }
+                
+                // Phase Request Notification popup overlay (Admin only)
+                if showingPhaseRequestNotifications && role == .ADMIN {
+                    Color.black.opacity(0.1)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.3)) {
+                                showingPhaseRequestNotifications = false
+                            }
+                        }
+                    
+                    // Responsive phase request notification popup
+                    VStack {
+                        HStack {
+                            Spacer()
+                            
+                            PhaseRequestNotificationFloatingView(
+                                requests: phaseRequestNotificationViewModel.pendingRequests,
+                                onRequestTap: { request in
+                                    // Handle request tap - could navigate to edit phase sheet
+                                    showingPhaseRequestNotifications = false
+                                    // TODO: Navigate to edit phase sheet with request details
+                                },
+                                onDismiss: {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        showingPhaseRequestNotifications = false
+                                    }
+                                }
+                            )
+                            .frame(
+                                width: min(360, geometry.size.width - 32),
+                                height: min(600, geometry.size.height * 0.7)
+                            )
+                            .padding(.trailing, 16)
+                            .transition(.asymmetric(
+                                insertion: .scale(scale: 0.8).combined(with: .opacity),
+                                removal: .scale(scale: 0.95).combined(with: .opacity)
+                            ))
+                            .onTapGesture { }  // Prevent tap from dismissing
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.top, geometry.safeAreaInsets.top + 60) // Account for navigation bar
+                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -312,6 +359,42 @@ struct DashboardView: View {
             
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: DesignSystem.Spacing.medium) {
+                    // Phase Request Notification Button (Admin only, before pencil)
+                    if role == .ADMIN {
+                        Button {
+                            HapticManager.impact(.light)
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                showingPhaseRequestNotifications.toggle()
+                                if showingPhaseRequestNotifications {
+                                    Task {
+                                        await phaseRequestNotificationViewModel.loadPendingRequests(
+                                            projectId: project?.id ?? "",
+                                            customerId: customerId
+                                        )
+                                    }
+                                }
+                            }
+                        } label: {
+                            ZStack {
+                                Image(systemName: "bell.fill")
+                                    .foregroundColor(.primary)
+                                
+                                if phaseRequestNotificationViewModel.pendingRequestsCount > 0 {
+                                    Circle()
+                                        .fill(.red)
+                                        .frame(width: 14, height: 14)
+                                        .overlay(
+                                            Text("\(phaseRequestNotificationViewModel.pendingRequestsCount)")
+                                                .font(.system(size: 10))
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.white)
+                                        )
+                                        .offset(x: 10, y: -10)
+                                }
+                            }
+                        }
+                    }
+                    
                     // Edit Button
                     if let project = project, role == .ADMIN{
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
@@ -323,7 +406,7 @@ struct DashboardView: View {
                         .buttonStyle(.plain)
                     }
                     
-                    // Notification Button
+                    // Notification Button (Non-admin users)
                     if role != .ADMIN{
                         Button {
                             HapticManager.impact(.light)
@@ -469,6 +552,13 @@ struct DashboardView: View {
                         projectId: projectId,
                         currentUserPhone: phoneNumber,
                         currentUserRole: role ?? .USER
+                    )
+                }
+                // Load phase request notifications for admin
+                if role == .ADMIN, let projectId = project?.id {
+                    await phaseRequestNotificationViewModel.loadPendingRequests(
+                        projectId: projectId,
+                        customerId: customerId
                     )
                 }
             }
