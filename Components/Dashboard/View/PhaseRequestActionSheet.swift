@@ -19,6 +19,7 @@ struct PhaseRequestActionSheet: View {
     
     @Environment(\.dismiss) private var dismiss
     @State private var isProcessing = false
+    @State private var processingAction: RequestAction? = nil // Track which action is processing
     @FocusState private var isReasonFocused: Bool
     
     private var dateFormatter: DateFormatter {
@@ -31,12 +32,21 @@ struct PhaseRequestActionSheet: View {
         request.createdAt.dateValue().formatted(date: .abbreviated, time: .omitted)
     }
     
+    // Reason is now optional, so buttons are always enabled when not processing
     private var canAccept: Bool {
-        !reasonToReact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isProcessing
     }
     
     private var canReject: Bool {
-        !reasonToReact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isProcessing
+    }
+    
+    private var isAcceptProcessing: Bool {
+        isProcessing && processingAction == .accept
+    }
+    
+    private var isRejectProcessing: Bool {
+        isProcessing && processingAction == .reject
     }
     
     var body: some View {
@@ -143,72 +153,71 @@ struct PhaseRequestActionSheet: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(isReasonFocused ? Color.blue : Color(.systemGray4), lineWidth: isReasonFocused ? 2 : 1)
                             )
-                        
-                        if reasonToReact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Please provide a reason for accepting or rejecting this request")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
                     }
                     .padding(.vertical, 4)
                 } header: {
                     Text("Your Response")
                 } footer: {
-                    Text("A reason is required to accept or reject this request")
+                    Text("Reason is optional but recommended")
                         .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 // Action Buttons Section
                 Section {
-                    VStack(spacing: 12) {
-                        // Accept Button
+                    HStack(spacing: 12) {
+                        // Accept Button (Left)
                         Button(action: {
+                            guard !isProcessing else { return }
                             isProcessing = true
+                            processingAction = .accept
                             HapticManager.impact(.medium)
                             onAccept()
                         }) {
-                            HStack {
-                                Spacer()
-                                if isProcessing {
+                            HStack(spacing: 6) {
+                                if isAcceptProcessing {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 16, weight: .semibold))
-                                    Text("Accept Request")
+                                    Text("Accept")
                                         .fontWeight(.semibold)
                                 }
-                                Spacer()
                             }
                             .foregroundColor(.white)
-                            .padding(.vertical, 12)
-                            .background(canAccept && !isProcessing ? Color.green : Color.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(canAccept ? Color.green : Color.gray)
                             .cornerRadius(10)
                         }
                         .disabled(!canAccept || isProcessing)
                         
-                        // Reject Button
+                        // Reject Button (Right)
                         Button(action: {
+                            guard !isProcessing else { return }
                             isProcessing = true
+                            processingAction = .reject
                             HapticManager.impact(.medium)
                             onReject()
                         }) {
-                            HStack {
-                                Spacer()
-                                if isProcessing {
+                            HStack(spacing: 6) {
+                                if isRejectProcessing {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
                                 } else {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 16, weight: .semibold))
-                                    Text("Reject Request")
+                                    Text("Reject")
                                         .fontWeight(.semibold)
                                 }
-                                Spacer()
                             }
                             .foregroundColor(.white)
-                            .padding(.vertical, 12)
-                            .background(canReject && !isProcessing ? Color.red : Color.gray)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(canReject ? Color.red : Color.gray)
                             .cornerRadius(10)
                         }
                         .disabled(!canReject || isProcessing)

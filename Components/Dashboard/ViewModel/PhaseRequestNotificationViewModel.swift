@@ -71,22 +71,26 @@ class PhaseRequestNotificationViewModel: ObservableObject {
             
             print("DEBUG 4 : printing status : \(status)")
             
-            // Update request document
-            try await requestRef.updateData([
+            // Update request document (reason is optional)
+            var updateData: [String: Any] = [
                 "status": status,
-                "reasonToReact": reason.isEmpty ? nil : reason,
                 "updatedAt": Timestamp()
-            ])
+            ]
+            
+            // Only add reasonToReact if it's not empty
+            if !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                updateData["reasonToReact"] = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            
+            try await requestRef.updateData(updateData)
             
             // If accepted, update phase end date and log to changes collection
             if action == .accept {
-                // Parse the extended date from request
-                guard let extendedDate = dateFormatter.date(from: request.extendedDate) else {
-                    print("⚠️ Invalid extended date format: \(request.extendedDate)")
-                    return
-                }
+                // Use the extendedDate directly from request (already in "dd/MM/yyyy" format)
+                // Don't parse and reformat to avoid any date conversion issues
+                let extendedDateStr = request.extendedDate
                 
-                let extendedDateStr = dateFormatter.string(from: extendedDate)
+                print("📅 Updating phase endDate to: \(extendedDateStr)")
                 
                 // Get current phase to get previous end date
                 let phaseRef = FirebasePathHelper.shared
@@ -98,11 +102,26 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                 if let phaseData = phaseDoc.data(),
                    let previousEndDate = phaseData["endDate"] as? String {
                     
+                    print("📅 Previous phase endDate: \(previousEndDate)")
+                    print("📅 New phase endDate: \(extendedDateStr)")
+                    
                     // Update phase end date
                     try await phaseRef.updateData([
                         "endDate": extendedDateStr,
                         "updatedAt": Timestamp()
                     ])
+                    
+                    print("✅ Phase endDate updated in Firebase to: \(extendedDateStr)")
+                    
+                    // Verify the update by refetching the document
+                    let updatedPhaseDoc = try await phaseRef.getDocument()
+                    if let updatedPhaseData = updatedPhaseDoc.data(),
+                       let updatedEndDate = updatedPhaseData["endDate"] as? String {
+                        print("✅ Verified phase endDate is now: \(updatedEndDate)")
+                        if updatedEndDate != extendedDateStr {
+                            print("⚠️ WARNING: Phase endDate update may not have synced. Expected: \(extendedDateStr), Got: \(updatedEndDate)")
+                        }
+                    }
                     
                     // Log to changes collection with requestID
                     let changeLog = PhaseTimelineChange(
@@ -119,7 +138,7 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                     let changesRef = phaseRef.collection("changes").document()
                     try await changesRef.setData(from: changeLog)
                     
-                    print("✅ Phase end date updated and logged to changes collection")
+                    print("✅ Phase end date updated and logged to changes collection with requestID: \(request.id)")
                 } else {
                     // If phase doesn't exist, create it with the new end date
                     try await phaseRef.setData([
@@ -129,6 +148,9 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                     
                     print("✅ Phase end date set (new phase)")
                 }
+            } else {
+                // For reject action, we don't update the phase endDate
+                print("ℹ️ Request rejected - phase endDate not changed")
             }
             
             print("✅ Request \(action == .accept ? "accepted" : "rejected") successfully")

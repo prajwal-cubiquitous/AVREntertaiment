@@ -557,6 +557,10 @@ struct DashboardView: View {
                                 action: .accept,
                                 reason: phaseRequestNotificationViewModel.reasonToReact
                             )
+                            
+                            // Wait for Firebase to sync (increased delay for better reliability)
+                            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                            
                             // Reload pending requests
                             await phaseRequestNotificationViewModel.loadPendingRequests(
                                 projectId: projectId,
@@ -564,6 +568,8 @@ struct DashboardView: View {
                             )
                             // Reload phases and extensions
                             await loadPhases()
+                            // Wait for phases to fully load
+                            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                             await loadPhaseExtensions()
                         }
                         showingRequestActionSheet = false
@@ -1278,11 +1284,13 @@ struct DashboardView: View {
                     let requestData = requestDoc.data()
                     if let extendedDate = requestData["extendedDate"] as? String {
                         print("🔍 Comparing: extendedDate='\(extendedDate)' vs phaseEndDate='\(phaseEndDateStr)'")
-                        // Compare extendedDate with phase endDate
-                        if extendedDate == phaseEndDateStr {
+                        // Compare extendedDate with phase endDate (exact string match)
+                        if extendedDate.trimmingCharacters(in: .whitespacesAndNewlines) == phaseEndDateStr.trimmingCharacters(in: .whitespacesAndNewlines) {
                             hasExtension = true
                             print("✅ Match found! Phase \(phase.name) has extension")
                             break
+                        } else {
+                            print("⚠️ Date mismatch: extendedDate='\(extendedDate)' != phaseEndDate='\(phaseEndDateStr)'")
                         }
                     }
                 }
