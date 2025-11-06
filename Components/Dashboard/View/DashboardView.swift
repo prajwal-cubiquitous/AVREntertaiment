@@ -822,6 +822,31 @@ struct DashboardView: View {
                                                 .fontWeight(daysInfo.color == .red || daysInfo.color == .orange ? .semibold : .regular)
                                         }
                                     }
+                                    
+                                    if let phaseBudget = phaseBudgetMap[phase.id] {
+                                        HStack {
+                                            Text("Total")
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.green.opacity(0.15))
+                                                .foregroundColor(.green)
+                                                .cornerRadius(8)
+
+                                            Spacer(minLength: 8)
+
+                                            Text(Int(phaseBudget.totalBudget).formattedCurrency)
+                                                .font(.headline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.green)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.green.opacity(0.08))
+                                        .cornerRadius(12)
+
+                                    }
                                 }
 
                                 Spacer()
@@ -897,17 +922,17 @@ struct DashboardView: View {
                             if let phaseBudget = phaseBudgetMap[phase.id] {
                                 HStack(spacing: DesignSystem.Spacing.medium) {
                                     // Total Budget
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Total Budget")
-                                            .font(DesignSystem.Typography.caption1)
-                                            .foregroundColor(.secondary)
-                                        Text(Int(phaseBudget.totalBudget).formattedCurrency)
-                                            .font(DesignSystem.Typography.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.primary)
-                                    }
+//                                    VStack(alignment: .leading, spacing: 4) {
+//                                        Text("Total Budget")
+//                                            .font(DesignSystem.Typography.caption1)
+//                                            .foregroundColor(.secondary)
+//                                        Text(Int(phaseBudget.totalBudget).formattedCurrency)
+//                                            .font(DesignSystem.Typography.subheadline)
+//                                            .fontWeight(.semibold)
+//                                            .foregroundColor(.primary)
+//                                    }
                                     
-                                    Spacer()
+//                                    Spacer()
                                     
                                     // Approved Amount
                                     VStack(alignment: .center, spacing: 4) {
@@ -2171,37 +2196,66 @@ private struct AllPhasesView: View {
                         // Phase Header with date, In Progress badge, and + icon
                         HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
                             HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(phase.name)
-                                        .font(DesignSystem.Typography.headline)
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
+                                VStack{
+                                    HStack{
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(phase.name)
+                                                .font(DesignSystem.Typography.headline)
+                                                .foregroundColor(.primary)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.85)
 
-                                    if phaseTimelineText(phase) != "" {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "calendar")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                                .accessibilityHidden(true)
-                                            Text(phaseTimelineText(phase))
-                                                .font(DesignSystem.Typography.caption1)
-                                                .foregroundColor(.secondary)
+                                            if phaseTimelineText(phase) != "" {
+                                                HStack(spacing: 6) {
+                                                    Image(systemName: "calendar")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.secondary)
+                                                        .accessibilityHidden(true)
+                                                    Text(phaseTimelineText(phase))
+                                                        .font(DesignSystem.Typography.caption1)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                        }
+                                        
+                                        if role == .ADMIN {
+                                            Button {
+                                                HapticManager.selection()
+                                                phaseToEdit = phase
+                                            } label: {
+                                                Image(systemName: "pencil.circle.fill")
+                                                    .font(.system(size: 18, weight: .medium))
+                                                    .foregroundColor(.accentColor)
+                                                    .accessibilityLabel("Edit phase")
+                                            }
+                                            .buttonStyle(.plain)
                                         }
                                     }
-                                }
-                                
-                                if role == .ADMIN {
-                                    Button {
-                                        HapticManager.selection()
-                                        phaseToEdit = phase
-                                    } label: {
-                                        Image(systemName: "pencil.circle.fill")
-                                            .font(.system(size: 18, weight: .medium))
-                                            .foregroundColor(.accentColor)
-                                            .accessibilityLabel("Edit phase")
+                                    
+                                    if let phaseBudget = phaseBudgetMap[phase.id] {
+                                        HStack {
+                                            Text("Total")
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.green.opacity(0.15))
+                                                .foregroundColor(.green)
+                                                .cornerRadius(8)
+
+                                            Spacer(minLength: 8)
+
+                                            Text(Int(phaseBudget.totalBudget).formattedCurrency)
+                                                .font(.headline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.green)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.green.opacity(0.08))
+                                        .cornerRadius(12)
+
                                     }
-                                    .buttonStyle(.plain)
                                 }
                                 Spacer()
                                 
@@ -2213,8 +2267,8 @@ private struct AllPhasesView: View {
                                             .font(DesignSystem.Typography.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.green)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
                                             .background(Color.green.opacity(0.12))
                                             .clipShape(Capsule())
                                             .accessibilityLabel("Phase status: In Progress")
@@ -2223,15 +2277,17 @@ private struct AllPhasesView: View {
                                     // Extension Badge - Show if phase has accepted extension
                                     if phaseExtensionMap[phase.id] == true {
                                         HStack(spacing: 4) {
-                                            Image(systemName: "arrow.clockwise.circle.fill")
-                                                .font(.caption2)
+//                                            Image(systemName: "arrow.clockwise.circle.fill")
+//                                                .font(.caption2)
                                             Text("Extended")
-                                                .font(DesignSystem.Typography.caption2)
+                                                .font(.caption2)
                                                 .fontWeight(.semibold)
+                                                .scaleEffect(0.8)
+
                                         }
                                         .foregroundColor(.orange)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 2)
                                         .background(Color.orange.opacity(0.12))
                                         .clipShape(Capsule())
                                         .accessibilityLabel("Phase extended via accepted request")
@@ -2281,17 +2337,17 @@ private struct AllPhasesView: View {
                         if let phaseBudget = phaseBudgetMap[phase.id] {
                             HStack(spacing: DesignSystem.Spacing.medium) {
                                 // Total Budget
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Total Budget")
-                                        .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
-                                    Text(Int(phaseBudget.totalBudget).formattedCurrency)
-                                        .font(DesignSystem.Typography.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.primary)
-                                }
-                                
-                                Spacer()
+//                                VStack(alignment: .leading, spacing: 4) {
+//                                    Text("Total Budget")
+//                                        .font(DesignSystem.Typography.caption1)
+//                                        .foregroundColor(.secondary)
+//                                    Text(Int(phaseBudget.totalBudget).formattedCurrency)
+//                                        .font(DesignSystem.Typography.subheadline)
+//                                        .fontWeight(.semibold)
+//                                        .foregroundColor(.primary)
+//                                }
+//                                
+//                                Spacer()
                                 
                                 // Approved Amount
                                 VStack(alignment: .center, spacing: 4) {
