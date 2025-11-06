@@ -19,6 +19,7 @@ struct Expense: Identifiable, Codable {
     let submittedBy: String // User phone number
     let status: ExpenseStatus
     let remark: String? // Optional remark for approval/rejection
+    let isAdmin: Bool // Whether this expense requires admin approval (default: false)
     
     // Anonymous Department Tracking
     let isAnonymous: Bool? // Whether this expense is in anonymous department
@@ -28,6 +29,109 @@ struct Expense: Identifiable, Codable {
     // Firestore Timestamps
     let createdAt: Timestamp
     let updatedAt: Timestamp
+    
+    // MARK: - Custom Decoder
+    enum CodingKeys: String, CodingKey {
+        case projectId, date, amount, department, phaseId, phaseName, categories
+        case modeOfPayment, description, attachmentURL, attachmentName, submittedBy
+        case status, remark, isAdmin, isAnonymous, originalDepartment, departmentDeletedAt
+        case createdAt, updatedAt
+    }
+    
+    // MARK: - Memberwise Initializer
+    init(
+        id: String? = nil,
+        projectId: String,
+        date: String,
+        amount: Double,
+        department: String,
+        phaseId: String? = nil,
+        phaseName: String? = nil,
+        categories: [String],
+        modeOfPayment: PaymentMode,
+        description: String,
+        attachmentURL: String? = nil,
+        attachmentName: String? = nil,
+        submittedBy: String,
+        status: ExpenseStatus,
+        remark: String? = nil,
+        isAdmin: Bool = false,
+        isAnonymous: Bool? = nil,
+        originalDepartment: String? = nil,
+        departmentDeletedAt: Timestamp? = nil,
+        createdAt: Timestamp,
+        updatedAt: Timestamp
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.date = date
+        self.amount = amount
+        self.department = department
+        self.phaseId = phaseId
+        self.phaseName = phaseName
+        self.categories = categories
+        self.modeOfPayment = modeOfPayment
+        self.description = description
+        self.attachmentURL = attachmentURL
+        self.attachmentName = attachmentName
+        self.submittedBy = submittedBy
+        self.status = status
+        self.remark = remark
+        self.isAdmin = isAdmin
+        self.isAnonymous = isAnonymous
+        self.originalDepartment = originalDepartment
+        self.departmentDeletedAt = departmentDeletedAt
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        projectId = try container.decode(String.self, forKey: .projectId)
+        date = try container.decode(String.self, forKey: .date)
+        amount = try container.decode(Double.self, forKey: .amount)
+        department = try container.decode(String.self, forKey: .department)
+        phaseId = try container.decodeIfPresent(String.self, forKey: .phaseId)
+        phaseName = try container.decodeIfPresent(String.self, forKey: .phaseName)
+        categories = try container.decode([String].self, forKey: .categories)
+        modeOfPayment = try container.decode(PaymentMode.self, forKey: .modeOfPayment)
+        description = try container.decode(String.self, forKey: .description)
+        attachmentURL = try container.decodeIfPresent(String.self, forKey: .attachmentURL)
+        attachmentName = try container.decodeIfPresent(String.self, forKey: .attachmentName)
+        submittedBy = try container.decode(String.self, forKey: .submittedBy)
+        status = try container.decode(ExpenseStatus.self, forKey: .status)
+        remark = try container.decodeIfPresent(String.self, forKey: .remark)
+        isAdmin = try container.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? false // Default to false if not present
+        isAnonymous = try container.decodeIfPresent(Bool.self, forKey: .isAnonymous)
+        originalDepartment = try container.decodeIfPresent(String.self, forKey: .originalDepartment)
+        departmentDeletedAt = try container.decodeIfPresent(Timestamp.self, forKey: .departmentDeletedAt)
+        createdAt = try container.decode(Timestamp.self, forKey: .createdAt)
+        updatedAt = try container.decode(Timestamp.self, forKey: .updatedAt)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(projectId, forKey: .projectId)
+        try container.encode(date, forKey: .date)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(department, forKey: .department)
+        try container.encodeIfPresent(phaseId, forKey: .phaseId)
+        try container.encodeIfPresent(phaseName, forKey: .phaseName)
+        try container.encode(categories, forKey: .categories)
+        try container.encode(modeOfPayment, forKey: .modeOfPayment)
+        try container.encode(description, forKey: .description)
+        try container.encodeIfPresent(attachmentURL, forKey: .attachmentURL)
+        try container.encodeIfPresent(attachmentName, forKey: .attachmentName)
+        try container.encode(submittedBy, forKey: .submittedBy)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(remark, forKey: .remark)
+        try container.encode(isAdmin, forKey: .isAdmin)
+        try container.encodeIfPresent(isAnonymous, forKey: .isAnonymous)
+        try container.encodeIfPresent(originalDepartment, forKey: .originalDepartment)
+        try container.encodeIfPresent(departmentDeletedAt, forKey: .departmentDeletedAt)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
     
     // MARK: - Computed Properties
     var amountFormatted: String {
@@ -109,7 +213,7 @@ extension Expense {
             attachmentName: nil,
             submittedBy: "+919876543210",
             status: .pending,
-            remark: nil,
+            remark: nil, isAdmin: false,
             isAnonymous: false,
             originalDepartment: nil,
             departmentDeletedAt: nil,

@@ -16,6 +16,14 @@ struct AddExpenseView: View {
         authService.currentCustomerId
     }
     
+    // MARK: - Helper Functions
+    private func formatCurrency(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
     var body: some View {
         NavigationView {
             ScrollViewReader { proxy in
@@ -111,6 +119,11 @@ struct AddExpenseView: View {
                 // MARK: - Phase Selection
                 Section {
                     phasePickerView
+                    
+                    // Admin approval message
+                    if let message = viewModel.adminApprovalMessage {
+                        AdminApprovalMessageView(message: message)
+                    }
                 } header: {
                     Text("Phase Selection")
                         .textCase(.none)
@@ -219,6 +232,15 @@ struct AddExpenseView: View {
                 // Reload phases when date changes
                 viewModel.loadPhases(for: newDate)
             }
+            .onChange(of: viewModel.amount) { _ in
+                viewModel.checkAdminApprovalConditions()
+            }
+            .onChange(of: viewModel.selectedPhaseId) { _ in
+                viewModel.checkAdminApprovalConditions()
+            }
+            .onChange(of: viewModel.selectedDepartment) { _ in
+                viewModel.checkAdminApprovalConditions()
+            }
     }
     
     
@@ -235,9 +257,17 @@ struct AddExpenseView: View {
                 let availablePhases = viewModel.availablePhases.filter { $0.canAddExpense }
                 if !availablePhases.isEmpty {
                     ForEach(availablePhases) { phase in
-                        Button(phase.name) {
+                        Button {
                             viewModel.selectedPhaseId = phase.id
                             viewModel.updateDepartmentForPhase()
+                        } label: {
+                            HStack {
+                                Text(phase.name)
+                                Spacer()
+                                Text(formatCurrency(phase.remainingAmount))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
                 } else {
@@ -275,9 +305,14 @@ struct AddExpenseView: View {
             } label: {
                 HStack {
                     if let selectedPhase = viewModel.selectedPhase {
-                        Text(selectedPhase.name)
-                            .foregroundColor(.primary)
-                            .fontWeight(.medium)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(selectedPhase.name)
+                                .foregroundColor(.primary)
+                                .fontWeight(.medium)
+                            Text("Remaining: \(formatCurrency(selectedPhase.remainingAmount))")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     } else {
                         Text("Select Phase")
                             .foregroundColor(.secondary)
@@ -325,16 +360,40 @@ struct AddExpenseView: View {
             
             if let selectedPhase = viewModel.selectedPhase {
                 Menu {
-                    ForEach(selectedPhase.departments, id: \.self) { department in
-                        Button(department) {
+                    ForEach(selectedPhase.departments.keys.sorted(), id: \.self) { department in
+                        Button {
                             viewModel.selectedDepartment = department
+                            viewModel.checkAdminApprovalConditions()
+                        } label: {
+                            HStack {
+                                Text(department)
+                                Spacer()
+                                if let remaining = selectedPhase.departmentRemainingAmounts[department] {
+                                    Text(formatCurrency(remaining))
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                     }
                 } label: {
                     HStack {
-                        Text(viewModel.selectedDepartment.isEmpty ? "Select Department" : viewModel.selectedDepartment)
-                            .foregroundColor(viewModel.selectedDepartment.isEmpty ? .secondary : .primary)
-                            .fontWeight(.medium)
+                        if viewModel.selectedDepartment.isEmpty {
+                            Text("Select Department")
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                        } else {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(viewModel.selectedDepartment)
+                                    .foregroundColor(.primary)
+                                    .fontWeight(.medium)
+                                if let remaining = selectedPhase.departmentRemainingAmounts[viewModel.selectedDepartment] {
+                                    Text("Remaining: \(formatCurrency(remaining))")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
                         Spacer()
                         Image(systemName: "chevron.down")
                             .font(.caption)
@@ -709,6 +768,31 @@ struct CategorySearchableDropdown: View {
                 showDropdown = false
             }
         }
+    }
+}
+
+// MARK: - Admin Approval Message View
+struct AdminApprovalMessageView: View {
+    let message: String
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "info.circle.fill")
+                .foregroundColor(.orange)
+                .font(.system(size: 14, weight: .medium))
+            
+            Text(message)
+                .font(DesignSystem.Typography.caption1)
+                .foregroundColor(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(DesignSystem.CornerRadius.small)
+        .padding(.top, DesignSystem.Spacing.extraSmall)
     }
 }
 

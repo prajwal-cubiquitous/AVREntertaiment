@@ -284,7 +284,7 @@ struct EditExpenseView: View {
             
             if let selectedPhase = viewModel.selectedPhase {
                 Menu {
-                    ForEach(selectedPhase.departments, id: \.self) { department in
+                    ForEach(selectedPhase.departments.keys.sorted(), id: \.self) { department in
                         Button(department) {
                             viewModel.selectedDepartment = department
                         }

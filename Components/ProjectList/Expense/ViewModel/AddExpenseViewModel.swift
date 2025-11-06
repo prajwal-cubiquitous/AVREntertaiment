@@ -68,14 +68,29 @@ class AddExpenseViewModel: ObservableObject {
     // MARK: - Project Data
     let project: Project
     @Published var availablePhases: [PhaseInfo] = []
+    @Published var adminApprovalMessage: String? = nil
     var customerId: String? // Customer ID for multi-tenant support
     
     struct PhaseInfo: Identifiable, Equatable {
         let id: String
         let name: String
-        let departments: [String]
+        let departments: [String: Double] // Department name to budget mapping
         let isEnabled: Bool
         let canAddExpense: Bool // True if phase is in timeline and enabled
+        let totalBudget: Double
+        let remainingAmount: Double
+        let departmentRemainingAmounts: [String: Double] // Department name to remaining amount mapping
+        
+        static func == (lhs: PhaseInfo, rhs: PhaseInfo) -> Bool {
+            lhs.id == rhs.id &&
+            lhs.name == rhs.name &&
+            lhs.departments == rhs.departments &&
+            lhs.isEnabled == rhs.isEnabled &&
+            lhs.canAddExpense == rhs.canAddExpense &&
+            lhs.totalBudget == rhs.totalBudget &&
+            lhs.remainingAmount == rhs.remainingAmount &&
+            lhs.departmentRemainingAmounts == rhs.departmentRemainingAmounts
+        }
     }
     
     // MARK: - Firebase References
@@ -202,72 +217,107 @@ class AddExpenseViewModel: ObservableObject {
     func loadPhases(for date: Date? = nil) {
         guard let projectId = project.id,
               let customerId = customerId else { return }
-        let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
-        phasesRef.order(by: "phaseNumber").getDocuments { [weak self] snapshot, error in
-            guard let self = self else { return }
-            var phasesList: [PhaseInfo] = []
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "dd/MM/yyyy"
-            // Use the provided date or expenseDate as the reference date for filtering
-            let referenceDate = date ?? self.expenseDate
-            
-            if let documents = snapshot?.documents {
-                for doc in documents {
+        
+        Task {
+            do {
+                // Load phases
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .order(by: "phaseNumber")
+                    .getDocuments()
+                
+                // Load approved expenses to calculate remaining amounts
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Calculate approved amounts by phase and department
+                var phaseApprovedAmounts: [String: Double] = [:]
+                var phaseDepartmentApprovedAmounts: [String: [String: Double]] = [:]
+                
+                for expenseDoc in expensesSnapshot.documents {
+                    if let expense = try? expenseDoc.data(as: Expense.self),
+                       let phaseId = expense.phaseId {
+                        phaseApprovedAmounts[phaseId, default: 0] += expense.amount
+                        phaseDepartmentApprovedAmounts[phaseId, default: [:]][expense.department, default: 0] += expense.amount
+                    }
+                }
+                
+                var phasesList: [PhaseInfo] = []
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                let referenceDate = date ?? expenseDate
+                
+                for doc in phasesSnapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
-                        // Check if phase is in timeline based on the reference date (expense date)
+                        // Check if phase is in timeline
                         let startDate = phase.startDate.flatMap { dateFormatter.date(from: $0) }
                         let endDate = phase.endDate.flatMap { dateFormatter.date(from: $0) }
                         
                         let isInTimeline: Bool = {
                             switch (startDate, endDate) {
-                            case (nil, nil):
-                                return true // Always visible if no dates
-                            case (let s?, nil):
-                                return s <= referenceDate // Visible if start date passed
-                            case (nil, let e?):
-                                return referenceDate <= e // Visible if before end date
-                            case (let s?, let e?):
-                                return s <= referenceDate && referenceDate <= e // Visible if in range
+                            case (nil, nil): return true
+                            case (let s?, nil): return s <= referenceDate
+                            case (nil, let e?): return referenceDate <= e
+                            case (let s?, let e?): return s <= referenceDate && referenceDate <= e
                             }
                         }()
                         
                         let isEnabled = phase.isEnabledValue
                         let canAddExpense = isInTimeline && isEnabled
                         
+                        // Calculate phase budget and remaining amount
+                        let totalBudget = phase.departments.values.reduce(0, +)
+                        let approvedAmount = phaseApprovedAmounts[doc.documentID] ?? 0
+                        let remainingAmount = totalBudget - approvedAmount
+                        
+                        // Calculate department remaining amounts
+                        var departmentRemainingAmounts: [String: Double] = [:]
+                        let deptApprovedAmounts = phaseDepartmentApprovedAmounts[doc.documentID] ?? [:]
+                        
+                        for (deptName, deptBudget) in phase.departments {
+                            let deptApproved = deptApprovedAmounts[deptName] ?? 0
+                            departmentRemainingAmounts[deptName] = deptBudget - deptApproved
+                        }
+                        
                         phasesList.append(PhaseInfo(
                             id: doc.documentID,
                             name: phase.phaseName,
-                            departments: Array(phase.departments.keys).sorted(),
+                            departments: phase.departments,
                             isEnabled: isEnabled,
-                            canAddExpense: canAddExpense
+                            canAddExpense: canAddExpense,
+                            totalBudget: totalBudget,
+                            remainingAmount: remainingAmount,
+                            departmentRemainingAmounts: departmentRemainingAmounts
                         ))
                     }
                 }
-            }
-            
-            DispatchQueue.main.async {
-                let previousSelectedPhaseId = self.selectedPhaseId
-                self.availablePhases = phasesList
                 
-                // If previously selected phase is still valid, keep it
-                if let previousPhase = phasesList.first(where: { $0.id == previousSelectedPhaseId && $0.canAddExpense }) {
-                    // Phase is still valid, keep selection
-                    if !previousPhase.departments.contains(self.selectedDepartment) {
-                        self.selectedDepartment = previousPhase.departments.first ?? ""
-                    }
-                } else {
-                    // Previously selected phase is no longer valid, select first available
-                    if let firstAvailable = phasesList.first(where: { $0.canAddExpense }) {
-                        self.selectedPhaseId = firstAvailable.id
-                        if let firstDept = firstAvailable.departments.first {
-                            self.selectedDepartment = firstDept
+                await MainActor.run {
+                    let previousSelectedPhaseId = self.selectedPhaseId
+                    self.availablePhases = phasesList
+                    
+                    // If previously selected phase is still valid, keep it
+                    if let previousPhase = phasesList.first(where: { $0.id == previousSelectedPhaseId && $0.canAddExpense }) {
+                        if !previousPhase.departments.keys.contains(self.selectedDepartment) {
+                            self.selectedDepartment = previousPhase.departments.keys.sorted().first ?? ""
                         }
                     } else {
-                        // No valid phases for this date
-                        self.selectedPhaseId = ""
-                        self.selectedDepartment = ""
+                        if let firstAvailable = phasesList.first(where: { $0.canAddExpense }) {
+                            self.selectedPhaseId = firstAvailable.id
+                            self.selectedDepartment = firstAvailable.departments.keys.sorted().first ?? ""
+                        } else {
+                            self.selectedPhaseId = ""
+                            self.selectedDepartment = ""
+                        }
                     }
+                    
+                    // Check admin approval conditions
+                    self.checkAdminApprovalConditions()
                 }
+            } catch {
+                print("Error loading phases: \(error)")
             }
         }
     }
@@ -279,9 +329,77 @@ class AddExpenseViewModel: ObservableObject {
         }
         
         // If current department is not in selected phase, select first available
-        if !phase.departments.contains(selectedDepartment) {
-            selectedDepartment = phase.departments.first ?? ""
+        if !phase.departments.keys.contains(selectedDepartment) {
+            selectedDepartment = phase.departments.keys.sorted().first ?? ""
         }
+        
+        // Check admin approval conditions when department changes
+        checkAdminApprovalConditions()
+    }
+    
+    // MARK: - Admin Approval Check
+    
+    func checkAdminApprovalConditions() {
+        guard amountValue > 0 else {
+            adminApprovalMessage = nil
+            return
+        }
+        
+        var messages: [String] = []
+        
+        // Check phase conditions
+        if let phase = selectedPhase {
+            if phase.totalBudget == 0 {
+                messages.append("Phase total budget is 0, so expense will be approved by admin")
+            } else if amountValue > phase.remainingAmount {
+                messages.append("Entered amount is greater than remaining amount in phase, so expense will be approved by admin")
+            }
+        }
+        
+        // Check department conditions
+        if let phase = selectedPhase, !selectedDepartment.isEmpty {
+            let deptBudget = phase.departments[selectedDepartment] ?? 0
+            let deptRemaining = phase.departmentRemainingAmounts[selectedDepartment] ?? 0
+            
+            if deptBudget == 0 {
+                messages.append("Department total budget is 0, so expense will be approved by admin")
+            } else if amountValue > deptRemaining {
+                messages.append("Entered amount is greater than remaining amount in department, so expense will be approved by admin")
+            }
+        }
+        
+        adminApprovalMessage = messages.isEmpty ? nil : messages.joined(separator: ". ")
+    }
+    
+    // MARK: - Calculate isAdmin
+    
+    var isAdmin: Bool {
+        guard amountValue > 0 else { return false }
+        
+        // Check phase conditions
+        if let phase = selectedPhase {
+            if phase.totalBudget == 0 {
+                return true
+            }
+            if amountValue > phase.remainingAmount {
+                return true
+            }
+        }
+        
+        // Check department conditions
+        if let phase = selectedPhase, !selectedDepartment.isEmpty {
+            let deptBudget = phase.departments[selectedDepartment] ?? 0
+            let deptRemaining = phase.departmentRemainingAmounts[selectedDepartment] ?? 0
+            
+            if deptBudget == 0 {
+                return true
+            }
+            if amountValue > deptRemaining {
+                return true
+            }
+        }
+        
+        return false
     }
     
     func removeCategory(at index: Int) {
@@ -555,6 +673,7 @@ class AddExpenseViewModel: ObservableObject {
                     "attachmentName": attachmentName as Any,
                     "submittedBy": "\(currentUserPhone)",
                     "status": ExpenseStatus.pending.rawValue,
+                    "isAdmin": isAdmin,
                     "createdAt": Timestamp(),
                     "updatedAt": Timestamp()
                 ]
@@ -629,6 +748,7 @@ class AddExpenseViewModel: ObservableObject {
             "categories": nonEmptyCategories,
             "description": description.trimmingCharacters(in: .whitespacesAndNewlines),
             "modeOfPayment": selectedPaymentMode.rawValue,
+            "isAdmin": isAdmin,
             "updatedAt": Timestamp()
         ]
         
@@ -683,7 +803,7 @@ class AddExpenseViewModel: ObservableObject {
         // Reset phase and department to first available
         if let firstAvailable = availablePhases.first(where: { $0.canAddExpense }) {
             selectedPhaseId = firstAvailable.id
-            selectedDepartment = firstAvailable.departments.first ?? ""
+            selectedDepartment = firstAvailable.departments.keys.sorted().first ?? ""
         }
     }
 }
