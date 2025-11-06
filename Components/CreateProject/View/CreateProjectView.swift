@@ -15,6 +15,13 @@ struct CreateProjectView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingReviewScreen = false
     
+    let currencies = [
+        ("₹ Indian Rupee", "INR"),
+        ("$ US Dollar", "USD"),
+        ("€ Euro", "EUR"),
+        ("£ British Pound", "GBP")
+    ]
+    
     var body: some View {
         NavigationView {
             Form {
@@ -123,7 +130,9 @@ struct CreateProjectView: View {
                         .foregroundColor(.primary)
                     
                     Picker("Currency", selection: $viewModel.currency) {
-                        Text("₹ Indian Rupee").tag("INR")
+                        ForEach(currencies, id: \.1) { currency in
+                            Text(currency.0).tag(currency.1)
+                        }
                     }
                     .pickerStyle(.menu)
                 }

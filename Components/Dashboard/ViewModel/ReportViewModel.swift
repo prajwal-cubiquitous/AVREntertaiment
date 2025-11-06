@@ -71,7 +71,7 @@ class ReportViewModel: ObservableObject {
         }
     }
     
-    func fetchDepartmentNames(from documentID: String) {
+    func fetchDepartmentNames(from documentID: String) async throws{
         let db = Firestore.firestore()
         
         db.collection("projects_ios1").document(documentID).getDocument { snapshot, error in

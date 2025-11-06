@@ -30,9 +30,13 @@ struct ReportView: View {
                     .padding(.horizontal)
                     .padding(.top, DesignSystem.Spacing.small)
                     .padding(.bottom, 100) // Add bottom padding to avoid floating buttons
-                    .onAppear {
+                    .task {
                         if let projectId = projectId {
-                            viewModel.fetchDepartmentNames(from: projectId)
+                            do{
+                                try await viewModel.fetchDepartmentNames(from: projectId)
+                            }catch{
+                                print("error fetching department names")
+                            }
                             Task {
                                 await viewModel.loadApprovedExpenses(projectId: projectId)
                                 await viewModel.loadDepartmentBudgets(projectId: projectId)
