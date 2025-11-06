@@ -1127,6 +1127,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             let db = Firestore.firestore()
             
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            let currentTimestamp = Timestamp()
             
             // Get all phases
             let phasesSnapshot = try await db
@@ -1136,6 +1137,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 .document(projectId)
                 .collection("phases")
                 .getDocuments()
+            
+            // Collect phase IDs that contain this department
+            var phaseIdsToUpdate: [String] = []
             
             // Delete department from all phases that contain it
             for doc in phasesSnapshot.documents {
@@ -1153,8 +1157,35 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                         try await phaseRef.updateData([
                             "departments.\(department)": FieldValue.delete()
                         ])
+                        
+                        // Track this phase ID for expense updates
+                        phaseIdsToUpdate.append(doc.documentID)
                     }
                 }
+            }
+            
+            // Update all expenses with matching department and phaseId
+            for phaseId in phaseIdsToUpdate {
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerID, projectId: projectId)
+                    .whereField("department", isEqualTo: department)
+                    .whereField("phaseId", isEqualTo: phaseId)
+                    .getDocuments()
+                
+                // Batch update expenses
+                let batch = db.batch()
+                for expenseDoc in expensesSnapshot.documents {
+                    let expenseRef = expenseDoc.reference
+                    batch.updateData([
+                        "isAnonymous": true,
+                        "originalDepartment": department,
+                        "departmentDeletedAt": currentTimestamp,
+                        "updatedAt": currentTimestamp
+                    ], forDocument: expenseRef)
+                }
+                
+                // Commit batch update
+                try await batch.commit()
             }
             
             // Update project budget after deleting department
@@ -1177,6 +1208,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             let db = Firestore.firestore()
             
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            let currentTimestamp = Timestamp()
             
             let phaseRef = db
                 .collection("customers")
@@ -1190,6 +1222,28 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             try await phaseRef.updateData([
                 "departments.\(department)": FieldValue.delete()
             ])
+            
+            // Find all expenses with matching department and phaseId
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerID, projectId: projectId)
+                .whereField("department", isEqualTo: department)
+                .whereField("phaseId", isEqualTo: phaseId)
+                .getDocuments()
+            
+            // Batch update expenses to mark them as anonymous
+            let batch = db.batch()
+            for expenseDoc in expensesSnapshot.documents {
+                let expenseRef = expenseDoc.reference
+                batch.updateData([
+                    "isAnonymous": true,
+                    "originalDepartment": department,
+                    "departmentDeletedAt": currentTimestamp,
+                    "updatedAt": currentTimestamp
+                ], forDocument: expenseRef)
+            }
+            
+            // Commit batch update
+            try await batch.commit()
             
             // Update project budget after deleting department from phase
             await updateProjectBudget(projectId: projectId, customerId: customerID)
