@@ -69,6 +69,7 @@ struct DashboardView: View {
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: PhaseBudget] = [:]
     @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
+    @State private var phaseAnonymousExpensesMap: [String: Double] = [:] // Track anonymous expenses per phase
     
     // Permanent approver
     
@@ -888,6 +889,13 @@ struct DashboardView: View {
                                                 }
                                             )
                                         }
+                                        
+                                        // Add "Other" department card for anonymous expenses
+                                        if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
+                                            OtherDepartmentCard(
+                                                spent: anonymousSpent
+                                            )
+                                        }
                                     }
                                     .padding(.vertical, 6)
                                 }
@@ -1167,6 +1175,8 @@ struct DashboardView: View {
             await loadPhaseBudgets()
             // Load extension status for phases
             await loadPhaseExtensions()
+            // Load anonymous expenses per phase
+            await loadPhaseAnonymousExpenses()
         } catch {
             print("Error loading phases: \(error)")
         }
@@ -1241,6 +1251,44 @@ struct DashboardView: View {
             }
         } catch {
             print("❌ Error loading phase extensions: \(error)")
+        }
+    }
+    
+    private func loadPhaseAnonymousExpenses() async {
+        guard let projectId = project?.id else { return }
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadPhaseAnonymousExpenses")
+            return
+        }
+        
+        // Wait for phases to be loaded
+        guard !allPhases.isEmpty else {
+            print("⚠️ No phases loaded yet, skipping anonymous expenses check")
+            return
+        }
+        
+        do {
+            // Load all anonymous expenses for this project
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
+                .whereField("isAnonymous", isEqualTo: true)
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            // Calculate anonymous expenses per phase
+            var anonymousMap: [String: Double] = [:]
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self),
+                   let phaseId = expense.phaseId {
+                    anonymousMap[phaseId, default: 0] += expense.amount
+                }
+            }
+            
+            await MainActor.run {
+                phaseAnonymousExpensesMap = anonymousMap
+            }
+        } catch {
+            print("❌ Error loading phase anonymous expenses: \(error)")
         }
     }
     
@@ -1849,6 +1897,86 @@ private struct DepartmentPill: View {
     }
 }
 
+// "Other" department card for anonymous expenses
+private struct OtherDepartmentCard: View {
+    let spent: Double
+    
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Title row
+            HStack {
+                Text("Other")
+                    .font(DesignSystem.Typography.headline)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // Budget/Spent/Remaining rows
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Budget:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("NA")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("Spent:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(Int(spent).formattedCurrency)")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                }
+                HStack {
+                    Text("Remaining:")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("NA")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                }
+
+                // Progress bar - show full bar for anonymous expenses
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 6)
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.orange.opacity(0.6))
+                            .frame(width: geometry.size.width, height: 6)
+                    }
+                }
+                .frame(height: 6)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(width: 240, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.systemGray5), lineWidth: 0.5)
+        )
+    }
+
+    var body: some View {
+        cardContent
+    }
+}
+
 // Small card used in horizontal scrollers for departments
 private struct DepartmentMiniCard: View {
     let title: String
@@ -1955,6 +2083,7 @@ private struct AllPhasesView: View {
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
     @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
+    @State private var phaseAnonymousExpensesMap: [String: Double] = [:] // Track anonymous expenses per phase
     @State private var showingAddPhase = false
     @State private var showingEditPhase = false
     @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
@@ -2124,6 +2253,41 @@ private struct AllPhasesView: View {
                 }
             } catch {
                 print("Error loading phase extensions: \(error)")
+            }
+        }
+    }
+    
+    private func loadPhaseAnonymousExpenses() {
+        guard let projectId = project?.id else { return }
+        Task {
+            do {
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in AllPhasesView.loadPhaseAnonymousExpenses")
+                    return
+                }
+                
+                // Load all anonymous expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("isAnonymous", isEqualTo: true)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Calculate anonymous expenses per phase
+                var anonymousMap: [String: Double] = [:]
+                for expenseDoc in expensesSnapshot.documents {
+                    if let expense = try? expenseDoc.data(as: Expense.self),
+                       let phaseId = expense.phaseId {
+                        anonymousMap[phaseId, default: 0] += expense.amount
+                    }
+                }
+                
+                await MainActor.run {
+                    phaseAnonymousExpensesMap = anonymousMap
+                }
+            } catch {
+                print("Error loading phase anonymous expenses: \(error)")
             }
         }
     }
@@ -2344,6 +2508,13 @@ private struct AllPhasesView: View {
                                             }
                                         )
                                     }
+                                    
+                                    // Add "Other" department card for anonymous expenses
+                                    if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
+                                        OtherDepartmentCard(
+                                            spent: anonymousSpent
+                                        )
+                                    }
                                 }
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -2392,6 +2563,7 @@ private struct AllPhasesView: View {
             loadPhaseEnabledStates()
             loadPhaseBudgets()
             loadPhaseExtensions()
+            loadPhaseAnonymousExpenses()
         }
         .sheet(isPresented: $showingDepartmentDetail) {
             if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {
