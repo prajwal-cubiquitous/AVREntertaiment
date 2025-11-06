@@ -61,6 +61,10 @@ class AddExpenseViewModel: ObservableObject {
     @Published var uploadProgress: Double = 0.0
     @Published var isUploading: Bool = false
     
+    // MARK: - Validation State
+    @Published var shouldShowValidationErrors: Bool = false
+    @Published var firstInvalidFieldId: String? = nil
+    
     // MARK: - Project Data
     let project: Project
     @Published var availablePhases: [PhaseInfo] = []
@@ -98,7 +102,7 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     var isFormValid: Bool {
-        let hasValidAmount = !amount.isEmpty && amountValue > 0
+        let hasValidAmount = !amount.isEmpty && amountValue >= 1
         let hasValidPhase = !selectedPhaseId.isEmpty
         let hasValidDepartment = !selectedDepartment.isEmpty
         let hasValidDescription = !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -385,9 +389,130 @@ class AddExpenseViewModel: ObservableObject {
         attachmentName = nil
     }
     
+    // MARK: - Validation Error Messages
+    
+    var amountError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if amount.isEmpty {
+            return "Amount is required"
+        }
+        if amountValue < 1 {
+            return "Value must be greater than 0"
+        }
+        return nil
+    }
+    
+    var phaseError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if selectedPhaseId.isEmpty {
+            return "Please select a phase"
+        }
+        return nil
+    }
+    
+    var departmentError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if selectedDepartment.isEmpty {
+            return "Please select a department"
+        }
+        return nil
+    }
+    
+    var descriptionError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Description is required"
+        }
+        return nil
+    }
+    
+    func categoryError(at index: Int) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard index >= 0 && index < categories.count else { return nil }
+        let category = categories[index]
+        if category.isEmpty {
+            return "Category is required"
+        }
+        if category == "Misc / Other (notes required)" {
+            if let customName = categoryCustomNames[index], !customName.trimmingCharacters(in: .whitespaces).isEmpty {
+                return nil
+            }
+            return "Custom category name is required"
+        }
+        return nil
+    }
+    
+    var categoriesError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        let validCategories = categories.enumerated().compactMap { index, category -> String? in
+            if category.isEmpty {
+                return nil
+            }
+            if category == "Misc / Other (notes required)" {
+                if let customName = categoryCustomNames[index], !customName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    return customName
+                }
+                return nil
+            }
+            return category
+        }
+        if validCategories.isEmpty {
+            return "At least one category is required"
+        }
+        return nil
+    }
+    
+    // MARK: - Find First Invalid Field
+    
+    func findFirstInvalidFieldId() -> String? {
+        // Check amount first (most important)
+        if amount.isEmpty || amountValue < 1 {
+            return "amount"
+        }
+        
+        // Check phase
+        if selectedPhaseId.isEmpty {
+            return "phase"
+        }
+        
+        // Check department
+        if selectedDepartment.isEmpty {
+            return "department"
+        }
+        
+        // Check description
+        if description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "description"
+        }
+        
+        // Check categories
+        for (index, category) in categories.enumerated() {
+            if category.isEmpty {
+                return "category_\(index)"
+            }
+            if category == "Misc / Other (notes required)" {
+                if let customName = categoryCustomNames[index], !customName.trimmingCharacters(in: .whitespaces).isEmpty {
+                    continue
+                }
+                return "category_\(index)_custom"
+            }
+        }
+        
+        return nil
+    }
+    
+    func validateAndFindFirstInvalidField() -> String? {
+        shouldShowValidationErrors = true
+        return findFirstInvalidFieldId()
+    }
+    
     // MARK: - Submit Expense
     func submitExpense() {
         guard isFormValid else {
+            // Validate and find first invalid field for scrolling
+            if let firstInvalidField = validateAndFindFirstInvalidField() {
+                firstInvalidFieldId = firstInvalidField
+            }
             alertMessage = "Please fill in all required fields correctly."
             showAlert = true
             return
@@ -552,6 +677,8 @@ class AddExpenseViewModel: ObservableObject {
         attachmentURL = nil
         attachmentName = nil
         uploadProgress = 0.0
+        shouldShowValidationErrors = false
+        firstInvalidFieldId = nil
         
         // Reset phase and department to first available
         if let firstAvailable = availablePhases.first(where: { $0.canAddExpense }) {

@@ -18,7 +18,8 @@ struct AddExpenseView: View {
     
     var body: some View {
         NavigationView {
-            Form {
+            ScrollViewReader { proxy in
+                Form {
                 // MARK: - Project Header
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -70,7 +71,16 @@ struct AddExpenseView: View {
                             .keyboardType(.decimalPad)
                             .font(.title3)
                             .fontWeight(.medium)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(viewModel.amountError != nil ? Color.red : Color.clear, lineWidth: 1)
+                            )
+                        
+                        if let error = viewModel.amountError {
+                            InlineErrorMessage(message: error)
+                        }
                     }
+                    .id("amount")
                     .padding(.vertical, 4)
                     
                     // Description
@@ -82,9 +92,14 @@ struct AddExpenseView: View {
                             .frame(minHeight: 100)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color(UIColor.systemGray4), lineWidth: 1)
+                                    .stroke(viewModel.descriptionError != nil ? Color.red : Color(UIColor.systemGray4), lineWidth: viewModel.descriptionError != nil ? 1 : 1)
                             )
+                        
+                        if let error = viewModel.descriptionError {
+                            InlineErrorMessage(message: error)
+                        }
                     }
+                    .id("description")
                     .padding(.vertical, 4)
                 } header: {
                     Text("Expense Details")
@@ -165,6 +180,17 @@ struct AddExpenseView: View {
                     }
                 }
             }
+            .onChange(of: viewModel.firstInvalidFieldId) { fieldId in
+                if let fieldId = fieldId {
+                    print("🔄 Attempting to scroll to field: \(fieldId)")
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                        withAnimation(.easeInOut(duration: 0.6)) {
+                            proxy.scrollTo(fieldId, anchor: .top)
+                        }
+                    }
+                }
+            }
             .alert("Status", isPresented: $viewModel.showAlert) {
                 Button("OK") {
                     if viewModel.alertMessage.contains("successfully") {
@@ -179,6 +205,7 @@ struct AddExpenseView: View {
                     allowedTypes: [.pdf, .image],
                     onDocumentPicked: viewModel.handleDocumentSelection
                 )
+            }
             }
         }
             .onAppear{
@@ -280,7 +307,12 @@ struct AddExpenseView: View {
                 .padding(.horizontal, 4)
                 .padding(.top, 4)
             }
+            
+            if let error = viewModel.phaseError {
+                InlineErrorMessage(message: error)
+            }
         }
+        .id("phase")
         .padding(.vertical, 4)
     }
     
@@ -311,6 +343,10 @@ struct AddExpenseView: View {
                     .padding()
                     .background(Color(UIColor.tertiarySystemFill))
                     .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(viewModel.departmentError != nil ? Color.red : Color.clear, lineWidth: 1)
+                    )
                 }
                 .disabled(!selectedPhase.canAddExpense)
             } else {
@@ -319,7 +355,12 @@ struct AddExpenseView: View {
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            
+            if let error = viewModel.departmentError {
+                InlineErrorMessage(message: error)
+            }
         }
+        .id("department")
         .padding(.vertical, 4)
     }
     
@@ -390,11 +431,25 @@ struct AddExpenseView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                         .font(.subheadline)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke((viewModel.categoryError(at: index)?.contains("Custom") ?? false) ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                        
+                        if let error = viewModel.categoryError(at: index), error.contains("Custom") {
+                            InlineErrorMessage(message: error)
+                        }
                     }
+                    .id("category_\(index)_custom")
                     .padding(.leading, 8)
                     .padding(.top, 4)
                 }
+                
+                if let error = viewModel.categoryError(at: index), !error.contains("Custom") {
+                    InlineErrorMessage(message: error)
+                }
             }
+            .id("category_\(index)")
             .padding(.vertical, 4)
         }
     }
@@ -490,7 +545,17 @@ struct AddExpenseView: View {
     
     // MARK: - Submit Button
     private var submitButton: some View {
-        Button(action: viewModel.submitExpense) {
+        Button(action: {
+            HapticManager.impact(.medium)
+            // Validate and find first invalid field before submitting
+            if let firstInvalidField = viewModel.validateAndFindFirstInvalidField() {
+                viewModel.firstInvalidFieldId = firstInvalidField
+                HapticManager.notification(.error)
+            } else {
+                // Form is valid, proceed with submission
+                viewModel.submitExpense()
+            }
+        }) {
             HStack {
                 if viewModel.isLoading {
                     ProgressView()
@@ -503,11 +568,11 @@ struct AddExpenseView: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(viewModel.isFormValid ? Color.blue : Color.gray)
+            .background(viewModel.isFormValid ? Color.blue : Color.blue.opacity(0.6))
             .foregroundColor(.white)
             .cornerRadius(12)
         }
-        .disabled(!viewModel.isFormValid || viewModel.isLoading)
+        .disabled(viewModel.isLoading)
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())
         .padding(.horizontal)
