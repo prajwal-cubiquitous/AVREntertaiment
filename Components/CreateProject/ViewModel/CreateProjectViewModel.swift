@@ -67,6 +67,10 @@ class CreateProjectViewModel: ObservableObject {
     @Published var errorMessage: String? = nil
     @Published var showSuccessMessage: Bool = false
     
+    // MARK: - Validation State
+    @Published var shouldShowValidationErrors: Bool = false
+    @Published var firstInvalidFieldId: String? = nil
+    
     private var db = Firestore.firestore()
     private var authService: FirebaseAuthService?
     
@@ -171,6 +175,183 @@ class CreateProjectViewModel: ObservableObject {
         }
         
         return true
+    }
+    
+    // MARK: - Validation Error Messages
+    
+    var projectNameError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if projectName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Project name is required"
+        }
+        return nil
+    }
+    
+    var projectDescriptionError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if projectDescription.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Project description is required"
+        }
+        return nil
+    }
+    
+    var clientError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if client.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Client name is required"
+        }
+        return nil
+    }
+    
+    var locationError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if location.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Location is required"
+        }
+        return nil
+    }
+    
+    var projectManagersError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if selectedProjectManagers.isEmpty {
+            return "At least one project manager is required"
+        }
+        return nil
+    }
+    
+    var projectTeamMembersError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        if selectedProjectTeamMembers.isEmpty {
+            return "At least one team member is required"
+        }
+        return nil
+    }
+    
+    func phaseNameError(for phaseId: UUID) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
+        if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Phase name is required"
+        }
+        return nil
+    }
+    
+    func phaseDateError(for phaseId: UUID) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
+        if phase.endDate <= phase.startDate {
+            return "End date must be after start date"
+        }
+        return nil
+    }
+    
+    func phaseTimelineError(for phaseId: UUID) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard let phaseIndex = phases.firstIndex(where: { $0.id == phaseId }),
+              phaseIndex > 0 else { return nil }
+        let currentPhase = phases[phaseIndex]
+        let previousPhase = phases[phaseIndex - 1]
+        if currentPhase.startDate <= previousPhase.endDate {
+            return "Phase must start after the previous phase ends"
+        }
+        return nil
+    }
+    
+    func departmentNameError(for phaseId: UUID, departmentId: UUID) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard let phase = phases.first(where: { $0.id == phaseId }),
+              let department = phase.departments.first(where: { $0.id == departmentId }) else { return nil }
+        if department.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Department name is required"
+        }
+        return nil
+    }
+    
+    func phaseDepartmentsError(for phaseId: UUID) -> String? {
+        guard shouldShowValidationErrors else { return nil }
+        guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
+        if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            return "At least one department with a name is required"
+        }
+        return nil
+    }
+    
+    // MARK: - Find First Invalid Field
+    
+    func findFirstInvalidFieldId() -> String? {
+        // Check project name
+        if projectName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "projectName"
+        }
+        
+        // Check client
+        if client.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "client"
+        }
+        
+        // Check location
+        if location.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "location"
+        }
+        
+        // Check description
+        if projectDescription.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "projectDescription"
+        }
+        
+        // Check project managers
+        if selectedProjectManagers.isEmpty {
+            return "projectManagers"
+        }
+        
+        // Check team members
+        if selectedProjectTeamMembers.isEmpty {
+            return "projectTeamMembers"
+        }
+        
+        // Check phases
+        for phase in phases {
+            if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+                return "phase_\(phase.id)_name"
+            }
+            
+            if phase.endDate <= phase.startDate {
+                return "phase_\(phase.id)_dates"
+            }
+            
+            if phase.departments.isEmpty || phase.departments.allSatisfy({ $0.name.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                return "phase_\(phase.id)_departments"
+            }
+            
+            // Check for empty department names
+            for department in phase.departments {
+                if department.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    return "phase_\(phase.id)_dept_\(department.id)_name"
+                }
+            }
+        }
+        
+        // Check phase timeline
+        for i in 0..<phases.count - 1 {
+            let currentPhase = phases[i]
+            let nextPhase = phases[i + 1]
+            if nextPhase.startDate <= currentPhase.endDate {
+                return "phase_\(nextPhase.id)_timeline"
+            }
+        }
+        
+        return nil
+    }
+    
+    func validateAndFindFirstInvalidField() -> String? {
+        shouldShowValidationErrors = true
+        let fieldId = findFirstInvalidFieldId()
+        if let fieldId = fieldId {
+            print("🔍 First invalid field found: \(fieldId)")
+        } else {
+            print("✅ All fields are valid")
+        }
+        return fieldId
     }
     
     // MARK: - Initialization
@@ -424,6 +605,8 @@ class CreateProjectViewModel: ObservableObject {
         allowTemplateOverrides = false
         showSuccessMessage = false
         errorMessage = nil
+        shouldShowValidationErrors = false
+        firstInvalidFieldId = nil
     }
     
     // MARK: - Set AuthService

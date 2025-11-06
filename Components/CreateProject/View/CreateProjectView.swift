@@ -24,64 +24,83 @@ struct CreateProjectView: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                // MARK: - Project Information
-                projectDetailsSection
-                
-                // MARK: - Phases Section
-                phasesSection
-                
-                // MARK: - Project Team Section
-                projectTeamSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: DesignSystem.Spacing.large) {
+                        // MARK: - Project Information
+                        projectDetailsSectionScrollView
+                        
+                        // MARK: - Phases Section
+                        phasesSectionScrollView
+                        
+                        // MARK: - Project Team Section
+                        projectTeamSectionScrollView
 
-                // MARK: - Template Overrides Section
-                templateOverridesSection
-                
-                // MARK: - Submit Action
-                submitSection
-            }
-            .navigationTitle("New Project")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+                        // MARK: - Template Overrides Section
+                        templateOverridesSectionScrollView
+                        
+                        // MARK: - Submit Action
+                        submitSectionScrollView
                     }
-                    .foregroundColor(.secondary)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.vertical, DesignSystem.Spacing.medium)
                 }
-            }
-            .onAppear {
-                viewModel.setAuthService(authService)
-            }
-            .alert("Project Status", isPresented: $viewModel.showAlert) {
-                Button("OK", role: .cancel) { 
-                    if viewModel.showSuccessMessage {
-                        dismiss()
-                    }
-                }
-            } message: {
-                Text(viewModel.alertMessage)
-            }
-            .sheet(isPresented: $showingReviewScreen) {
-                NavigationView {
-                    ProjectReviewScreen(
-                        viewModel: viewModel,
-                        onConfirm: {
-                            viewModel.saveProject()
-                            // Dismiss review screen after starting save
-                            showingReviewScreen = false
-                            // Dismiss main view after save completes (handled in alert)
-                        },
-                        onCancel: {
-                            showingReviewScreen = false
-                        },
-                        onEdit: {
-                            // Dismiss review screen to go back to editing
-                            showingReviewScreen = false
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("New Project")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            dismiss()
                         }
-                    )
+                        .foregroundColor(.secondary)
+                    }
                 }
-                .presentationDetents([.large])
+                .onAppear {
+                    viewModel.setAuthService(authService)
+                }
+                .onChange(of: viewModel.firstInvalidFieldId) { fieldId in
+                    if let fieldId = fieldId {
+                        print("🔄 Attempting to scroll to field: \(fieldId)")
+                        // Use Task to ensure it runs after view updates
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                            withAnimation(.easeInOut(duration: 0.6)) {
+                                proxy.scrollTo(fieldId, anchor: .top)
+                            }
+                        }
+                    }
+                }
+                .alert("Project Status", isPresented: $viewModel.showAlert) {
+                    Button("OK", role: .cancel) { 
+                        if viewModel.showSuccessMessage {
+                            dismiss()
+                        }
+                    }
+                } message: {
+                    Text(viewModel.alertMessage)
+                }
+                .sheet(isPresented: $showingReviewScreen) {
+                    NavigationView {
+                        ProjectReviewScreen(
+                            viewModel: viewModel,
+                            onConfirm: {
+                                viewModel.saveProject()
+                                // Dismiss review screen after starting save
+                                showingReviewScreen = false
+                                // Dismiss main view after save completes (handled in alert)
+                            },
+                            onCancel: {
+                                showingReviewScreen = false
+                            },
+                            onEdit: {
+                                // Dismiss review screen to go back to editing
+                                showingReviewScreen = false
+                            }
+                        )
+                    }
+                    .presentationDetents([.large])
+                }
             }
         }
     }
@@ -99,7 +118,16 @@ struct CreateProjectView: View {
                     TextField("Enter project name", text: $viewModel.projectName)
                         .font(DesignSystem.Typography.body)
                         .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.projectNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.projectNameError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("projectName")
                 
                 // Client
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -110,7 +138,16 @@ struct CreateProjectView: View {
                     TextField("Enter client name", text: $viewModel.client)
                         .font(DesignSystem.Typography.body)
                         .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.clientError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.clientError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("client")
                 
                 // Location
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -121,7 +158,16 @@ struct CreateProjectView: View {
                     TextField("Enter location", text: $viewModel.location)
                         .font(DesignSystem.Typography.body)
                         .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.locationError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.locationError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("location")
                 
                 // Currency Picker (currently only INR)
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -150,9 +196,14 @@ struct CreateProjectView: View {
                         .cornerRadius(DesignSystem.CornerRadius.field)
                         .overlay(
                             RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
-                                .stroke(Color(.separator), lineWidth: 0.5)
+                                .stroke(viewModel.projectDescriptionError != nil ? Color.red : Color(.separator), lineWidth: viewModel.projectDescriptionError != nil ? 1 : 0.5)
                         )
+                    
+                    if let error = viewModel.projectDescriptionError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("projectDescription")
             }
             .padding(.vertical, DesignSystem.Spacing.small)
         } header: {
@@ -169,6 +220,7 @@ struct CreateProjectView: View {
                         phase: phaseBinding(for: phase.id),
                         phaseNumber: phase.phaseNumber,
                         canDelete: viewModel.phases.count > 1,
+                        viewModel: viewModel,
                         onDelete: {
                             HapticManager.selection()
                             viewModel.removePhaseById(phase.id)
@@ -256,7 +308,12 @@ struct CreateProjectView: View {
                             viewModel.projectManagerSearchText = ""
                         }
                     )
+                    
+                    if let error = viewModel.projectManagersError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("projectManagers")
 
                 // Team members
                 VStack(alignment: .leading, spacing: 8) {
@@ -279,7 +336,12 @@ struct CreateProjectView: View {
                             .padding(.top, 5)
                         }
                     }
+                    
+                    if let error = viewModel.projectTeamMembersError {
+                        InlineErrorMessage(message: error)
+                    }
                 }
+                .id("projectTeamMembers")
             }
             .padding(.vertical, DesignSystem.Spacing.small)
         } header: {
@@ -318,6 +380,269 @@ struct CreateProjectView: View {
         }
     }
     
+    // MARK: - ScrollView Compatible Sections
+    
+    private var projectDetailsSectionScrollView: some View {
+        FormSectionView(header: SectionHeaderLabel(title: "Project Details", icon: "folder.badge.plus")) {
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Project Name")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter project name", text: $viewModel.projectName)
+                        .font(DesignSystem.Typography.body)
+                        .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.projectNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.projectNameError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("projectName")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Client")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter client name", text: $viewModel.client)
+                        .font(DesignSystem.Typography.body)
+                        .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.clientError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.clientError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("client")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Location")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextField("Enter location", text: $viewModel.location)
+                        .font(DesignSystem.Typography.body)
+                        .fieldStyle()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.locationError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                    
+                    if let error = viewModel.locationError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("location")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Currency")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    Picker("Currency", selection: $viewModel.currency) {
+                        ForEach(currencies, id: \.1) { currency in
+                            Text(currency.0).tag(currency.1)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Description")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    TextEditor(text: $viewModel.projectDescription)
+                        .frame(height: 100)
+                        .font(DesignSystem.Typography.body)
+                        .padding(DesignSystem.Spacing.small)
+                        .background(Color(.tertiarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.field)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(viewModel.projectDescriptionError != nil ? Color.red : Color(.separator), lineWidth: viewModel.projectDescriptionError != nil ? 1 : 0.5)
+                        )
+                    
+                    if let error = viewModel.projectDescriptionError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("projectDescription")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+            }
+        }
+    }
+    
+    private var phasesSectionScrollView: some View {
+        FormSectionView(header: SectionHeaderLabel(title: "Project Phases", icon: "arrow.triangle.2.circlepath")) {
+            VStack(spacing: DesignSystem.Spacing.large) {
+                ForEach(viewModel.phases) { phase in
+                    PhaseCardView(
+                        phase: phaseBinding(for: phase.id),
+                        phaseNumber: phase.phaseNumber,
+                        canDelete: viewModel.phases.count > 1,
+                        viewModel: viewModel,
+                        onDelete: {
+                            HapticManager.selection()
+                            viewModel.removePhaseById(phase.id)
+                        },
+                        onAddDepartment: {
+                            viewModel.addDepartment(to: phase.id)
+                        }
+                    )
+                    .id(phase.id)
+                }
+                
+                Button(action: {
+                    HapticManager.selection()
+                    withAnimation(DesignSystem.Animation.standardSpring) {
+                        viewModel.addPhase()
+                    }
+                }) {
+                    Label("Add Phase", systemImage: "plus.circle.fill")
+                        .foregroundColor(.accentColor)
+                        .font(DesignSystem.Typography.callout)
+                        .fontWeight(.medium)
+                }
+                .secondaryButton()
+                .padding(.top, DesignSystem.Spacing.small)
+            }
+            .padding(.vertical, DesignSystem.Spacing.small)
+            
+            budgetFooterView
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.top, DesignSystem.Spacing.small)
+        }
+    }
+    
+    private var projectTeamSectionScrollView: some View {
+        FormSectionView(header: SectionHeaderLabel(title: "Project Team", icon: "person.3.fill")) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Project Managers (Approvers)").font(.caption).foregroundColor(.secondary)
+                    if !viewModel.selectedProjectManagers.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(viewModel.selectedProjectManagers, id: \.self) { manager in
+                                HStack {
+                                    Text(manager.name).fontWeight(.bold)
+                                    Spacer()
+                                    Button(action: {
+                                        viewModel.selectedProjectManagers.removeAll { $0 == manager }
+                                    }) { Image(systemName: "xmark.circle.fill").foregroundColor(.gray) }
+                                }
+                                .padding(10).background(Color.blue.opacity(0.08)).cornerRadius(8)
+                            }
+                        }
+                    }
+                    SearchableDropdownView(
+                        title: "Search manager name/email/phone",
+                        searchText: $viewModel.projectManagerSearchText,
+                        items: viewModel.filteredProjectManagers(),
+                        itemContent: { user in Text("\(user.name) - \(user.email ?? user.phoneNumber)") },
+                        onSelect: { user in
+                            if !viewModel.selectedProjectManagers.contains(user) { viewModel.selectedProjectManagers.append(user) }
+                            viewModel.projectManagerSearchText = ""
+                        }
+                    )
+                    
+                    if let error = viewModel.projectManagersError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("projectManagers")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Project Team Members").font(.caption).foregroundColor(.secondary)
+                    SearchableDropdownView(
+                        title: "Search name or phone number...",
+                        searchText: $viewModel.projectTeamMemberSearchText,
+                        items: viewModel.filteredProjectTeamMembers(),
+                        itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                        onSelect: { member in
+                            viewModel.selectedProjectTeamMembers.insert(member)
+                            viewModel.projectTeamMemberSearchText = ""
+                        }
+                    )
+                    if !viewModel.selectedProjectTeamMembers.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack { ForEach(Array(viewModel.selectedProjectTeamMembers)) { member in
+                                TagView(user: member, onRemove: { viewModel.selectedProjectTeamMembers.remove(member) })
+                            } }
+                            .padding(.top, 5)
+                        }
+                    }
+                    
+                    if let error = viewModel.projectTeamMembersError {
+                        InlineErrorMessage(message: error)
+                    }
+                }
+                .id("projectTeamMembers")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+            }
+        }
+    }
+    
+    private var templateOverridesSectionScrollView: some View {
+        FormSectionView(header: SectionHeaderLabel(title: "Template Settings", icon: "doc.on.doc")) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Allow Template Overrides")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text("Enable to allow overriding project templates")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Toggle("", isOn: $viewModel.allowTemplateOverrides)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, DesignSystem.Spacing.medium)
+            .padding(.vertical, DesignSystem.Spacing.small)
+        }
+    }
+    
+    private var submitSectionScrollView: some View {
+        VStack {
+            submitButton
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.medium)
+        }
+    }
+    
     // MARK: - Subviews
     
     private var budgetFooterView: some View {
@@ -344,7 +669,16 @@ struct CreateProjectView: View {
     private var submitButton: some View {
         Button(action: {
             HapticManager.impact(.medium)
-            showingReviewScreen = true
+            
+            // Validate and find first invalid field
+            if let firstInvalidField = viewModel.validateAndFindFirstInvalidField() {
+                HapticManager.notification(.error)
+                // Set the invalid field ID to trigger scroll
+                viewModel.firstInvalidFieldId = firstInvalidField
+            } else {
+                // Form is valid, proceed to review screen
+                showingReviewScreen = true
+            }
         }) {
             HStack {
                 Label("Review Project", systemImage: "doc.text.magnifyingglass")
@@ -353,7 +687,7 @@ struct CreateProjectView: View {
             .font(DesignSystem.Typography.headline)
         }
         .primaryButton()
-        .disabled(!viewModel.isFormValid || viewModel.isLoading)
+        .disabled(viewModel.isLoading)
         .animation(DesignSystem.Animation.standardSpring, value: viewModel.isFormValid)
     }
 }
@@ -364,6 +698,7 @@ struct PhaseCardView: View {
     @Binding var phase: PhaseItem
     let phaseNumber: Int
     let canDelete: Bool
+    @ObservedObject var viewModel: CreateProjectViewModel
     let onDelete: () -> Void
     let onAddDepartment: () -> Void
     
@@ -396,7 +731,16 @@ struct PhaseCardView: View {
                 TextField("Enter phase name", text: $phase.phaseName)
                     .font(DesignSystem.Typography.body)
                     .fieldStyle()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                            .stroke(viewModel.phaseNameError(for: phase.id) != nil ? Color.red : Color.clear, lineWidth: 1)
+                    )
+                
+                if let error = viewModel.phaseNameError(for: phase.id) {
+                    InlineErrorMessage(message: error)
+                }
             }
+            .id("phase_\(phase.id)_name")
 
             // Timeline Section
             VStack(alignment: .leading, spacing: 12) {
@@ -427,17 +771,16 @@ struct PhaseCardView: View {
                 .padding(.vertical, 4)
 
                 // Date Validation Warnings
-                if phase.endDate <= phase.startDate {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("End date must be after start date")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                    }
-                    .transition(.opacity.animation(.easeInOut))
+                if let error = viewModel.phaseDateError(for: phase.id) {
+                    InlineErrorMessage(message: error)
+                }
+                
+                if let timelineError = viewModel.phaseTimelineError(for: phase.id) {
+                    InlineErrorMessage(message: timelineError)
+                        .id("phase_\(phase.id)_timeline")
                 }
             }
+            .id("phase_\(phase.id)_dates")
 
             // Manager & Team note
             VStack(alignment: .leading, spacing: 8) {
@@ -453,7 +796,11 @@ struct PhaseCardView: View {
                     .foregroundColor(.secondary)
 
                 ForEach($phase.departments) { $dept in
-                    DepartmentInputRow(item: $dept)
+                    DepartmentInputRow(
+                        item: $dept,
+                        errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id)
+                    )
+                    .id("phase_\(phase.id)_dept_\(dept.id)_name")
                 }
 
                 Button(action: {
@@ -466,7 +813,12 @@ struct PhaseCardView: View {
                         .fontWeight(.medium)
                 }
                 .buttonStyle(.plain)
+                
+                if let error = viewModel.phaseDepartmentsError(for: phase.id) {
+                    InlineErrorMessage(message: error)
+                }
             }
+            .id("phase_\(phase.id)_departments")
 
             Divider()
         }
@@ -568,9 +920,10 @@ private struct SectionHeaderLabel: View {
 
 private struct DepartmentInputRow: View {
     @Binding var item: DepartmentItem
+    let errorMessage: String?
     
     var body: some View {
-        VStack(spacing: DesignSystem.Spacing.small) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             HStack(spacing: DesignSystem.Spacing.medium) {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
                     Text("Department")
@@ -581,6 +934,13 @@ private struct DepartmentInputRow: View {
                     TextField("e.g., Marketing", text: $item.name)
                         .font(DesignSystem.Typography.callout)
                         .textFieldStyle(.plain)
+                        .padding(DesignSystem.Spacing.small)
+                        .background(Color(.tertiarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.field)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                .stroke(errorMessage != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
                 }
                 
                 VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
@@ -595,6 +955,9 @@ private struct DepartmentInputRow: View {
                         .fontWeight(.medium)
                         .multilineTextAlignment(.trailing)
                         .textFieldStyle(.plain)
+                        .padding(DesignSystem.Spacing.small)
+                        .background(Color(.tertiarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.field)
                         .frame(width: 100)
                         .onSubmit {
                             if item.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -602,6 +965,10 @@ private struct DepartmentInputRow: View {
                             }
                         }
                 }
+            }
+            
+            if let error = errorMessage {
+                InlineErrorMessage(message: error)
             }
             
             Divider()
@@ -612,6 +979,57 @@ private struct DepartmentInputRow: View {
                 item.amount = "0"
             }
         }
+    }
+}
+
+// MARK: - Form Section View (ScrollView compatible)
+struct FormSectionView<Content: View, Header: View>: View {
+    let header: Header
+    let content: Content
+    
+    init(header: Header, @ViewBuilder content: () -> Content) {
+        self.header = header
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Header
+            header
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.top, DesignSystem.Spacing.medium)
+            
+            // Content
+            VStack(spacing: 0) {
+                content
+            }
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(DesignSystem.CornerRadius.medium)
+            .padding(.horizontal, DesignSystem.Spacing.medium)
+        }
+    }
+}
+
+// MARK: - Inline Error Message View
+struct InlineErrorMessage: View {
+    let message: String
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundColor(.red)
+                .font(.system(size: 14, weight: .medium))
+            
+            Text(message)
+                .font(DesignSystem.Typography.caption1)
+                .foregroundColor(.red)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.top, DesignSystem.Spacing.extraSmall)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 }
 
