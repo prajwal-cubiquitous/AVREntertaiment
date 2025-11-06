@@ -895,7 +895,16 @@ struct DashboardView: View {
                                         // Add "Other" department card for anonymous expenses
                                         if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
                                             OtherDepartmentCard(
-                                                spent: anonymousSpent
+                                                spent: anonymousSpent,
+                                                onTap: {
+                                                    // Set a special marker to indicate "Other" department
+                                                    selectedDepartmentForDetail = "Other"
+                                                    // Store phase ID for filtering anonymous expenses
+                                                    // We'll need to pass phaseId to DepartmentBudgetDetailView
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                        showingDepartmentDetail = true
+                                                    }
+                                                }
                                             )
                                         }
                                     }
@@ -1940,6 +1949,7 @@ private struct DepartmentPill: View {
 // "Other" department card for anonymous expenses
 private struct OtherDepartmentCard: View {
     let spent: Double
+    let onTap: (() -> Void)?
     
     private var cardContent: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -2013,7 +2023,14 @@ private struct OtherDepartmentCard: View {
     }
 
     var body: some View {
-        cardContent
+        if let onTap = onTap {
+            Button(action: onTap) {
+                cardContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            cardContent
+        }
     }
 }
 
@@ -2584,10 +2601,10 @@ private struct AllPhasesView: View {
                                             spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                             onTap: {
                                                 selectedDepartment = dept
-                                                // Small delay to ensure state is set before showing sheet
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                    showingDepartmentDetail = true
-                                                }
+//                                                // Small delay to ensure state is set before showing sheet
+//                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                                                    showingDepartmentDetail = true
+//                                                }
                                             }
                                         )
                                     }
@@ -2595,7 +2612,14 @@ private struct AllPhasesView: View {
                                     // Add "Other" department card for anonymous expenses
                                     if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
                                         OtherDepartmentCard(
-                                            spent: anonymousSpent
+                                            spent: anonymousSpent,
+                                            onTap: {
+                                                selectedDepartment = "Other"
+                                                // Small delay to ensure state is set before showing sheet
+//                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                                                    showingDepartmentDetail = true
+//                                                }
+                                            }
                                         )
                                     }
                                 }
@@ -2649,8 +2673,10 @@ private struct AllPhasesView: View {
             loadPhaseExtensions()
             loadPhaseAnonymousExpenses()
         }
-        .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty {
+        .sheet(item: $selectedDepartment) { department in
+            if let project = project,
+               let projectId = project.id,
+               !projectId.isEmpty {
                 DepartmentBudgetDetailView(
                     department: department,
                     projectId: projectId,
@@ -2659,8 +2685,7 @@ private struct AllPhasesView: View {
                 )
                 .presentationDetents([.large])
             }
-        }
-        .sheet(item: $phaseForDepartmentAdd) { phase in
+        }        .sheet(item: $phaseForDepartmentAdd) { phase in
             if let projectId = project?.id {
                 AddDepartmentSheet(
                     projectId: projectId,
@@ -2698,6 +2723,17 @@ private struct AllPhasesView: View {
                 onSaved: { onPhaseAdded?() }
             )
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showingDepartmentDetail) {
+            if let department = selectedDepartment, let project = project, let projectId = project.id, !projectId.isEmpty {
+                DepartmentBudgetDetailView(
+                    department: department,
+                    projectId: projectId,
+                    role: role,
+                    phoneNumber: phoneNumber
+                )
+                .presentationDetents([.large])
+            }
         }
     }
 }

@@ -128,14 +128,15 @@ struct DepartmentBudgetDetailView: View {
                             .font(.headline)
                             .fontWeight(.semibold)
                         
-                        Text("Department Expenses")
+                        Text(department == "Other" ? "Anonymous Expenses" : "Department Expenses")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    if role == .ADMIN{
+                    // Hide edit/delete options for "Other" department (anonymous expenses)
+                    if role == .ADMIN && department != "Other" {
                         Menu {
                             Button(role: .none) {
                                 showingEditBudget = true
@@ -630,7 +631,9 @@ struct DepartmentBudgetDetailView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
-            Text("No expenses have been recorded for the \(department) department yet.")
+            Text(department == "Other" 
+                 ? "No anonymous expenses found yet." 
+                 : "No expenses have been recorded for the \(department) department yet.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -886,21 +889,33 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         
         Task {
             do {
-                let db = Firestore.firestore()
+                // Get customer ID
+                let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
-                // Load expenses for the department
-                let expensesSnapshot = try await db
-                    .collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .collection("expenses")
-                    .whereField("department", isEqualTo: department)
-                    .order(by: "createdAt", descending: true)
-                    .getDocuments()
-                
-                let loadedExpenses = expensesSnapshot.documents.compactMap { doc in
-                    try? doc.data(as: Expense.self)
+                // Special handling for "Other" department (anonymous expenses)
+                let loadedExpenses: [Expense]
+                if department == "Other" {
+                    // Load all anonymous expenses for this project
+                    let expensesSnapshot = try await FirebasePathHelper.shared
+                        .expensesCollection(customerId: customerID, projectId: projectId)
+                        .whereField("isAnonymous", isEqualTo: true)
+                        .order(by: "createdAt", descending: true)
+                        .getDocuments()
+                    
+                    loadedExpenses = expensesSnapshot.documents.compactMap { doc in
+                        try? doc.data(as: Expense.self)
+                    }
+                } else {
+                    // Load expenses for the specific department
+                    let expensesSnapshot = try await FirebasePathHelper.shared
+                        .expensesCollection(customerId: customerID, projectId: projectId)
+                        .whereField("department", isEqualTo: department)
+                        .order(by: "createdAt", descending: true)
+                        .getDocuments()
+                    
+                    loadedExpenses = expensesSnapshot.documents.compactMap { doc in
+                        try? doc.data(as: Expense.self)
+                    }
                 }
                 
                 // Calculate totals
@@ -908,26 +923,26 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     .filter { $0.status == .approved }
                     .reduce(0) { $0 + $1.amount }
                 
-                // Aggregate allocated budget from phases for this department
+                // For "Other" department, budget is 0 (no allocated budget for anonymous expenses)
                 var allocated: Double = 0
                 var phaseIdsWithDepartment: [String] = []
                 var phasesOnlyWithThisDepartment: [(id: String, name: String)] = []
-                let phasesSnapshot = try await db
-                    .collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .collection("phases")
-                    .getDocuments()
-                for doc in phasesSnapshot.documents {
-                    if let phase = try? doc.data(as: Phase.self) {
-                        if phase.departments[department] != nil {
-                            allocated += phase.departments[department] ?? 0
-                            phaseIdsWithDepartment.append(doc.documentID)
-                            
-                            // Check if this is the only department in this phase
-                            if phase.departments.count == 1 {
-                                phasesOnlyWithThisDepartment.append((id: doc.documentID, name: phase.phaseName))
+                
+                if department != "Other" {
+                    // Aggregate allocated budget from phases for this department
+                    let phasesSnapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerID, projectId: projectId)
+                        .getDocuments()
+                    for doc in phasesSnapshot.documents {
+                        if let phase = try? doc.data(as: Phase.self) {
+                            if phase.departments[department] != nil {
+                                allocated += phase.departments[department] ?? 0
+                                phaseIdsWithDepartment.append(doc.documentID)
+                                
+                                // Check if this is the only department in this phase
+                                if phase.departments.count == 1 {
+                                    phasesOnlyWithThisDepartment.append((id: doc.documentID, name: phase.phaseName))
+                                }
                             }
                         }
                     }
@@ -993,15 +1008,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     
     func isOnlyDepartmentInAnyPhase(department: String, projectId: String) async -> Bool {
         do {
-            let db = Firestore.firestore()
+            let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
             
             // Get all phases
-            let phasesSnapshot = try await db
-                .collection("customers")
-                .document(customerID)
-                .collection("projects")
-                .document(projectId)
-                .collection("phases")
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerID, projectId: projectId)
                 .getDocuments()
             
             // Check if any phase has only this department
@@ -1027,10 +1038,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     
     func updateDepartmentBudget(department: String, projectId: String, newBudget: Double) async {
         do {
-            let db = Firestore.firestore()
-            
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
-
             
             // Update budget in all phases that contain this department
             // We need to distribute the new budget across all phases
@@ -1038,12 +1046,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             // Or you could calculate proportional distribution
             
             // First, get all phases with this department
-            let phasesSnapshot = try await db
-                .collection("customers")
-                .document(customerID)
-                .collection("projects")
-                .document(projectId)
-                .collection("phases")
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerID, projectId: projectId)
                 .getDocuments()
             
             var phasesWithDepartment: [(id: String, currentBudget: Double)] = []
@@ -1062,12 +1066,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             
             // Update each phase proportionally
             for phaseData in phasesWithDepartment {
-                let phaseRef = db
-                    .collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .collection("phases")
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerID, projectId: projectId)
                     .document(phaseData.id)
                 
                 // Calculate proportional budget for this phase
@@ -1124,18 +1124,13 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     
     func deleteDepartment(department: String, projectId: String) async {
         do {
-            let db = Firestore.firestore()
-            
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
             let currentTimestamp = Timestamp()
+            let db = Firestore.firestore()
             
             // Get all phases
-            let phasesSnapshot = try await db
-                .collection("customers")
-                .document(customerID)
-                .collection("projects")
-                .document(projectId)
-                .collection("phases")
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerID, projectId: projectId)
                 .getDocuments()
             
             // Collect phase IDs that contain this department
@@ -1145,12 +1140,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             for doc in phasesSnapshot.documents {
                 if let phase = try? doc.data(as: Phase.self) {
                     if phase.departments[department] != nil {
-                        let phaseRef = db
-                            .collection("customers")
-                            .document(customerID)
-                            .collection("projects")
-                            .document(projectId)
-                            .collection("phases")
+                        let phaseRef = FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerID, projectId: projectId)
                             .document(doc.documentID)
                         
                         // Remove the department from the departments dictionary
@@ -1205,17 +1196,12 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     
     func deleteDepartmentFromPhase(department: String, projectId: String, phaseId: String) async {
         do {
-            let db = Firestore.firestore()
-            
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
             let currentTimestamp = Timestamp()
+            let db = Firestore.firestore()
             
-            let phaseRef = db
-                .collection("customers")
-                .document(customerID)
-                .collection("projects")
-                .document(projectId)
-                .collection("phases")
+            let phaseRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerID, projectId: projectId)
                 .document(phaseId)
             
             // Remove the department from the departments dictionary
