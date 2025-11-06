@@ -12,9 +12,7 @@ import FirebaseAuth
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: DashboardViewModel
-    @StateObject private var notificationViewModel = NotificationViewModel()
     @EnvironmentObject var authService: FirebaseAuthService
-    @State private var showingNotifications = false
     @State private var showingPendingApprovals = false
     @State private var selectedDepartment: String? = nil
     @State private var showingReportSheet = false
@@ -115,24 +113,6 @@ struct DashboardView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: DesignSystem.Spacing.large) {
-                            // Notifications Section
-                            if let project = project, role == .APPROVER {
-                                NotificationSummaryView(
-                                    viewModel: notificationViewModel,
-                                    onPendingApprovalsTap: {
-                                        showingPendingApprovals = true
-                                    },
-                                    onMessagesTap: {
-                                        showingChats = true
-                                    },
-                                    onExpenseChatsTap: {
-                                        // Handle expense chat tap
-                                        HapticManager.selection()
-                                    }
-                                )
-                                .padding(.horizontal, DesignSystem.Spacing.medium)
-                            }
-                            
                             // Project Overview Section
                             if let project = project {
                                 projectOverviewSection
@@ -262,44 +242,6 @@ struct DashboardView: View {
                     alignment: .bottom
                 )
                 
-                // Notification popup overlay
-                if showingNotifications {
-                    Color.black.opacity(0.1)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.3)) {
-                                showingNotifications = false
-                            }
-                        }
-                    
-                    // Responsive notification popup
-                    VStack {
-                        HStack {
-                            Spacer()
-                            
-                            if let project = project{
-                                NotificationsView(showingPendingApprovals: $showingPendingApprovals, project: project, role: role, phoneNumber: phoneNumber)
-                                    .frame(
-                                        width: min(320, geometry.size.width - 32),
-                                        height: min(450, geometry.size.height * 0.6)
-                                    )
-                                    .background(Color(.systemBackground))
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                                    .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 10)
-                                    .padding(.trailing, 16)
-                                    .transition(.asymmetric(
-                                        insertion: .scale(scale: 0.8).combined(with: .opacity),
-                                        removal: .scale(scale: 0.95).combined(with: .opacity)
-                                    ))
-                                    .onTapGesture { }  // Prevent tap from dismissing
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.top, geometry.safeAreaInsets.top + 60) // Account for navigation bar
-                }
-                
                 // Phase Request Notification popup overlay (Admin only)
                 if showingPhaseRequestNotifications && role == .ADMIN {
                     Color.black.opacity(0.1)
@@ -410,33 +352,6 @@ struct DashboardView: View {
                         .buttonStyle(.plain)
                     }
                     
-                    // Notification Button (Non-admin users)
-                    if role != .ADMIN{
-                        Button {
-                            HapticManager.impact(.light)
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showingNotifications.toggle()
-                            }
-                        } label: {
-                            ZStack {
-                                Image(systemName: "bell.fill")
-                                    .foregroundColor(.primary)
-                                
-                                if viewModel.pendingNotifications > 0 {
-                                    Circle()
-                                        .fill(.red)
-                                        .frame(width: 14, height: 14)
-                                        .overlay(
-                                            Text("\(viewModel.pendingNotifications)")
-                                                .font(.system(size: 10))
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.white)
-                                        )
-                                        .offset(x: 10, y: -10)
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -608,14 +523,6 @@ struct DashboardView: View {
             Task {
                 await loadPhases()
                 await fetchTempApproverData()
-                // Load notifications
-                if let projectId = project?.id {
-                    await notificationViewModel.fetchProjectNotifications(
-                        projectId: projectId,
-                        currentUserPhone: phoneNumber,
-                        currentUserRole: role ?? .USER
-                    )
-                }
                 // Load phase request notifications for admin
                 if role == .ADMIN, let projectId = project?.id {
                     await phaseRequestNotificationViewModel.loadPendingRequests(
