@@ -70,6 +70,7 @@ struct DashboardView: View {
     @State private var phaseBudgetMap: [String: PhaseBudget] = [:]
     @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
     @State private var phaseAnonymousExpensesMap: [String: Double] = [:] // Track anonymous expenses per phase
+    @State private var phaseDepartmentSpentMap: [String: [String: Double]] = [:] // Track spent per department per phase [phaseId: [department: spent]]
     
     // Permanent approver
     
@@ -880,6 +881,7 @@ struct DashboardView: View {
                                             DepartmentMiniCard(
                                                 title: dept,
                                                 amount: amount,
+                                                spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                                 onTap: {
                                                     selectedDepartmentForDetail = dept
                                                     // Small delay to ensure state is set before showing sheet
@@ -1173,6 +1175,8 @@ struct DashboardView: View {
             await MainActor.run { allPhases = collected }
             // Load phase budgets after phases are loaded
             await loadPhaseBudgets()
+            // Load department spent amounts per phase
+            await loadPhaseDepartmentSpent()
             // Load extension status for phases
             await loadPhaseExtensions()
             // Load anonymous expenses per phase
@@ -1331,6 +1335,42 @@ struct DashboardView: View {
             }
         } catch {
             print("Error loading phase budgets: \(error.localizedDescription)")
+        }
+    }
+    
+    private func loadPhaseDepartmentSpent() async {
+        guard let projectId = project?.id else { return }
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in loadPhaseDepartmentSpent")
+            return
+        }
+        do {
+            // Load all approved expenses for this project (excluding anonymous)
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            // Calculate spent amount per department per phase
+            // Structure: [phaseId: [department: spent]]
+            var departmentSpentMap: [String: [String: Double]] = [:]
+            
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self),
+                   let phaseId = expense.phaseId,
+                   expense.isAnonymous != true { // Exclude anonymous expenses
+                    if departmentSpentMap[phaseId] == nil {
+                        departmentSpentMap[phaseId] = [:]
+                    }
+                    departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
+                }
+            }
+            
+            await MainActor.run {
+                phaseDepartmentSpentMap = departmentSpentMap
+            }
+        } catch {
+            print("Error loading phase department spent: \(error.localizedDescription)")
         }
     }
 
@@ -1981,10 +2021,10 @@ private struct OtherDepartmentCard: View {
 private struct DepartmentMiniCard: View {
     let title: String
     let amount: Double
+    let spent: Double
     let onTap: (() -> Void)?
 
     private var budget: Double { amount }
-    private var spent: Double { 0 }
     private var remaining: Double { max(budget - spent, 0) }
     
     private var cardContent: some View {
@@ -2020,6 +2060,7 @@ private struct DepartmentMiniCard: View {
                     Text("\(Int(spent).formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
+                        .foregroundColor(.orange)
                 }
                 HStack {
                     Text("Remaining:")
@@ -2029,7 +2070,7 @@ private struct DepartmentMiniCard: View {
                     Text("\(Int(remaining).formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.green)
+                        .foregroundColor(remaining >= 0 ? .green : .red)
                 }
 
                 // Progress bar
@@ -2084,6 +2125,7 @@ private struct AllPhasesView: View {
     @State private var phaseBudgetMap: [String: DashboardView.PhaseBudget] = [:]
     @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
     @State private var phaseAnonymousExpensesMap: [String: Double] = [:] // Track anonymous expenses per phase
+    @State private var phaseDepartmentSpentMap: [String: [String: Double]] = [:] // Track spent per department per phase [phaseId: [department: spent]]
     @State private var showingAddPhase = false
     @State private var showingEditPhase = false
     @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
@@ -2198,6 +2240,46 @@ private struct AllPhasesView: View {
                 }
             } catch {
                 print("Error loading phase budgets: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func loadPhaseDepartmentSpent() {
+        guard let projectId = project?.id else { return }
+        Task {
+            do {
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in AllPhasesView.loadPhaseDepartmentSpent")
+                    return
+                }
+                
+                // Load all approved expenses for this project (excluding anonymous)
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Calculate spent amount per department per phase
+                // Structure: [phaseId: [department: spent]]
+                var departmentSpentMap: [String: [String: Double]] = [:]
+                
+                for expenseDoc in expensesSnapshot.documents {
+                    if let expense = try? expenseDoc.data(as: Expense.self),
+                       let phaseId = expense.phaseId,
+                       expense.isAnonymous != true { // Exclude anonymous expenses
+                        if departmentSpentMap[phaseId] == nil {
+                            departmentSpentMap[phaseId] = [:]
+                        }
+                        departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
+                    }
+                }
+                
+                await MainActor.run {
+                    phaseDepartmentSpentMap = departmentSpentMap
+                }
+            } catch {
+                print("Error loading phase department spent: \(error.localizedDescription)")
             }
         }
     }
@@ -2499,6 +2581,7 @@ private struct AllPhasesView: View {
                                         DepartmentMiniCard(
                                             title: dept,
                                             amount: amount,
+                                            spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                             onTap: {
                                                 selectedDepartment = dept
                                                 // Small delay to ensure state is set before showing sheet
@@ -2562,6 +2645,7 @@ private struct AllPhasesView: View {
         .onAppear {
             loadPhaseEnabledStates()
             loadPhaseBudgets()
+            loadPhaseDepartmentSpent()
             loadPhaseExtensions()
             loadPhaseAnonymousExpenses()
         }
