@@ -870,8 +870,8 @@ struct DashboardView: View {
                                         
                                         if phaseExtensionMap[phase.id] == true {
                                             HStack(spacing: 4) {
-                                                Image(systemName: "arrow.clockwise.circle.fill")
-                                                    .font(.caption2)
+//                                                Image(systemName: "arrow.clockwise.circle.fill")
+//                                                    .font(.caption2)
                                                 Text("Extended")
                                                     .font(DesignSystem.Typography.caption2)
                                                     .fontWeight(.semibold)
@@ -1715,15 +1715,48 @@ private struct AddDepartmentSheet: View {
                     departmentName: amount
                 ]
             ], merge: true) { error in
-                isSaving = false
                 if let error = error {
+                    isSaving = false
                     errorMessage = "Failed to save: \(error.localizedDescription)"
                 } else {
-                    onSaved()
-                    dismiss()
+                    // Update project budget after adding department
+                    Task {
+                        await updateProjectBudget(projectId: projectId, customerId: customerId)
+                        await MainActor.run {
+                            isSaving = false
+                            onSaved()
+                            dismiss()
+                        }
+                    }
                 }
             }
 
+    }
+    
+    // Helper function to update project budget
+    private func updateProjectBudget(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            var totalBudget: Double = 0
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    totalBudget += phase.departments.values.reduce(0, +)
+                }
+            }
+            
+            // Update project budget
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "budget": totalBudget,
+                    "updatedAt": Timestamp()
+                ])
+        } catch {
+            print("Error updating project budget: \(error.localizedDescription)")
+        }
     }
 }
 
@@ -3252,6 +3285,9 @@ private struct AddPhaseSheet: View {
                 
                 try await phaseRef.setData(from: phaseData)
                 
+                // Update project budget after adding phase
+                await updateProjectBudget(projectId: projectId, customerId: customerId)
+                
                 await MainActor.run {
                     isSaving = false
                     onSaved()
@@ -3267,6 +3303,32 @@ private struct AddPhaseSheet: View {
                     errorMessage = "Failed to save phase: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Helper function to update project budget
+    private func updateProjectBudget(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            var totalBudget: Double = 0
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    totalBudget += phase.departments.values.reduce(0, +)
+                }
+            }
+            
+            // Update project budget
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "budget": totalBudget,
+                    "updatedAt": Timestamp()
+                ])
+        } catch {
+            print("Error updating project budget: \(error.localizedDescription)")
         }
     }
 }
@@ -3457,6 +3519,8 @@ private struct EditPhaseSheet: View {
                     try await changesRef.setData(from: changeLog)
                 }
                 
+                // Note: Project budget doesn't change when editing phase name/dates, only when departments change
+                
                 await MainActor.run {
                     isSaving = false
                     onSaved()
@@ -3472,6 +3536,32 @@ private struct EditPhaseSheet: View {
                     errorMessage = "Failed to update phase: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Helper function to update project budget
+    private func updateProjectBudget(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            var totalBudget: Double = 0
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    totalBudget += phase.departments.values.reduce(0, +)
+                }
+            }
+            
+            // Update project budget
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "budget": totalBudget,
+                    "updatedAt": Timestamp()
+                ])
+        } catch {
+            print("Error updating project budget: \(error.localizedDescription)")
         }
     }
 }

@@ -1079,6 +1079,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 ])
             }
             
+            // Update project budget after changing department budget
+            await updateProjectBudget(projectId: projectId, customerId: customerID)
+            
             // Reload expenses to refresh the budget
             await MainActor.run {
                 self.totalBudget = newBudget
@@ -1090,6 +1093,32 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             await MainActor.run {
                 self.errorMessage = "Failed to update budget: \(error.localizedDescription)"
             }
+        }
+    }
+    
+    // Helper function to update project budget
+    private func updateProjectBudget(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            var totalBudget: Double = 0
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    totalBudget += phase.departments.values.reduce(0, +)
+                }
+            }
+            
+            // Update project budget
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "budget": totalBudget,
+                    "updatedAt": Timestamp()
+                ])
+        } catch {
+            print("Error updating project budget: \(error.localizedDescription)")
         }
     }
     
@@ -1128,6 +1157,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 }
             }
             
+            // Update project budget after deleting department
+            await updateProjectBudget(projectId: projectId, customerId: customerID)
+            
             // Notify parent views to refresh
             await MainActor.run {
                 NotificationCenter.default.post(name: NSNotification.Name("DepartmentDeleted"), object: nil)
@@ -1158,6 +1190,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             try await phaseRef.updateData([
                 "departments.\(department)": FieldValue.delete()
             ])
+            
+            // Update project budget after deleting department from phase
+            await updateProjectBudget(projectId: projectId, customerId: customerID)
             
             // Notify parent views to refresh
             await MainActor.run {
@@ -1408,25 +1443,66 @@ struct AddDepartmentSheetForDelete: View {
         isSaving = true
         errorMessage = nil
 
-        let db = Firestore.firestore()
-        let phaseRef = db.collection(FirebaseCollections.projects)
-            .document(projectId)
-            .collection("phases")
-            .document(phaseId)
-        
-        // Use updateData with the department key path to properly merge
-        phaseRef.updateData([
-            "departments.\(departmentName)": amount
-        ]) { error in
-            DispatchQueue.main.async {
-                self.isSaving = false
-                if let error = error {
-                    self.errorMessage = "Failed to save: \(error.localizedDescription)"
-                } else {
-                    self.onSaved()
-                    self.dismiss()
+        Task {
+            do {
+                // Get customerId from Firebase Auth
+                guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+                    await MainActor.run {
+                        isSaving = false
+                        errorMessage = "Customer ID not found. Please log in again."
+                    }
+                    return
+                }
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phaseId)
+                
+                // Use updateData with the department key path to properly merge
+                try await phaseRef.updateData([
+                    "departments.\(departmentName)": amount
+                ])
+                
+                // Update project budget after adding department
+                await updateProjectBudget(projectId: projectId, customerId: customerId)
+                
+                await MainActor.run {
+                    isSaving = false
+                    onSaved()
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    errorMessage = "Failed to save: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Helper function to update project budget
+    private func updateProjectBudget(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            var totalBudget: Double = 0
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    totalBudget += phase.departments.values.reduce(0, +)
+                }
+            }
+            
+            // Update project budget
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "budget": totalBudget,
+                    "updatedAt": Timestamp()
+                ])
+        } catch {
+            print("Error updating project budget: \(error.localizedDescription)")
         }
     }
 }
