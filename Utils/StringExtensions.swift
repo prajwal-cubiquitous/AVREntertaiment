@@ -19,4 +19,14 @@ extension Int {
         formatter.maximumFractionDigits = 0
         return formatter.string(from: NSNumber(value: self)) ?? "₹0"
     }
+}
+
+extension Double {
+    var formattedCurrency: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: self)) ?? "₹0.00"
+    }
 } 

@@ -17,6 +17,12 @@ struct ExpenseDetailView: View {
     @State private var showingSuccessAlert = false
     @State private var successMessage = ""
     
+    // Budget Context State
+    @State private var allocatedBudget: Double = 0
+    @State private var spentAmount: Double = 0
+    @State private var isLoadingBudget = false
+    @State private var phaseName: String? = nil
+    
     private let db = Firestore.firestore()
     private let currentUserPhone: String
     private let currentUserRole: UserRole
@@ -40,6 +46,11 @@ struct ExpenseDetailView: View {
                         
                         // Expense Details Card
                         expenseDetailsCard
+                        
+                        // Budget Context Card (if phase and department info available)
+                        if expense.phaseId != nil {
+                            budgetContextCard
+                        }
                         
                         // Payment Information Card
                         paymentInfoCard
@@ -113,6 +124,11 @@ struct ExpenseDetailView: View {
                 .padding(DesignSystem.Spacing.large)
                 .background(Color(.systemGray6))
                 .cornerRadius(DesignSystem.CornerRadius.large)
+            }
+        }
+        .onAppear {
+            if expense.phaseId != nil {
+                loadBudgetContext()
             }
         }
     }
@@ -209,6 +225,227 @@ struct ExpenseDetailView: View {
         .background(Color(.systemBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+    }
+    
+    // MARK: - Budget Context Card
+    private var budgetContextCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Title with icon
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+                
+                Text("Budget Context")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            
+            // Phase and Department Pills
+            HStack(spacing: DesignSystem.Spacing.small) {
+                if let phaseName = phaseName ?? expense.phaseName {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.fill")
+                            .font(.caption2)
+                        Text(phaseName)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(8)
+                }
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "building.2.fill")
+                        .font(.caption2)
+                    Text(expense.department)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(.systemGray5))
+                .cornerRadius(8)
+            }
+            
+            // Budget Breakdown
+            VStack(spacing: DesignSystem.Spacing.small) {
+                // Allocated
+                HStack {
+                    Text("Allocated")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(Double(allocatedBudget).formattedCurrency)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                // Spent
+                HStack {
+                    Text("Spent")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(Double(spentAmount).formattedCurrency)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.orange)
+                }
+                
+                // Remaining
+                HStack {
+                    Text("Remaining")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: 6) {
+                        Text(Double(remainingBudget).formattedCurrency)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(remainingBudget >= 0 ? .green : .red)
+                        
+                        // Percentage pill
+                        if allocatedBudget > 0 {
+                            Text("\(Int(spentPercentage))%")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color(.systemGray5))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+            }
+            
+            // Progress Bar
+            if allocatedBudget > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color(.systemGray5))
+                            .frame(height: 8)
+                        
+                        // Spent portion (orange) - from left
+                        if spentPercentage > 0 {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.orange)
+                                .frame(
+                                    width: max(0, min(CGFloat(spentPercentage / 100) * geometry.size.width, geometry.size.width)),
+                                    height: 8
+                                )
+                        }
+                        
+                        // Remaining portion (green) - after spent portion
+                        if remainingBudget > 0 && remainingPercentage > 0 {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.green)
+                                .frame(
+                                    width: max(0, min(CGFloat(remainingPercentage / 100) * geometry.size.width, geometry.size.width)),
+                                    height: 8
+                                )
+                                .offset(x: max(0, min(CGFloat(spentPercentage / 100) * geometry.size.width, geometry.size.width)))
+                        }
+                    }
+                }
+                .frame(height: 8)
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .redacted(reason: isLoadingBudget ? .placeholder : [])
+    }
+    
+    // MARK: - Budget Context Computed Properties
+    private var remainingBudget: Double {
+        allocatedBudget - spentAmount
+    }
+    
+    private var spentPercentage: Double {
+        guard allocatedBudget > 0 else { return 0 }
+        return (spentAmount / allocatedBudget) * 100
+    }
+    
+    private var remainingPercentage: Double {
+        guard allocatedBudget > 0 else { return 0 }
+        return (remainingBudget / allocatedBudget) * 100
+    }
+    
+    // MARK: - Load Budget Context
+    private func loadBudgetContext() {
+        guard let phaseId = expense.phaseId else { return }
+        
+        isLoadingBudget = true
+        
+        Task {
+            do {
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                
+                // Fetch phase to get department budget
+                let phaseDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: expense.projectId)
+                    .document(phaseId)
+                    .getDocument()
+                
+                if let phase = try? phaseDoc.data(as: Phase.self) {
+                    // Get allocated budget for this department in this phase
+                    let departmentBudget = phase.departments[expense.department] ?? 0
+                    
+                    // Store phase name
+                    await MainActor.run {
+                        self.phaseName = phase.phaseName
+                        self.allocatedBudget = departmentBudget
+                    }
+                    
+                    // Fetch all approved expenses for this phase and department
+                    let expensesSnapshot = try await FirebasePathHelper.shared
+                        .expensesCollection(customerId: customerId, projectId: expense.projectId)
+                        .whereField("phaseId", isEqualTo: phaseId)
+                        .whereField("department", isEqualTo: expense.department)
+                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                        .getDocuments()
+                    
+                    // Calculate total spent
+                    var totalSpent: Double = 0
+                    for expenseDoc in expensesSnapshot.documents {
+                        if let expense = try? expenseDoc.data(as: Expense.self) {
+                            totalSpent += expense.amount
+                        }
+                    }
+                    
+                    await MainActor.run {
+                        self.spentAmount = totalSpent
+                        self.isLoadingBudget = false
+                    }
+                } else {
+                    await MainActor.run {
+                        self.isLoadingBudget = false
+                    }
+                }
+            } catch {
+                print("Error loading budget context: \(error.localizedDescription)")
+                await MainActor.run {
+                    self.isLoadingBudget = false
+                }
+            }
+        }
     }
     
     // MARK: - Payment Information Card

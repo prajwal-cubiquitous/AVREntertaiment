@@ -1585,7 +1585,7 @@ private struct BudgetComparisonRow: View {
                 
                 Spacer()
                 
-                Text("₹\(budget.approvedBudget.formattedCurrency) / ₹\(budget.totalBudget.formattedCurrency)")
+                Text("₹\(Double(budget.approvedBudget).formattedCurrency) / ₹\(Double(budget.totalBudget).formattedCurrency)")
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(.secondary)
             }
@@ -1796,7 +1796,7 @@ struct EnhancedDepartmentBudgetCard: View {
                         
                         Spacer()
                         
-                        Text("\(budget.totalBudget.formattedCurrency)")
+                        Text("\(Double(budget.totalBudget).formattedCurrency)")
                             .font(DesignSystem.Typography.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
@@ -2786,7 +2786,7 @@ struct TotalBudgetCard: View {
                     .foregroundColor(.secondary)
                 
                 // Remaining amount
-                Text("Remaining: \(viewModel.remainingBudget.formattedCurrency)")
+                Text("Remaining: \(Double(viewModel.remainingBudget).formattedCurrency)")
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
                     .fontWeight(.medium)
