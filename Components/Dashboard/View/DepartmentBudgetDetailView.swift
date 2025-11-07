@@ -292,8 +292,8 @@ struct DepartmentBudgetDetailView: View {
         VStack(spacing: 16) {
             // Department stats
             GeometryReader { geometry in
-                HStack(spacing: 0) {
-                    // Total Budget
+                VStack(spacing: 12) {
+                    // 🔹 Total Budget (Top Center)
                     VStack(spacing: 4) {
                         Text("Total Budget")
                             .font(.caption)
@@ -307,42 +307,44 @@ struct DepartmentBudgetDetailView: View {
                             .minimumScaleFactor(0.7)
                             .multilineTextAlignment(.center)
                     }
-                    .frame(width: geometry.size.width / 3, alignment: .leading)
-                    
-                    // Spent
-                    VStack(spacing: 4) {
-                        Text("Spent")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                    // 🔹 Spent and Remaining (Bottom Row)
+                    HStack {
+                        VStack(spacing: 4) {
+                            Text("Spent")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text(viewModel.totalSpentFormatted)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .frame(width: geometry.size.width / 2, alignment: .leading)
                         
-                        Text(viewModel.totalSpentFormatted)
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .multilineTextAlignment(.center)
+                        VStack(spacing: 4) {
+                            Text("Remaining")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text(viewModel.remainingBudgetFormatted)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .frame(width: geometry.size.width / 2, alignment: .trailing)
                     }
-                    .frame(width: geometry.size.width / 3, alignment: .center)
-                    
-                    // Remaining
-                    VStack(spacing: 4) {
-                        Text("Remaining")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text(viewModel.remainingBudgetFormatted)
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    .frame(width: geometry.size.width / 3, alignment: .trailing)
                 }
+                .frame(maxWidth: .infinity)
             }
-            .frame(height: 80)
+            .frame(height: 100)
             .padding(.horizontal, 12)
             .padding(.vertical, 16)
             .background(
@@ -354,7 +356,7 @@ struct DepartmentBudgetDetailView: View {
                     )
             )
             .padding(.horizontal, 16)
-            
+
             // Progress bar
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -414,14 +416,7 @@ struct DepartmentBudgetDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(.secondarySystemGroupedBackground))
-            .cornerRadius(10)
-
-            // Unified Filter & Sort Menu
-            HStack {
+                
                 Menu {
                     // Status Section
                     Section("Status") {
@@ -477,8 +472,71 @@ struct DepartmentBudgetDetailView: View {
                         .background(Color.blue.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(10)
 
-                Spacer()
+            // Unified Filter & Sort Menu
+            HStack {
+//                Menu {
+//                    // Status Section
+//                    Section("Status") {
+//                        Button(action: { selectedFilter = nil }) {
+//                            HStack {
+//                                Text("All")
+//                                if selectedFilter == nil { Spacer(); Image(systemName: "checkmark") }
+//                            }
+//                        }
+//                        ForEach(ExpenseStatus.allCases, id: \.self) { status in
+//                            Button(action: { selectedFilter = status }) {
+//                                HStack {
+//                                    Text(status.rawValue.capitalized)
+//                                    if selectedFilter == status { Spacer(); Image(systemName: "checkmark") }
+//                                }
+//                            }
+//                        }
+//                    }
+//
+//                    // Sort Picker
+//                    Picker("Sort by", selection: $sortOption) {
+//                        ForEach(SortOption.allCases, id: \.self) { option in
+//                            Label(option.rawValue, systemImage: option.icon)
+//                                .tag(option)
+//                        }
+//                    }
+//                    .pickerStyle(.menu)
+//
+//                    // Date Range Controls
+//                    Toggle(isOn: $isDateRangeActive) {
+//                        Label("Enable Date Range", systemImage: "calendar")
+//                    }
+//                    Button {
+//                        showingDateRangePicker = true
+//                    } label: {
+//                        Label("Set Date Range…", systemImage: "calendar.badge.plus")
+//                    }
+//
+//                    // Clear section
+//                    if selectedFilter != nil || isDateRangeActive || searchText.isEmpty == false || sortOption != .dateDescending {
+//                        Button("Clear All Filters", role: .destructive) {
+//                            selectedFilter = nil
+//                            isDateRangeActive = false
+//                            searchText = ""
+//                            sortOption = .dateDescending
+//                        }
+//                    }
+//                } label: {
+//                    Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
+//                        .font(.subheadline)
+//                        .padding(.horizontal, 12)
+//                        .padding(.vertical, 8)
+//                        .background(Color.blue.opacity(0.1))
+//                        .clipShape(RoundedRectangle(cornerRadius: 12))
+//                }
+
+//                Spacer()
 
                 // Totals Summary
                 totalsSummary
