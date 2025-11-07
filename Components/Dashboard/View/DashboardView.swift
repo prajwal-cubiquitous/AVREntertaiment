@@ -9,12 +9,18 @@ import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
 
+struct DepartmentSelection: Identifiable {
+    let id = UUID()
+    let name: String
+    let phaseId: String?
+}
+
+
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel: DashboardViewModel
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var showingPendingApprovals = false
-    @State private var selectedDepartment: String? = nil
     @State private var showingReportSheet = false
     @State private var showingActionMenu = false
     @State private var showingAddExpense = false
@@ -2215,7 +2221,7 @@ private struct AllPhasesView: View {
     let onPhaseAdded: (() -> Void)?
     
     @State private var showingDepartmentDetail = false
-    @State private var selectedDepartment: String? = nil
+    @State private var selectedDepartment: DepartmentSelection? = nil
     @State private var selectedPhaseId: String? = nil
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
@@ -2681,8 +2687,7 @@ private struct AllPhasesView: View {
                                             amount: amount,
                                             spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                             onTap: {
-                                                selectedDepartment = dept
-                                                selectedPhaseId = phase.id
+                                                selectedDepartment = DepartmentSelection(name: dept, phaseId: phase.id)
                                                 // Small delay to ensure state is set before showing sheet
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                     showingDepartmentDetail = true
@@ -2696,8 +2701,7 @@ private struct AllPhasesView: View {
                                         OtherDepartmentCard(
                                             spent: anonymousSpent,
                                             onTap: {
-                                                selectedDepartment = "Other"
-                                                selectedPhaseId = phase.id
+                                                selectedDepartment = DepartmentSelection(name: "Other", phaseId: phase.id)
                                                 // Small delay to ensure state is set before showing sheet
 //                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                     showingDepartmentDetail = true
@@ -2769,43 +2773,33 @@ private struct AllPhasesView: View {
 //                .presentationDetents([.large])
 //            }
 //        }
-        .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartment,
-               let project = project,
+        .sheet(isPresented: $showingAddPhase) {
+            if let projectId = project?.id {
+                AddPhaseSheet(
+                    projectId: projectId,
+                    existingPhaseCount: phases.count,
+                    onSaved: {
+                        // Call parent callback to reload phases
+                        onPhaseAdded?()
+                    }
+                )
+                .presentationDetents([.medium])
+            }
+        }
+        .sheet(item: $selectedDepartment) { selection in
+            if let project = project,
                let projectId = project.id,
                !projectId.isEmpty {
-                
                 DepartmentBudgetDetailView(
-                    department: department,
+                    department: selection.name,
                     projectId: projectId,
                     role: role,
                     phoneNumber: phoneNumber,
-                    phaseId: selectedPhaseId
+                    phaseId: selection.phaseId
                 )
                 .presentationDetents([.large])
-            } else {
-                ProgressView("Loading…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let department = selectedDepartment,
-                   let project = project,
-                   let projectId = project.id,
-                   !projectId.isEmpty {
-                    
-                    DepartmentBudgetDetailView(
-                        department: department,
-                        projectId: projectId,
-                        role: role,
-                        phoneNumber: phoneNumber,
-                        phaseId: selectedPhaseId
-                    )
-                    .presentationDetents([.large])
-                } else {
-//                    ProgressView("Loading…")
-//                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
             }
         }
-
         .sheet(item: $phaseForDepartmentAdd) { phase in
             if let projectId = project?.id {
                 AddDepartmentSheet(
@@ -2816,19 +2810,6 @@ private struct AllPhasesView: View {
                         HapticManager.impact(.light)
                         // Optional: reload budgets when department is added
                         loadPhaseBudgets()
-                    }
-                )
-                .presentationDetents([.medium])
-            }
-        }
-        .sheet(isPresented: $showingAddPhase) {
-            if let projectId = project?.id {
-                AddPhaseSheet(
-                    projectId: projectId,
-                    existingPhaseCount: phases.count,
-                    onSaved: {
-                        // Call parent callback to reload phases
-                        onPhaseAdded?()
                     }
                 )
                 .presentationDetents([.medium])
@@ -2845,18 +2826,18 @@ private struct AllPhasesView: View {
             )
             .presentationDetents([.medium])
         }
-        .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartment, let project = project, let projectId = project.id, !projectId.isEmpty {
-                DepartmentBudgetDetailView(
-                    department: department,
-                    projectId: projectId,
-                    role: role,
-                    phoneNumber: phoneNumber,
-                    phaseId: selectedPhaseId
-                )
-                .presentationDetents([.large])
-            }
-        }
+//        .sheet(isPresented: $showingDepartmentDetail) {
+//            if let department = selectedDepartment, let project = project, let projectId = project.id, !projectId.isEmpty {
+//                DepartmentBudgetDetailView(
+//                    department: department,
+//                    projectId: projectId,
+//                    role: role,
+//                    phoneNumber: phoneNumber,
+//                    phaseId: selectedPhaseId
+//                )
+//                .presentationDetents([.large])
+//            }
+//        }
     }
 }
 
