@@ -448,7 +448,8 @@ struct MemberExpensesView: View {
             }
         }
         .onAppear {
-            viewModel.loadExpenses(for: project, memberId: member.id ?? "")
+            // Use phone number instead of ID since submittedBy stores phone number
+            viewModel.loadExpenses(for: project, memberPhoneNumber: member.phoneNumber)
         }
         .sheet(isPresented: $showingDateRangePicker) {
             AppleDateRangePickerSheet(
@@ -698,7 +699,7 @@ class MemberExpensesViewModel: ObservableObject {
         }
     }
     
-    func loadExpenses(for project: Project, memberId: String) {
+    func loadExpenses(for project: Project, memberPhoneNumber: String) {
         guard let projectId = project.id else { return }
         
         isLoading = true
@@ -706,28 +707,38 @@ class MemberExpensesViewModel: ObservableObject {
         
         Task {
             do {
-                let snapshot = try await db
-                    .collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .collection("expenses")
-                    .whereField("submittedBy", isEqualTo: memberId)
+                // Get customer ID
+                let customerId = try await customerID
+                
+                // Build query using FirebasePathHelper
+                // Note: submittedBy stores phone number, not user ID
+                let snapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("submittedBy", isEqualTo: memberPhoneNumber)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()
                 
+                print("🔍 [MemberExpenses] Found \(snapshot.documents.count) expense documents for member phone: \(memberPhoneNumber)")
+                
                 var loadedExpenses: [Expense] = []
                 for document in snapshot.documents {
-                    if let expense = try? document.data(as: Expense.self) {
+                    do {
+                        var expense = try document.data(as: Expense.self)
+                        expense.id = document.documentID
                         loadedExpenses.append(expense)
+                    } catch {
+                        print("❌ Error decoding expense document \(document.documentID): \(error)")
                     }
                 }
+                
+                print("✅ [MemberExpenses] Successfully loaded \(loadedExpenses.count) expenses for member phone: \(memberPhoneNumber)")
                 
                 await MainActor.run {
                     self.expenses = loadedExpenses
                     self.isLoading = false
                 }
             } catch {
+                print("❌ [MemberExpenses] Error loading expenses: \(error)")
                 await MainActor.run {
                     self.errorMessage = "Failed to load expenses: \(error.localizedDescription)"
                     self.isLoading = false
