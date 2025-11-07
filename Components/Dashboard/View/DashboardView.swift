@@ -2709,6 +2709,23 @@ private struct AllPhasesView: View {
             } else {
                 ProgressView("Loading…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let department = selectedDepartment,
+                   let project = project,
+                   let projectId = project.id,
+                   !projectId.isEmpty {
+                    
+                    DepartmentBudgetDetailView(
+                        department: department,
+                        projectId: projectId,
+                        role: role,
+                        phoneNumber: phoneNumber,
+                        phaseId: selectedPhaseId
+                    )
+                    .presentationDetents([.large])
+                } else {
+//                    ProgressView("Loading…")
+//                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
 
