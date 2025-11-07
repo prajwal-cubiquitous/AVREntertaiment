@@ -23,6 +23,7 @@ struct DashboardView: View {
     @State private var showingChats = false
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartmentForDetail: String? = nil
+    @State private var selectedPhaseIdForDetail: String? = nil
     @State private var showingTeamMembersDetail = false
     @State private var showingAnonymousExpensesDetail = false
     @State private var scrollToDepartmentSection = false
@@ -435,7 +436,8 @@ struct DashboardView: View {
                     department: department,
                     projectId: projectId,
                     role: role,
-                    phoneNumber: phoneNumber
+                    phoneNumber: phoneNumber,
+                    phaseId: selectedPhaseIdForDetail
                 )
                 .presentationDetents([.large])
             }
@@ -884,6 +886,7 @@ struct DashboardView: View {
                                                 spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                                 onTap: {
                                                     selectedDepartmentForDetail = dept
+                                                    selectedPhaseIdForDetail = phase.id
                                                     // Small delay to ensure state is set before showing sheet
                                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                         showingDepartmentDetail = true
@@ -899,8 +902,8 @@ struct DashboardView: View {
                                                 onTap: {
                                                     // Set a special marker to indicate "Other" department
                                                     selectedDepartmentForDetail = "Other"
+                                                    selectedPhaseIdForDetail = phase.id
                                                     // Store phase ID for filtering anonymous expenses
-                                                    // We'll need to pass phaseId to DepartmentBudgetDetailView
                                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                         showingDepartmentDetail = true
                                                     }
@@ -2136,6 +2139,7 @@ private struct AllPhasesView: View {
     
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartment: String? = nil
+    @State private var selectedPhaseId: String? = nil
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: DashboardView.PhaseSummary? = nil
     @State private var phaseEnabledMap: [String: Bool] = [:]
@@ -2601,6 +2605,7 @@ private struct AllPhasesView: View {
                                             spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
                                             onTap: {
                                                 selectedDepartment = dept
+                                                selectedPhaseId = phase.id
                                                 // Small delay to ensure state is set before showing sheet
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                     showingDepartmentDetail = true
@@ -2615,7 +2620,8 @@ private struct AllPhasesView: View {
                                             spent: anonymousSpent,
                                             onTap: {
                                                 selectedDepartment = "Other"
-//                                                 Small delay to ensure state is set before showing sheet
+                                                selectedPhaseId = phase.id
+                                                // Small delay to ensure state is set before showing sheet
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                     showingDepartmentDetail = true
                                                 }
@@ -2687,7 +2693,17 @@ private struct AllPhasesView: View {
 //            }
 //        }
         .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty { DepartmentBudgetDetailView( department: department, projectId: projectId, role: role, phoneNumber: phoneNumber ) .presentationDetents([.large]) } }
+            if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty { 
+                DepartmentBudgetDetailView( 
+                    department: department, 
+                    projectId: projectId, 
+                    role: role, 
+                    phoneNumber: phoneNumber,
+                    phaseId: selectedPhaseId
+                ) 
+                .presentationDetents([.large]) 
+            } 
+        }
         .sheet(item: $phaseForDepartmentAdd) { phase in
             if let projectId = project?.id {
                 AddDepartmentSheet(
@@ -2733,7 +2749,8 @@ private struct AllPhasesView: View {
                     department: department,
                     projectId: projectId,
                     role: role,
-                    phoneNumber: phoneNumber
+                    phoneNumber: phoneNumber,
+                    phaseId: selectedPhaseId
                 )
                 .presentationDetents([.large])
             }

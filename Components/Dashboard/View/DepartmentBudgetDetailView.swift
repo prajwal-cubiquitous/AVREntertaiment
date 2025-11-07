@@ -31,8 +31,18 @@ struct DepartmentBudgetDetailView: View {
     let projectId: String
     let role: UserRole?
     let phoneNumber: String
-    @StateObject private var viewModel = DepartmentBudgetDetailViewModel()
+    let phaseId: String?
+    @StateObject private var viewModel: DepartmentBudgetDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    init(department: String, projectId: String, role: UserRole?, phoneNumber: String, phaseId: String? = nil) {
+        self.department = department
+        self.projectId = projectId
+        self.role = role
+        self.phoneNumber = phoneNumber
+        self.phaseId = phaseId
+        self._viewModel = StateObject(wrappedValue: DepartmentBudgetDetailViewModel(phaseId: phaseId))
+    }
     @State private var selectedFilter: ExpenseStatus? = nil
     @State private var searchText = ""
     @State private var showingExpenseChat = false
@@ -56,10 +66,12 @@ struct DepartmentBudgetDetailView: View {
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
         
-        // Filter by status
+        // Filter by status - only apply filter if a specific status is selected
+        // When selectedFilter is nil, show all expenses (no filtering)
         if let status = selectedFilter {
             expenses = expenses.filter { $0.status == status }
         }
+        // When selectedFilter is nil, all expenses are shown (no filtering applied)
         
         // Filter by date range
         if isDateRangeActive {
@@ -170,6 +182,8 @@ struct DepartmentBudgetDetailView: View {
             }
         }
         .onAppear {
+            // Ensure filter is reset to "All" when view appears
+            selectedFilter = nil
             viewModel.loadExpenses(for: department, projectId: projectId)
         }
         .sheet(isPresented: $showingExpenseChat) {
@@ -420,14 +434,19 @@ struct DepartmentBudgetDetailView: View {
                 Menu {
                     // Status Section
                     Section("Status") {
-                        Button(action: { selectedFilter = nil }) {
+                        Button(action: { 
+                            // Explicitly reset filter to show all expenses
+                            selectedFilter = nil
+                        }) {
                             HStack {
                                 Text("All")
                                 if selectedFilter == nil { Spacer(); Image(systemName: "checkmark") }
                             }
                         }
                         ForEach(ExpenseStatus.allCases, id: \.self) { status in
-                            Button(action: { selectedFilter = status }) {
+                            Button(action: { 
+                                selectedFilter = status
+                            }) {
                                 HStack {
                                     Text(status.rawValue.capitalized)
                                     if selectedFilter == status { Spacer(); Image(systemName: "checkmark") }
@@ -905,6 +924,12 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     @Published var phaseIds: [String] = [] // Store phase IDs that contain this department
     @Published var phasesWithOnlyThisDepartment: [(id: String, name: String)] = [] // Phases with only this department
     
+    let phaseId: String? // Store the phaseId passed from the view
+    
+    init(phaseId: String? = nil) {
+        self.phaseId = phaseId
+    }
+    
     var remainingBudget: Double {
         totalBudget - totalSpent
     }
@@ -967,6 +992,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     // Load expenses for the specific department
                     let expensesSnapshot = try await FirebasePathHelper.shared
                         .expensesCollection(customerId: customerID, projectId: projectId)
+                        .whereField("phaseId", isEqualTo: phaseId)
                         .whereField("department", isEqualTo: department)
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
@@ -1310,7 +1336,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         department: "Costumes",
         projectId: "128YgC7uVnge9RLxVrgG",
         role: .APPROVER,
-        phoneNumber: "9876543218"
+        phoneNumber: "9876543218",
+        phaseId: nil
     )
 }
 
