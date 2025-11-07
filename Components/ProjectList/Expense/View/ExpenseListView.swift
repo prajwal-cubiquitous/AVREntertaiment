@@ -5,9 +5,7 @@ struct ExpenseListView: View {
     let project: Project
     @StateObject private var viewModel: ExpenseListViewModel
     let currentUserPhone: String
-    @State private var showingExpenseChat = false
     @State private var selectedExpenseForChat: Expense?
-    @State private var showingEditExpense = false
     @State private var selectedExpenseForEdit: Expense?
     @EnvironmentObject var authService: FirebaseAuthService
     
@@ -51,21 +49,18 @@ struct ExpenseListView: View {
                 project: project
             )
         }
-        .sheet(isPresented: $showingExpenseChat) {
-            if let expense = selectedExpenseForChat {
-                ExpenseChatView(
-                    expense: expense,
-                    userPhoneNumber: currentUserPhone,
-                    projectId: project.id ?? "",
-                    role: .USER // You might want to get this from user context
-                )
-            }
+        .sheet(item: $selectedExpenseForChat) { expense in
+            ExpenseChatView(
+                expense: expense,
+                userPhoneNumber: currentUserPhone,
+                projectId: project.id ?? "",
+                role: .USER // adjust as needed
+            )
         }
-        .sheet(isPresented: $showingEditExpense) {
-            if let expense = selectedExpenseForEdit {
-                EditExpenseView(expense: expense, project: project)
-            }
+        .sheet(item: $selectedExpenseForEdit) { expense in
+            EditExpenseView(expense: expense, project: project)
         }
+
     }
     
     // MARK: - Loading State
@@ -112,11 +107,9 @@ struct ExpenseListView: View {
                     expense: expense,
                     onChatTapped: {
                         selectedExpenseForChat = expense
-                        showingExpenseChat = true
                     },
                     onEditTapped: {
                         selectedExpenseForEdit = expense
-                        showingEditExpense = true
                     }
                 )
             }
