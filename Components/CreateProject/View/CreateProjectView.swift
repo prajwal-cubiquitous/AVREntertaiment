@@ -819,12 +819,44 @@ struct PhaseCardView: View {
                 }
             }
             .id("phase_\(phase.id)_departments")
+            
+            // Phase Budget Summary
+            phaseBudgetView(for: phase.id)
 
             Divider()
         }
         .padding(DesignSystem.Spacing.medium)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Phase Budget View
+    
+    private func phaseBudgetView(for phaseId: UUID) -> some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "indianrupeesign.circle.fill")
+                .foregroundColor(.blue)
+                .font(DesignSystem.Typography.callout)
+                .symbolRenderingMode(.hierarchical)
+            
+            Text("Phase Budget:")
+                .font(DesignSystem.Typography.subheadline)
+                .foregroundColor(.secondary)
+            
+            Spacer()
+            
+            Text(viewModel.phaseBudgetFormatted(for: phaseId))
+                .font(DesignSystem.Typography.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+        }
+        .padding(.vertical, DesignSystem.Spacing.small)
+        .padding(.horizontal, DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small)
+                .fill(Color(.tertiarySystemGroupedBackground))
+        )
+        .padding(.top, DesignSystem.Spacing.small)
     }
 }
 

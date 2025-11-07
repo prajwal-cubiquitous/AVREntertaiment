@@ -132,6 +132,23 @@ class CreateProjectViewModel: ObservableObject {
         return formatter.string(from: NSNumber(value: totalBudget)) ?? "₹0.00"
     }
     
+    // MARK: - Phase Budget Calculation
+    
+    func phaseBudget(for phaseId: UUID) -> Double {
+        guard let phase = phases.first(where: { $0.id == phaseId }) else {
+            return 0
+        }
+        return phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
+    }
+    
+    func phaseBudgetFormatted(for phaseId: UUID) -> String {
+        let budget = phaseBudget(for: phaseId)
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: budget)) ?? "₹0.00"
+    }
+    
     var isFormValid: Bool {
         // Basic fields validation
         guard !projectName.trimmingCharacters(in: .whitespaces).isEmpty,
