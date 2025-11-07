@@ -155,9 +155,10 @@ struct AddExpenseView: View {
                     categoriesView
                 } header: {
                     categoriesHeader
-                } footer: {
-                    categoriesFooter
                 }
+//                footer: {
+//                    categoriesFooter
+//                }
                 
                 // MARK: - Payment Mode
                 Section {
