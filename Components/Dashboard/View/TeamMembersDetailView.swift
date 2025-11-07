@@ -370,6 +370,7 @@ struct MemberExpensesView: View {
     @State private var startDate = Date()
     @State private var endDate = Date()
     @State private var isDateRangeActive = false
+    @State private var searchText = ""
     
     enum ExpenseFilter: String, CaseIterable {
         case all = "All"
@@ -398,6 +399,29 @@ struct MemberExpensesView: View {
             expenses = expenses.filter { exp in
                 let d = exp.createdAt.dateValue()
                 return d >= startDate && d <= endDate
+            }
+        }
+        
+        // Search filter - search across multiple fields
+        if !searchText.isEmpty {
+            let searchLower = searchText.lowercased()
+            expenses = expenses.filter { expense in
+                // Search in description
+                expense.description.lowercased().contains(searchLower) ||
+                // Search in department
+                expense.department.lowercased().contains(searchLower) ||
+                // Search in categories
+                expense.categoriesString.lowercased().contains(searchLower) ||
+                // Search in payment mode
+                expense.modeOfPayment.rawValue.lowercased().contains(searchLower) ||
+                // Search in status
+                expense.status.rawValue.lowercased().contains(searchLower) ||
+                // Search in amount (numeric search)
+                String(format: "%.0f", expense.amount).contains(searchText) ||
+                expense.amountFormatted.lowercased().contains(searchLower) ||
+                // Search in date
+                expense.date.contains(searchText) ||
+                expense.dateFormatted.lowercased().contains(searchLower)
             }
         }
         
@@ -439,6 +463,7 @@ struct MemberExpensesView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Search expenses by amount, description, department...")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") {
@@ -480,12 +505,13 @@ struct MemberExpensesView: View {
                         }
                         
                         // MARK: - Clear Filters
-                        if selectedFilter != .all || sortOption != .dateDescending {
+                        if selectedFilter != .all || sortOption != .dateDescending || isDateRangeActive || !searchText.isEmpty {
                             Section {
                                 Button("Clear All Filters", role: .destructive) {
                                     selectedFilter = .all
                                     sortOption = .dateDescending
                                     isDateRangeActive = false
+                                    searchText = ""
                                 }
                             }
                         }
@@ -697,21 +723,37 @@ struct MemberExpensesView: View {
     
     // MARK: - Empty Filter View
     private var emptyFilterView: some View {
-        VStack {
+        VStack(spacing: DesignSystem.Spacing.medium) {
             Spacer()
-            Image(systemName: "tray")
+            
+            Image(systemName: searchText.isEmpty ? "tray" : "magnifyingglass")
                 .font(.system(size: 60))
                 .foregroundColor(.gray.opacity(0.5))
-            Text("No \(selectedFilter.rawValue) Expenses")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-                .padding(.top)
-            Text("No expenses match the selected filter.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+            
+            if !searchText.isEmpty {
+                Text("No Results Found")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Text("No expenses match \"\(searchText)\"")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            } else {
+                Text("No \(selectedFilter.rawValue) Expenses")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Text("No expenses match the selected filter.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            
             Spacer()
         }
     }
