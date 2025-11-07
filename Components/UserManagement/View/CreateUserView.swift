@@ -106,9 +106,9 @@ struct CreateUserView: View {
                         Task {
                             await viewModel.checkAndCreateUser(authService: authService)
                             if viewModel.showSuccessMessage {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    dismiss()
-                                }
+//                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+//                                    dismiss()
+//                                }
                             }
                         }
                     }
