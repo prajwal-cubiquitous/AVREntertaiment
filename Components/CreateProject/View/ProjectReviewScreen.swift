@@ -197,7 +197,14 @@ struct PhaseReviewCard: View {
     }
     
     private var phaseBudget: Double {
-        phase.departments.compactMap { Double($0.amount) }.reduce(0, +)
+        phase.departments.compactMap { Double(removeFormatting(from: $0.amount)) }.reduce(0, +)
+    }
+    
+    // Helper to remove formatting (commas, spaces, etc.)
+    private func removeFormatting(from value: String) -> String {
+        return value.replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespaces)
     }
     
     private func formatAmount(_ amount: Double) -> String {
@@ -265,7 +272,7 @@ struct PhaseReviewCard: View {
                                 
                                 Spacer()
                                 
-                                Text(formatAmount(Double(dept.amount) ?? 0))
+                                Text(formatAmount(Double(removeFormatting(from: dept.amount)) ?? 0))
                                     .font(DesignSystem.Typography.body)
                                     .foregroundColor(.secondary)
                                     .fontWeight(.medium)

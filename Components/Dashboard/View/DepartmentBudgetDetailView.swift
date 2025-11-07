@@ -1460,10 +1460,82 @@ struct EditBudgetSheet: View {
     @State private var errorMessage: String?
     
     private var isFormValid: Bool {
-        if let value = Double(budgetText), value >= 0 {
+        if let value = Double(removeFormatting(from: budgetText)), value >= 0 {
             return true
         }
         return false
+    }
+    
+    // MARK: - Indian Number Formatting Helpers
+    
+    // Helper to remove formatting (commas, spaces, etc.)
+    private func removeFormatting(from value: String) -> String {
+        return value.replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+    
+    // Format number according to Indian numbering system (lakhs, crores)
+    private func formatIndianNumber(_ number: Double) -> String {
+        let integerPart = Int(number)
+        let decimalPart = number - Double(integerPart)
+        let integerString = String(integerPart)
+        let digits = Array(integerString)
+        let count = digits.count
+        
+        if count < 4 {
+            var result = integerString
+            if decimalPart > 0.0001 {
+                let decimalString = String(format: "%.2f", decimalPart)
+                if let dotIndex = decimalString.firstIndex(of: ".") {
+                    let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                    result += "." + afterDot
+                }
+            }
+            return result
+        }
+        
+        var groups: [String] = []
+        var remainingDigits = digits
+        
+        if remainingDigits.count >= 3 {
+            let lastThree = String(remainingDigits.suffix(3))
+            groups.append(lastThree)
+            remainingDigits = Array(remainingDigits.dropLast(3))
+        } else {
+            groups.append(String(remainingDigits))
+            remainingDigits = []
+        }
+        
+        while remainingDigits.count >= 2 {
+            let lastTwo = String(remainingDigits.suffix(2))
+            groups.insert(lastTwo, at: 0)
+            remainingDigits = Array(remainingDigits.dropLast(2))
+        }
+        
+        if remainingDigits.count == 1 {
+            groups.insert(String(remainingDigits[0]), at: 0)
+        }
+        
+        let result = groups.joined(separator: ",")
+        var finalResult = result
+        if decimalPart > 0.0001 {
+            let decimalString = String(format: "%.2f", decimalPart)
+            if let dotIndex = decimalString.firstIndex(of: ".") {
+                let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                finalResult += "." + afterDot
+            }
+        }
+        
+        return finalResult
+    }
+    
+    // Method to format amount as user types
+    func formatAmountInput(_ input: String) -> String {
+        let cleaned = removeFormatting(from: input)
+        guard !cleaned.isEmpty else { return "" }
+        guard let number = Double(cleaned) else { return cleaned }
+        return formatIndianNumber(number)
     }
     
     var body: some View {
@@ -1480,10 +1552,15 @@ struct EditBudgetSheet: View {
                 
                 Section {
                     HStack {
-                        TextField("Budget (₹)", text: $budgetText)
+                        TextField("Budget (₹)", text: Binding(
+                            get: { budgetText },
+                            set: { newValue in
+                                budgetText = formatAmountInput(newValue)
+                            }
+                        ))
                             .keyboardType(.decimalPad)
                         
-                        if let amount = Double(budgetText) {
+                        if let amount = Double(removeFormatting(from: budgetText)) {
                             Text(Int(amount).formattedCurrency)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -1517,13 +1594,13 @@ struct EditBudgetSheet: View {
                 }
             }
             .onAppear {
-                budgetText = String(format: "%.0f", currentBudget)
+                budgetText = formatIndianNumber(currentBudget)
             }
         }
     }
     
     private func save() {
-        guard let newBudget = Double(budgetText), newBudget >= 0 else {
+        guard let newBudget = Double(removeFormatting(from: budgetText)), newBudget >= 0 else {
             errorMessage = "Please enter a valid budget amount"
             return
         }
@@ -1557,6 +1634,78 @@ struct AddDepartmentSheetForDelete: View {
     private var isFormValid: Bool {
         !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+    
+    // MARK: - Indian Number Formatting Helpers
+    
+    // Helper to remove formatting (commas, spaces, etc.)
+    private func removeFormatting(from value: String) -> String {
+        return value.replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+    
+    // Format number according to Indian numbering system (lakhs, crores)
+    private func formatIndianNumber(_ number: Double) -> String {
+        let integerPart = Int(number)
+        let decimalPart = number - Double(integerPart)
+        let integerString = String(integerPart)
+        let digits = Array(integerString)
+        let count = digits.count
+        
+        if count < 4 {
+            var result = integerString
+            if decimalPart > 0.0001 {
+                let decimalString = String(format: "%.2f", decimalPart)
+                if let dotIndex = decimalString.firstIndex(of: ".") {
+                    let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                    result += "." + afterDot
+                }
+            }
+            return result
+        }
+        
+        var groups: [String] = []
+        var remainingDigits = digits
+        
+        if remainingDigits.count >= 3 {
+            let lastThree = String(remainingDigits.suffix(3))
+            groups.append(lastThree)
+            remainingDigits = Array(remainingDigits.dropLast(3))
+        } else {
+            groups.append(String(remainingDigits))
+            remainingDigits = []
+        }
+        
+        while remainingDigits.count >= 2 {
+            let lastTwo = String(remainingDigits.suffix(2))
+            groups.insert(lastTwo, at: 0)
+            remainingDigits = Array(remainingDigits.dropLast(2))
+        }
+        
+        if remainingDigits.count == 1 {
+            groups.insert(String(remainingDigits[0]), at: 0)
+        }
+        
+        let result = groups.joined(separator: ",")
+        var finalResult = result
+        if decimalPart > 0.0001 {
+            let decimalString = String(format: "%.2f", decimalPart)
+            if let dotIndex = decimalString.firstIndex(of: ".") {
+                let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                finalResult += "." + afterDot
+            }
+        }
+        
+        return finalResult
+    }
+    
+    // Method to format amount as user types
+    func formatAmountInput(_ input: String) -> String {
+        let cleaned = removeFormatting(from: input)
+        guard !cleaned.isEmpty else { return "" }
+        guard let number = Double(cleaned) else { return cleaned }
+        return formatIndianNumber(number)
+    }
 
     var body: some View {
         NavigationView {
@@ -1577,10 +1726,15 @@ struct AddDepartmentSheetForDelete: View {
                         .focused($focusedField, equals: .name)
 
                     HStack {
-                        TextField("Budget (₹)", text: $budgetText)
+                        TextField("Budget (₹)", text: Binding(
+                            get: { budgetText },
+                            set: { newValue in
+                                budgetText = formatAmountInput(newValue)
+                            }
+                        ))
                             .keyboardType(.decimalPad)
                             .focused($focusedField, equals: .budget)
-                        if let amount = Double(budgetText) {
+                        if let amount = Double(removeFormatting(from: budgetText)) {
                             Text(Int(amount).formattedCurrency)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -1609,7 +1763,7 @@ struct AddDepartmentSheetForDelete: View {
     }
 
     private func save() {
-        let amount = Double(budgetText) ?? 0
+        let amount = Double(removeFormatting(from: budgetText)) ?? 0
         isSaving = true
         errorMessage = nil
 

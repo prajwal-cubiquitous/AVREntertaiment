@@ -760,7 +760,8 @@ struct PhaseCardView: View {
                 ForEach($phase.departments) { $dept in
                     DepartmentInputRow(
                         item: $dept,
-                        errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id)
+                        errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id),
+                        viewModel: viewModel
                     )
                     .id("phase_\(phase.id)_dept_\(dept.id)_name")
                 }
@@ -962,6 +963,8 @@ private struct SectionHeaderLabel: View {
 private struct DepartmentInputRow: View {
     @Binding var item: DepartmentItem
     let errorMessage: String?
+    @ObservedObject var viewModel: CreateProjectViewModel
+    @State private var rawAmountInput: String = ""
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -990,7 +993,18 @@ private struct DepartmentInputRow: View {
                         .foregroundColor(.secondary)
                         .textCase(.uppercase)
                     
-                    TextField("", text: $item.amount)
+                    TextField("", text: Binding(
+                        get: { rawAmountInput.isEmpty ? item.amount : rawAmountInput },
+                        set: { newValue in
+                            // Store raw input
+                            rawAmountInput = newValue
+                            // Format and update the item
+                            let formatted = viewModel.formatAmountInput(newValue)
+                            item.amount = formatted
+                            // Update raw input to show formatted value
+                            rawAmountInput = formatted
+                        }
+                    ))
                         .keyboardType(.decimalPad)
                         .font(DesignSystem.Typography.callout)
                         .fontWeight(.medium)
@@ -1000,9 +1014,20 @@ private struct DepartmentInputRow: View {
                         .background(Color(.tertiarySystemGroupedBackground))
                         .cornerRadius(DesignSystem.CornerRadius.field)
                         .frame(width: 100)
+                        .onAppear {
+                            // Initialize raw input with current amount
+                            rawAmountInput = item.amount
+                        }
+                        .onChange(of: item.amount) { oldValue, newValue in
+                            // Sync raw input when item.amount changes externally
+                            if rawAmountInput != newValue {
+                                rawAmountInput = newValue
+                            }
+                        }
                         .onSubmit {
                             if item.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 item.amount = "0"
+                                rawAmountInput = "0"
                             }
                         }
                 }
