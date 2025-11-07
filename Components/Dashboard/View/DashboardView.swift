@@ -739,8 +739,8 @@ struct DashboardView: View {
                                                 .fontWeight(.semibold)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
-                                                .background(Color.green.opacity(0.15))
-                                                .foregroundColor(.green)
+                                                .background(Color.purple.opacity(0.15))
+                                                .foregroundColor(.purple)
                                                 .cornerRadius(8)
 
                                             Spacer(minLength: 8)
@@ -748,11 +748,11 @@ struct DashboardView: View {
                                             Text(Int(phaseBudget.totalBudget).formattedCurrency)
                                                 .font(.headline)
                                                 .fontWeight(.bold)
-                                                .foregroundColor(.green)
+                                                .foregroundColor(.purple)
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
-                                        .background(Color.green.opacity(0.08))
+                                        .background(Color.purple.opacity(0.08))
                                         .cornerRadius(12)
 
                                     }
@@ -2442,8 +2442,8 @@ private struct AllPhasesView: View {
                                                 .fontWeight(.semibold)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 4)
-                                                .background(Color.green.opacity(0.15))
-                                                .foregroundColor(.green)
+                                                .background(Color.purple.opacity(0.15))
+                                                .foregroundColor(.purple)
                                                 .cornerRadius(8)
 
                                             Spacer(minLength: 8)
@@ -2451,11 +2451,11 @@ private struct AllPhasesView: View {
                                             Text(Int(phaseBudget.totalBudget).formattedCurrency)
                                                 .font(.headline)
                                                 .fontWeight(.bold)
-                                                .foregroundColor(.green)
+                                                .foregroundColor(.purple)
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
-                                        .background(Color.green.opacity(0.08))
+                                        .background(Color.purple.opacity(0.08))
                                         .cornerRadius(12)
 
                                     }
