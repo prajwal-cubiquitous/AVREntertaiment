@@ -105,8 +105,103 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     // MARK: - Computed Properties
+    
+    // Helper to remove formatting (commas, spaces, etc.)
+    private func removeFormatting(from value: String) -> String {
+        return value.replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespaces)
+    }
+    
+    // Format number according to Indian numbering system (lakhs, crores)
+    // Indian numbering: from RIGHT, first 3 digits, then groups of 2
+    // Examples: 1,000; 10,000; 1,00,000 (lakh); 10,00,000; 1,00,00,000 (crore)
+    func formatIndianNumber(_ number: Double) -> String {
+        // Handle decimal part
+        let integerPart = Int(number)
+        let decimalPart = number - Double(integerPart)
+        
+        // Convert integer to string
+        let integerString = String(integerPart)
+        let digits = Array(integerString)
+        let count = digits.count
+        
+        // For numbers < 1000, no formatting needed
+        if count < 4 {
+            var result = integerString
+            // Add decimal part if exists
+            if decimalPart > 0.0001 {
+                let decimalString = String(format: "%.2f", decimalPart)
+                if let dotIndex = decimalString.firstIndex(of: ".") {
+                    let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                    result += "." + afterDot
+                }
+            }
+            return result
+        }
+        
+        // Process from RIGHT to LEFT
+        // Indian numbering: last 3 digits, then groups of 2, then remaining
+        // Examples: 1,000; 10,000; 1,00,000; 10,00,000; 1,00,00,000
+        var groups: [String] = []
+        var remainingDigits = digits
+        
+        // Step 1: Take last 3 digits from right (ones, tens, hundreds)
+        if remainingDigits.count >= 3 {
+            let lastThree = String(remainingDigits.suffix(3))
+            groups.append(lastThree) // Add to end (will be last group)
+            remainingDigits = Array(remainingDigits.dropLast(3))
+        } else {
+            // Less than 3 digits total, just add them
+            groups.append(String(remainingDigits))
+            remainingDigits = []
+        }
+        
+        // Step 2: Take groups of 2 digits from right (thousands, ten thousands, lakhs, etc.)
+        while remainingDigits.count >= 2 {
+            let lastTwo = String(remainingDigits.suffix(2))
+            groups.insert(lastTwo, at: 0) // Insert at beginning (will be before last 3)
+            remainingDigits = Array(remainingDigits.dropLast(2))
+        }
+        
+        // Step 3: If one digit remains, add it at the beginning
+        if remainingDigits.count == 1 {
+            groups.insert(String(remainingDigits[0]), at: 0)
+        }
+        
+        // Join with commas (groups are already in correct order: left to right)
+        let result = groups.joined(separator: ",")
+        
+        // Add decimal part if exists
+        var finalResult = result
+        if decimalPart > 0.0001 {
+            let decimalString = String(format: "%.2f", decimalPart)
+            if let dotIndex = decimalString.firstIndex(of: ".") {
+                let afterDot = String(decimalString[decimalString.index(after: dotIndex)...])
+                finalResult += "." + afterDot
+            }
+        }
+        
+        return finalResult
+    }
+    
+    // Method to format amount as user types
+    func formatAmountInput(_ input: String) -> String {
+        // Remove any existing formatting
+        let cleaned = removeFormatting(from: input)
+        
+        // If empty, return empty
+        guard !cleaned.isEmpty else { return "" }
+        
+        // Convert to number
+        guard let number = Double(cleaned) else { return cleaned }
+        
+        // Format according to Indian numbering system
+        return formatIndianNumber(number)
+    }
+    
     var amountValue: Double {
-        Double(amount) ?? 0.0
+        Double(removeFormatting(from: amount)) ?? 0.0
     }
     
     var formattedAmount: String {

@@ -75,7 +75,13 @@ struct AddExpenseView: View {
                         Text("Amount")
                             .font(.subheadline)
                             .foregroundColor(.primary)
-                        TextField("0", text: $viewModel.amount)
+                        TextField("0", text: Binding(
+                            get: { viewModel.amount },
+                            set: { newValue in
+                                // Format the input according to Indian numbering system
+                                viewModel.amount = viewModel.formatAmountInput(newValue)
+                            }
+                        ))
                             .keyboardType(.decimalPad)
                             .font(.title3)
                             .fontWeight(.medium)
