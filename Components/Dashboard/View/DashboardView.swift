@@ -2622,9 +2622,9 @@ private struct AllPhasesView: View {
                                                 selectedDepartment = "Other"
                                                 selectedPhaseId = phase.id
                                                 // Small delay to ensure state is set before showing sheet
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                     showingDepartmentDetail = true
-                                                }
+//                                                }
                                             }
                                         )
                                     }
@@ -2693,17 +2693,25 @@ private struct AllPhasesView: View {
 //            }
 //        }
         .sheet(isPresented: $showingDepartmentDetail) {
-            if let department = selectedDepartment, let project = project, let projectId = project.id, !department.isEmpty, !projectId.isEmpty { 
-                DepartmentBudgetDetailView( 
-                    department: department, 
-                    projectId: projectId, 
-                    role: role, 
+            if let department = selectedDepartment,
+               let project = project,
+               let projectId = project.id,
+               !projectId.isEmpty {
+                
+                DepartmentBudgetDetailView(
+                    department: department,
+                    projectId: projectId,
+                    role: role,
                     phoneNumber: phoneNumber,
                     phaseId: selectedPhaseId
-                ) 
-                .presentationDetents([.large]) 
-            } 
+                )
+                .presentationDetents([.large])
+            } else {
+                ProgressView("Loading…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
+
         .sheet(item: $phaseForDepartmentAdd) { phase in
             if let projectId = project?.id {
                 AddDepartmentSheet(
