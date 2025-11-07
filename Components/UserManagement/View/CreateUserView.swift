@@ -11,14 +11,24 @@ struct CreateUserView: View {
             Form {
                 Section {
                     // Phone Number Field
-                    HStack {
-                        Image(systemName: "phone.fill")
-                            .foregroundColor(.accentColor)
-                            .frame(width: 20)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Image(systemName: "phone.fill")
+                                .foregroundColor(.accentColor)
+                                .frame(width: 20)
+                            
+                            TextField("Phone Number", text: $viewModel.phoneNumber)
+                                .keyboardType(.phonePad)
+                                .textContentType(.telephoneNumber)
+                        }
                         
-                        TextField("Phone Number", text: $viewModel.phoneNumber)
-                            .keyboardType(.phonePad)
-                            .textContentType(.telephoneNumber)
+                        // Show phone number error only when validation has been attempted
+                        if viewModel.hasAttemptedValidation, let phoneError = viewModel.phoneNumberError {
+                            Text(phoneError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .padding(.leading, 28) // Align with text field
+                        }
                     }
                     
                     // Name Field
@@ -47,8 +57,9 @@ struct CreateUserView: View {
                 } header: {
                     Text("User Information")
                 } footer: {
-                    if !viewModel.isFormValid {
-                        Text("Please fill all fields with valid information")
+                    // Show general error message only when validation has been attempted
+                    if viewModel.hasAttemptedValidation, let errorMessage = viewModel.errorMessage, viewModel.phoneNumberError == nil {
+                        Text(errorMessage)
                             .foregroundColor(.red)
                     }
                 }
