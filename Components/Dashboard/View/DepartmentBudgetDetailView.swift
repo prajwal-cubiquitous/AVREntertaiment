@@ -978,28 +978,73 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 // Special handling for "Other" department (anonymous expenses)
                 let loadedExpenses: [Expense]
                 if department == "Other" {
-                    // Load all anonymous expenses for this project
-                    let expensesSnapshot = try await FirebasePathHelper.shared
+                    // Load anonymous expenses for this project
+                    let baseQuery = FirebasePathHelper.shared
                         .expensesCollection(customerId: customerID, projectId: projectId)
                         .whereField("isAnonymous", isEqualTo: true)
+                    
+                    // Build query conditionally based on whether phaseId is provided
+                    let query: Query
+                    if let phaseId = phaseId {
+                        query = baseQuery.whereField("phaseId", isEqualTo: phaseId)
+                        print("🔍 [Other Department] Loading anonymous expenses with phaseId: \(phaseId)")
+                    } else {
+                        query = baseQuery
+                        print("🔍 [Other Department] Loading all anonymous expenses (no phaseId filter)")
+                    }
+                    
+                    let expensesSnapshot = try await query
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
                     
+                    print("🔍 [Other Department] Found \(expensesSnapshot.documents.count) anonymous expenses in query")
+                    
                     loadedExpenses = expensesSnapshot.documents.compactMap { doc in
-                        try? doc.data(as: Expense.self)
+                        do {
+                            var expense = try doc.data(as: Expense.self)
+                            expense.id = doc.documentID
+                            return expense
+                        } catch {
+                            print("❌ Error decoding expense document \(doc.documentID): \(error)")
+                            return nil
+                        }
                     }
+                    
+                    print("✅ [Other Department] Successfully loaded \(loadedExpenses.count) expenses")
                 } else {
                     // Load expenses for the specific department
-                    let expensesSnapshot = try await FirebasePathHelper.shared
+                    let baseQuery = FirebasePathHelper.shared
                         .expensesCollection(customerId: customerID, projectId: projectId)
-                        .whereField("phaseId", isEqualTo: phaseId)
                         .whereField("department", isEqualTo: department)
+                    
+                    // Build query conditionally based on whether phaseId is provided
+                    let query: Query
+                    if let phaseId = phaseId {
+                        query = baseQuery.whereField("phaseId", isEqualTo: phaseId)
+                        print("🔍 Loading expenses for department: \(department), phaseId: \(phaseId)")
+                    } else {
+                        query = baseQuery
+                        print("🔍 Loading expenses for department: \(department), all phases (no phaseId filter)")
+                    }
+                    
+                    let expensesSnapshot = try await query
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
                     
+                    print("🔍 Found \(expensesSnapshot.documents.count) expenses in query for department: \(department)")
+                    
                     loadedExpenses = expensesSnapshot.documents.compactMap { doc in
-                        try? doc.data(as: Expense.self)
+                        do {
+                            var expense = try doc.data(as: Expense.self)
+                            expense.id = doc.documentID
+                            return expense
+                        } catch {
+                            print("❌ Error decoding expense document \(doc.documentID): \(error)")
+                            return nil
+                        }
                     }
+                    
+                    print("✅ Successfully loaded \(loadedExpenses.count) expenses for department: \(department)")
                 }
                 
                 // Calculate totals
