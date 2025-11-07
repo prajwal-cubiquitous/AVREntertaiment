@@ -310,17 +310,13 @@ private struct PhaseBreakdownView: View {
                 }
                 .padding(.vertical, DesignSystem.Spacing.medium)
             } else if !viewModel.currentPhases.isEmpty {
-                VStack(spacing: DesignSystem.Spacing.medium) {
+                VStack(spacing: DesignSystem.Spacing.jumbo) {
                     ForEach(Array(viewModel.currentPhases.enumerated()), id: \.element.id) { index, phase in
                         CurrentPhaseView(
                             phase: phase,
                             projectId: project.id ?? "",
                             phaseExtensionMap: viewModel.phaseExtensionMap
                         )
-                        
-                        if index < viewModel.currentPhases.count - 1 {
-                            Divider()
-                        }
                     }
                 }
             } else {
@@ -347,7 +343,6 @@ private struct CurrentPhaseView: View {
     let projectId: String
     let phaseExtensionMap: [String: Bool]
     
-    @State private var isExpanded = false
     @State private var showingRequestForm = false
     @State private var showingRequestStatus = false
     @State private var hasUserRequests = false
@@ -641,42 +636,26 @@ private struct CurrentPhaseView: View {
                 }
             }
             
-            // Department Breakdown
+            // Department Breakdown - Always visible, horizontal scrolling
             if !phase.departments.isEmpty {
                 Divider()
                 
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                }) {
-                    HStack {
-                        Text("Departments")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                        
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                
-                if isExpanded {
-                    VStack(spacing: DesignSystem.Spacing.small) {
-                        ForEach(Array(phase.departments.enumerated()), id: \.element.id) { index, department in
-                            DepartmentRowView(department: department)
-                            
-                            if index < phase.departments.count - 1 {
-                                Divider()
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Departments")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: DesignSystem.Spacing.medium) {
+                            ForEach(phase.departments) { department in
+                                HorizontalDepartmentCard(department: department)
                             }
                         }
+                        .padding(.horizontal, DesignSystem.Spacing.small)
                     }
-                    .padding(.top, DesignSystem.Spacing.small)
                 }
+                .padding(.top, DesignSystem.Spacing.small)
             }
         }
     }
@@ -878,7 +857,6 @@ private struct ProjectDetailPhaseCardView: View {
     let isInProgress: Bool
     let projectId: String
     let phaseExtensionMap: [String: Bool]
-    @State private var isExpanded = false
     @State private var showingRequestForm = false
     @State private var showingRequestStatus = false
     @State private var hasUserRequests = false
@@ -1122,53 +1100,137 @@ private struct ProjectDetailPhaseCardView: View {
                 }
             }
             
-            // Department Breakdown - Expandable
+            // Department Breakdown - Always visible, horizontal scrolling
             if !phase.departments.isEmpty {
                 Divider()
                     .padding(.vertical, DesignSystem.Spacing.extraSmall)
                 
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
-                }) {
-                    HStack {
-                        Text("Departments")
-                            .font(DesignSystem.Typography.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        Text("(\(phase.departments.count))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-                
-                if isExpanded {
-                    VStack(spacing: DesignSystem.Spacing.small) {
-                        ForEach(phase.departments) { department in
-                            DepartmentRowView(department: department)
-                            
-                            if department.id != phase.departments.last?.id {
-                                Divider()
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Departments")
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: DesignSystem.Spacing.medium) {
+                            ForEach(phase.departments) { department in
+                                HorizontalDepartmentCard(department: department)
                             }
                         }
+                        .padding(.horizontal, DesignSystem.Spacing.small)
                     }
-                    .padding(.top, DesignSystem.Spacing.small)
                 }
+                .padding(.top, DesignSystem.Spacing.small)
             }
         }
         .padding(.vertical, DesignSystem.Spacing.small)
     }
 }
 
+// MARK: - Horizontal Department Card for All Phases View
+private struct HorizontalDepartmentCard: View {
+    let department: ProjectDetailViewModel.DepartmentInfo
+    
+    private func formatCurrency(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_IN")
+        return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
+    var progressColor: Color {
+        if department.spentPercentage > 1.0 {
+            return .red
+        } else if department.spentPercentage > 0.8 {
+            return .orange
+        } else {
+            return .blue
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Department Name and Status Indicator
+            HStack {
+                Text(department.name)
+                    .font(DesignSystem.Typography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                Circle()
+                    .fill(progressColor)
+                    .frame(width: 8, height: 8)
+            }
+            
+            // Budget Information - Compact Layout
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                // Allocated Budget
+                HStack {
+                    Text("Allocated:")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(formatCurrency(department.allocatedBudget))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                // Approved Amount
+                HStack {
+                    Text("Approved:")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(formatCurrency(department.approvedAmount))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                // Remaining Budget
+                HStack {
+                    Text("Remaining:")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(formatCurrency(department.remainingAmount))
+                        .font(DesignSystem.Typography.caption1)
+                        .fontWeight(.semibold)
+                        .foregroundColor(department.remainingAmount >= 0 ? .green : .red)
+                }
+            }
+            
+            // Progress Bar
+            ProgressView(value: min(department.spentPercentage, 1.0))
+                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+                .scaleEffect(y: 0.8)
+            
+            // Utilization Percentage
+            HStack {
+                Text("\(Int(department.spentPercentage * 100))% utilized")
+                    .font(DesignSystem.Typography.caption2)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                if department.spentPercentage > 1.0 {
+                    Text("Over budget!")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.red)
+                        .fontWeight(.medium)
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(width: 280)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+}
 
 private struct EnhancedDepartmentRow: View {
     let name: String
