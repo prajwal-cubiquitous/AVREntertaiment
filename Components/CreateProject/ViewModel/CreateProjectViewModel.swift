@@ -601,6 +601,13 @@ class CreateProjectViewModel: ObservableObject {
             phases[index].departments.remove(atOffsets: offsets)
         }
     }
+    
+    func removeDepartmentById(from phaseId: UUID, departmentId: UUID) {
+        if let phaseIndex = phases.firstIndex(where: { $0.id == phaseId }),
+           let departmentIndex = phases[phaseIndex].departments.firstIndex(where: { $0.id == departmentId }) {
+            phases[phaseIndex].departments.remove(at: departmentIndex)
+        }
+    }
 
     // MARK: - Firestore Saving Logic
     func saveProject() {

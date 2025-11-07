@@ -761,7 +761,11 @@ struct PhaseCardView: View {
                     DepartmentInputRow(
                         item: $dept,
                         errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id),
-                        viewModel: viewModel
+                        viewModel: viewModel,
+                        canDelete: phase.departments.count > 1,
+                        onDelete: {
+                            viewModel.removeDepartmentById(from: phase.id, departmentId: dept.id)
+                        }
                     )
                     .id("phase_\(phase.id)_dept_\(dept.id)_name")
                 }
@@ -964,6 +968,8 @@ private struct DepartmentInputRow: View {
     @Binding var item: DepartmentItem
     let errorMessage: String?
     @ObservedObject var viewModel: CreateProjectViewModel
+    let canDelete: Bool
+    let onDelete: () -> Void
     @State private var rawAmountInput: String = ""
     
     var body: some View {
@@ -988,10 +994,28 @@ private struct DepartmentInputRow: View {
                 }
                 
                 VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
-                    Text("Budget")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
+                    HStack{
+                        Text("Budget")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                        
+                        if canDelete {
+                            Button(action: {
+                                HapticManager.selection()
+                                onDelete()
+                            }) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                                    .font(.system(size: 8))
+                                    .frame(width: 16, height: 16)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Delete department")
+                            .accessibilityHint("Removes this department from the phase")
+                        }
+                    }
                     
                     TextField("", text: Binding(
                         get: { rawAmountInput.isEmpty ? item.amount : rawAmountInput },
@@ -1031,6 +1055,23 @@ private struct DepartmentInputRow: View {
                             }
                         }
                 }
+                
+                // Delete Button - Following Apple's design guidelines for destructive actions
+//                if canDelete {
+//                    Button(action: {
+//                        HapticManager.selection()
+//                        onDelete()
+//                    }) {
+//                        Image(systemName: "trash")
+//                            .foregroundColor(.red)
+//                            .font(.system(size: 16))
+//                            .frame(width: 32, height: 32)
+//                            .contentShape(Rectangle())
+//                    }
+//                    .buttonStyle(.plain)
+//                    .accessibilityLabel("Delete department")
+//                    .accessibilityHint("Removes this department from the phase")
+//                }
             }
             
             if let error = errorMessage {
