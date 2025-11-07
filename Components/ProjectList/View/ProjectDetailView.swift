@@ -791,58 +791,70 @@ private struct AllPhasesSheetView: View {
     
     var body: some View {
         NavigationView {
-            List {
-                // Current Phases Section
-                if !currentPhases.isEmpty {
-                    Section {
-                        ForEach(currentPhases) { phase in
-                            ProjectDetailPhaseCardView(
-                                phase: phase,
-                                isInProgress: true,
-                                projectId: projectId,
-                                phaseExtensionMap: phaseExtensionMap
-                            )
-                        }
-                    } header: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock.fill")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                            Text("Current Phases")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                        }
-                    }
-                }
-                
-                // Expired Phases Section
-                if !expiredPhases.isEmpty {
-                    Section {
-                        ForEach(expiredPhases) { phase in
-                            ProjectDetailPhaseCardView(
-                                phase: phase,
-                                isInProgress: false,
-                                projectId: projectId,
-                                phaseExtensionMap: phaseExtensionMap
-                            )
-                        }
-                    } header: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                            Text("Completed Phases")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.jumbo) {
+                    // Current Phases Section
+                    if !currentPhases.isEmpty {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Text("Current Phases")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            
+                            VStack(spacing: DesignSystem.Spacing.jumbo) {
+                                ForEach(currentPhases) { phase in
+                                    ProjectDetailPhaseCardView(
+                                        phase: phase,
+                                        isInProgress: true,
+                                        projectId: projectId,
+                                        phaseExtensionMap: phaseExtensionMap
+                                    )
+                                    .padding(DesignSystem.Spacing.medium)
+                                    .cardStyle()
+                                }
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
                         }
                     }
-                }
-                
-                // Empty State
-                if allPhases.isEmpty {
-                    Section {
+                    
+                    // Expired Phases Section
+                    if !expiredPhases.isEmpty {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                Text("Completed Phases")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            
+                            VStack(spacing: DesignSystem.Spacing.jumbo) {
+                                ForEach(expiredPhases) { phase in
+                                    ProjectDetailPhaseCardView(
+                                        phase: phase,
+                                        isInProgress: false,
+                                        projectId: projectId,
+                                        phaseExtensionMap: phaseExtensionMap
+                                    )
+                                    .padding(DesignSystem.Spacing.medium)
+                                    .cardStyle()
+                                }
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                        }
+                    }
+                    
+                    // Empty State
+                    if allPhases.isEmpty {
                         VStack(spacing: DesignSystem.Spacing.small) {
                             Image(systemName: "calendar.badge.exclamationmark")
                                 .font(.system(size: 48))
@@ -862,9 +874,13 @@ private struct AllPhasesSheetView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, DesignSystem.Spacing.large)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
                     }
                 }
+                .padding(.top, DesignSystem.Spacing.medium)
+                .padding(.bottom, DesignSystem.Spacing.large)
             }
+            .background(Color(UIColor.systemGroupedBackground))
             .navigationTitle("All Phases")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
