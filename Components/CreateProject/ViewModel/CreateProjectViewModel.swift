@@ -50,12 +50,12 @@ class CreateProjectViewModel: ObservableObject {
     }()
     @Published var allowTemplateOverrides: Bool = false
     
-    // MARK: - Data Source for Dropdowns (private)
-    @Published private var allApprovers: [User] = []
+    // MARK: - Data Source for Dropdowns
+    @Published var allApprovers: [User] = [] // Made public for picker access
     @Published private var allUsers: [User] = []
 
     // Project-level selections (same for all phases)
-    @Published var selectedProjectManagers: [User] = []
+    @Published var selectedProjectManager: User? = nil // Single manager only
     @Published var selectedProjectTeamMembers: Set<User> = []
     @Published var projectManagerSearchText: String = ""
     @Published var projectTeamMemberSearchText: String = ""
@@ -101,9 +101,12 @@ class CreateProjectViewModel: ObservableObject {
     func filteredProjectManagers() -> [User] {
         if projectManagerSearchText.isEmpty { return [] }
         return allApprovers.filter {
-            $0.isActive && ($0.name.localizedCaseInsensitiveContains(projectManagerSearchText) ||
+            let isNotSelected = selectedProjectManager?.phoneNumber != $0.phoneNumber
+            let isActive = $0.isActive
+            let matchesSearch = $0.name.localizedCaseInsensitiveContains(projectManagerSearchText) ||
                             $0.phoneNumber.localizedCaseInsensitiveContains(projectManagerSearchText) ||
-                            ($0.email ?? "").localizedCaseInsensitiveContains(projectManagerSearchText))
+                            ($0.email ?? "").localizedCaseInsensitiveContains(projectManagerSearchText)
+            return isNotSelected && isActive && matchesSearch
         }
     }
     
@@ -160,7 +163,7 @@ class CreateProjectViewModel: ObservableObject {
         }
         
         // Validate project-level selections
-        if selectedProjectManagers.isEmpty { return false }
+        if selectedProjectManager == nil { return false }
         if selectedProjectTeamMembers.isEmpty { return false }
 
         // Validate each phase
@@ -230,8 +233,8 @@ class CreateProjectViewModel: ObservableObject {
     
     var projectManagersError: String? {
         guard shouldShowValidationErrors else { return nil }
-        if selectedProjectManagers.isEmpty {
-            return "At least one project manager is required"
+        if selectedProjectManager == nil {
+            return "A project manager is required"
         }
         return nil
     }
@@ -316,8 +319,8 @@ class CreateProjectViewModel: ObservableObject {
             return "projectDescription"
         }
         
-        // Check project managers
-        if selectedProjectManagers.isEmpty {
+        // Check project manager
+        if selectedProjectManager == nil {
             return "projectManagers"
         }
         
@@ -525,9 +528,11 @@ class CreateProjectViewModel: ObservableObject {
                     throw NSError(domain: "CreateProjectError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Customer ID not found. Please log in again."])
                 }
                 
-                // Project-level team members and managers
+                // Project-level team members and manager
+                // Note: Backend stores managerIds as array, but UI only allows single selection
                 let allTeamMembers = Set(selectedProjectTeamMembers.map { $0.phoneNumber })
-                let managerIds = selectedProjectManagers.map { $0.email ?? $0.phoneNumber }.filter { !$0.isEmpty }
+                let managerId = selectedProjectManager?.email ?? selectedProjectManager?.phoneNumber ?? ""
+                let managerIds = managerId.isEmpty ? [] : [managerId] // Store as array for backend compatibility
                 
                 // Create project data (without departments, they're in phases now)
                 // Use customer-specific projects collection
@@ -611,7 +616,7 @@ class CreateProjectViewModel: ObservableObject {
         client = ""
         location = ""
         currency = "INR"
-        selectedProjectManagers = []
+        selectedProjectManager = nil
         selectedProjectTeamMembers = []
         projectManagerSearchText = ""
         projectTeamMemberSearchText = ""

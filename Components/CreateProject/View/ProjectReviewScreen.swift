@@ -126,31 +126,29 @@ struct ProjectReviewScreen: View {
     // MARK: - Project Team Content
     private var projectTeamContent: some View {
         Group {
-            // Managers
-            if !viewModel.selectedProjectManagers.isEmpty {
+            // Manager (Single)
+            if let manager = viewModel.selectedProjectManager {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                     HStack(spacing: 6) {
                         Image(systemName: "person.badge.key.fill")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("Managers (\(viewModel.selectedProjectManagers.count))")
+                        Text("Manager")
                             .font(DesignSystem.Typography.subheadline)
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
                     }
                     .padding(.top, DesignSystem.Spacing.extraSmall)
                     
-                    ForEach(viewModel.selectedProjectManagers, id: \.id) { manager in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(Color.accentColor.opacity(0.2))
-                                .frame(width: 6, height: 6)
-                            Text(manager.name)
-                                .font(DesignSystem.Typography.body)
-                                .foregroundColor(.primary)
-                        }
-                        .padding(.leading, 12)
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.2))
+                            .frame(width: 6, height: 6)
+                        Text(manager.name)
+                            .font(DesignSystem.Typography.body)
+                            .foregroundColor(.primary)
                     }
+                    .padding(.leading, 12)
                 }
                 .padding(.vertical, DesignSystem.Spacing.extraSmall)
             }
@@ -167,7 +165,7 @@ struct ProjectReviewScreen: View {
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
                     }
-                    .padding(.top, viewModel.selectedProjectManagers.isEmpty ? DesignSystem.Spacing.extraSmall : DesignSystem.Spacing.small)
+                    .padding(.top, viewModel.selectedProjectManager == nil ? DesignSystem.Spacing.extraSmall : DesignSystem.Spacing.small)
                     
                     ForEach(Array(viewModel.selectedProjectTeamMembers), id: \.id) { member in
                         HStack(spacing: 8) {

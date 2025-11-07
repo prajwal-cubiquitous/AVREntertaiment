@@ -13,7 +13,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var startDate: Date
     @Published var endDate: Date
     @Published var teamMembers: [String]
-    @Published var managerNames: [String] = []
+    @Published var managerName: String? = nil // Single manager only
     @Published var tempApproverID: String?
     
     // Temporary Approver Properties
@@ -33,7 +33,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var approverSearchText = ""
     @Published var teamMemberSearchText = ""
     @Published var selectedTeamMembers: Set<User> = []
-    @Published var selectedManagers: Set<User> = []
+    @Published var selectedManager: User? = nil // Single manager only
     @Published var allApprovers: [User] = []
     @Published private var allUsers: [User] = []
     
@@ -99,7 +99,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     var filteredApprovers: [User] {
         if approverSearchText.isEmpty { return [] }
         return allApprovers.filter { approver in
-            let isNotSelected = !selectedManagers.contains(approver)
+            let isNotSelected = selectedManager?.phoneNumber != approver.phoneNumber
             let isActive = approver.isActive
             let matchesSearch = approver.name.localizedCaseInsensitiveContains(approverSearchText) ||
                               approver.phoneNumber.localizedCaseInsensitiveContains(approverSearchText)
@@ -146,9 +146,14 @@ class AdminProjectDetailViewModel: ObservableObject {
                         }
                     } else if user.role == .APPROVER {
                         loadedApprovers.append(user)
-                        // Support multiple managers
-                        if project.managerIds.contains(user.phoneNumber) {
-                            selectedManagers.insert(user)
+                        // Single manager only - take the first one found from managerIds array
+                        // Check both phoneNumber and email to match the stored managerId
+                        if selectedManager == nil {
+                            let matchesPhone = project.managerIds.contains(user.phoneNumber)
+                            let matchesEmail = user.email != nil && project.managerIds.contains(user.email!)
+                            if matchesPhone || matchesEmail {
+                                selectedManager = user
+                            }
                         }
                     }
                 }
@@ -157,8 +162,8 @@ class AdminProjectDetailViewModel: ObservableObject {
             allUsers = loadedUsers.sorted { $0.name < $1.name }
             allApprovers = loadedApprovers.sorted { $0.name < $1.name }
             
-            // Update manager names
-            managerNames = selectedManagers.map { $0.name }.sorted()
+            // Update manager name
+            managerName = selectedManager?.name
             
         } catch {
             errorMessage = "Failed to load users: \(error.localizedDescription)"
@@ -381,8 +386,9 @@ class AdminProjectDetailViewModel: ObservableObject {
                     saveTempApprover()
                 }
                 
-                // Support multiple managers
-                let managerIds = Array(selectedManagers).map { $0.phoneNumber }
+                // Single manager only - store as array (backend expects list)
+                let managerId = selectedManager?.email ?? selectedManager?.phoneNumber ?? ""
+                let managerIds = managerId.isEmpty ? [] : [managerId]
                 let data: [String: Any] = [
                     "managerIds": managerIds,
                     "teamMembers": Array(selectedTeamMembers).map { $0.phoneNumber }
@@ -393,7 +399,7 @@ class AdminProjectDetailViewModel: ObservableObject {
                     .updateData(data)
                 
                 teamMembers = Array(selectedTeamMembers).map { $0.phoneNumber }
-                managerNames = selectedManagers.map { $0.name }.sorted()
+                managerName = selectedManager?.name
                 isEditingTeam = false
                 showSuccess = true
                 
@@ -434,14 +440,14 @@ class AdminProjectDetailViewModel: ObservableObject {
     // MARK: - Team Management
     
     func selectManager(_ user: User) {
-        selectedManagers.insert(user)
+        selectedManager = user
         approverSearchText = ""
-        managerNames = selectedManagers.map { $0.name }.sorted()
+        managerName = user.name
     }
     
     func removeManager(_ user: User) {
-        selectedManagers.remove(user)
-        managerNames = selectedManagers.map { $0.name }.sorted()
+        selectedManager = nil
+        managerName = nil
     }
     
     func selectTeamMember(_ user: User) {

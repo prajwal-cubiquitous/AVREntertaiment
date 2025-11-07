@@ -281,32 +281,13 @@ struct CreateProjectView: View {
     private var projectTeamSection: some View {
         Section {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-                // Managers (Approvers) - allow multiple
+                // Manager (Approver) - single selection only
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Project Managers (Approvers)").font(.caption).foregroundColor(.secondary)
-                    if !viewModel.selectedProjectManagers.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(viewModel.selectedProjectManagers, id: \.self) { manager in
-                                HStack {
-                                    Text(manager.name).fontWeight(.bold)
-                                    Spacer()
-                                    Button(action: {
-                                        viewModel.selectedProjectManagers.removeAll { $0 == manager }
-                                    }) { Image(systemName: "xmark.circle.fill").foregroundColor(.gray) }
-                                }
-                                .padding(10).background(Color.blue.opacity(0.08)).cornerRadius(8)
-                            }
-                        }
-                    }
-                    SearchableDropdownView(
-                        title: "Search manager name/email/phone",
-                        searchText: $viewModel.projectManagerSearchText,
-                        items: viewModel.filteredProjectManagers(),
-                        itemContent: { user in Text("\(user.name) - \(user.email ?? user.phoneNumber)") },
-                        onSelect: { user in
-                            if !viewModel.selectedProjectManagers.contains(user) { viewModel.selectedProjectManagers.append(user) }
-                            viewModel.projectManagerSearchText = ""
-                        }
+                    Text("Project Manager (Approver)").font(.caption).foregroundColor(.secondary)
+                    SingleSelectionPicker(
+                        selectedUser: $viewModel.selectedProjectManager,
+                        users: viewModel.allApprovers.filter { $0.isActive },
+                        placeholder: "Select project manager"
                     )
                     
                     if let error = viewModel.projectManagersError {
@@ -544,30 +525,11 @@ struct CreateProjectView: View {
         FormSectionView(header: SectionHeaderLabel(title: "Project Team", icon: "person.3.fill")) {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Project Managers (Approvers)").font(.caption).foregroundColor(.secondary)
-                    if !viewModel.selectedProjectManagers.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ForEach(viewModel.selectedProjectManagers, id: \.self) { manager in
-                                HStack {
-                                    Text(manager.name).fontWeight(.bold)
-                                    Spacer()
-                                    Button(action: {
-                                        viewModel.selectedProjectManagers.removeAll { $0 == manager }
-                                    }) { Image(systemName: "xmark.circle.fill").foregroundColor(.gray) }
-                                }
-                                .padding(10).background(Color.blue.opacity(0.08)).cornerRadius(8)
-                            }
-                        }
-                    }
-                    SearchableDropdownView(
-                        title: "Search manager name/email/phone",
-                        searchText: $viewModel.projectManagerSearchText,
-                        items: viewModel.filteredProjectManagers(),
-                        itemContent: { user in Text("\(user.name) - \(user.email ?? user.phoneNumber)") },
-                        onSelect: { user in
-                            if !viewModel.selectedProjectManagers.contains(user) { viewModel.selectedProjectManagers.append(user) }
-                            viewModel.projectManagerSearchText = ""
-                        }
+                    Text("Project Manager (Approver)").font(.caption).foregroundColor(.secondary)
+                    SingleSelectionPicker(
+                        selectedUser: $viewModel.selectedProjectManager,
+                        users: viewModel.allApprovers.filter { $0.isActive },
+                        placeholder: "Select project manager"
                     )
                     
                     if let error = viewModel.projectManagersError {
@@ -869,6 +831,53 @@ extension Array {
 }
 
 // MARK: - Reusable Helper Views
+
+// Single Selection Picker for Manager Selection
+struct SingleSelectionPicker: View {
+    @Binding var selectedUser: User?
+    let users: [User]
+    let placeholder: String
+    
+    var body: some View {
+        Menu {
+            Button(action: {
+                selectedUser = nil
+            }) {
+                HStack {
+                    Text("None")
+                    if selectedUser == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            
+            ForEach(users.sorted(by: { $0.name < $1.name })) { user in
+                Button(action: {
+                    selectedUser = user
+                }) {
+                    HStack {
+                        Text("\(user.name) - \(user.email ?? user.phoneNumber)")
+                        if selectedUser?.phoneNumber == user.phoneNumber {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack {
+                Text(selectedUser?.name ?? placeholder)
+                    .foregroundColor(selectedUser == nil ? .secondary : .primary)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(DesignSystem.Spacing.medium)
+            .background(Color(.tertiarySystemGroupedBackground))
+            .cornerRadius(DesignSystem.CornerRadius.field)
+        }
+    }
+}
 
 struct SearchableDropdownView: View {
     let title: String

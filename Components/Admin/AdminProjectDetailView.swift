@@ -195,24 +195,32 @@ struct AdminProjectDetailView: View {
             
             if viewModel.isEditingTeam {
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Project Managers Selection (Multiple)
+                    // Project Manager Selection (Single)
                     VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                        TeamMemberSelectionCard(
-                            title: "Project Managers",
-                            subtitle: "Select project approvers (multiple allowed)",
-                            searchText: $viewModel.approverSearchText,
-                            items: viewModel.filteredApprovers,
-                            onSelect: viewModel.selectManager,
-                            icon: "person.badge.key.fill"
-                        )
-                        
-                        // Selected Managers Display
-                        if !viewModel.selectedManagers.isEmpty {
-                            SelectedManagersCard(
-                                managers: viewModel.selectedManagers,
-                                onRemove: viewModel.removeManager
-                            )
+                        HStack {
+                            Image(systemName: "person.badge.key.fill")
+                                .font(.subheadline)
+                                .foregroundStyle(.blue)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Project Manager")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                
+                                Text("Select project approver (single selection)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Spacer()
                         }
+                        .padding(.bottom, DesignSystem.Spacing.small)
+                        
+                        SingleSelectionPicker(
+                            selectedUser: $viewModel.selectedManager,
+                            users: viewModel.allApprovers.filter { $0.isActive },
+                            placeholder: "Select project manager"
+                        )
                     }
                     
                     // Team Members Selection
@@ -286,10 +294,11 @@ struct AdminProjectDetailView: View {
                 }
             } else {
                 VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Managers Display (Multiple)
-                    if !viewModel.managerNames.isEmpty {
-                        TeamManagersListCard(
-                            managers: viewModel.managerNames,
+                    // Manager Display (Single)
+                    if let managerName = viewModel.managerName {
+                        TeamMemberDisplayCard(
+                            title: "Project Manager",
+                            member: managerName,
                             icon: "person.badge.key.fill",
                             color: .blue
                         )
@@ -737,49 +746,41 @@ struct TeamMembersListCard: View {
     }
 }
 
-// MARK: - Selected Managers Card
-struct SelectedManagersCard: View {
-    let managers: Set<User>
-    let onRemove: (User) -> Void
+// MARK: - Selected Manager Card (Single)
+struct SelectedManagerCard: View {
+    let manager: User
+    let onRemove: () -> Void
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            Text("Selected Managers")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
+        HStack {
+            Circle()
+                .fill(Color.blue.opacity(0.2))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    Text(String(manager.name.prefix(1)))
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.blue)
+                )
             
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.small) {
-                ForEach(managers.sorted(by: { $0.name < $1.name })) { manager in
-                    HStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.2))
-                            .frame(width: 20, height: 20)
-                            .overlay(
-                                Text(String(manager.name.prefix(1)))
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.blue)
-                            )
-                        
-                        Text(manager.name)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        Button {
-                            HapticManager.selection()
-                            onRemove(manager)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                        }
-                    }
-                    .padding(.horizontal, DesignSystem.Spacing.small)
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                    .background(Color(.quaternarySystemFill))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(manager.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                
+                Text(manager.phoneNumber)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer()
+            
+            Button {
+                HapticManager.selection()
+                onRemove()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.red)
             }
         }
         .padding()
@@ -788,54 +789,6 @@ struct SelectedManagersCard: View {
     }
 }
 
-// MARK: - Team Managers List Card
-struct TeamManagersListCard: View {
-    let managers: [String]
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.subheadline)
-                    .foregroundStyle(color)
-                
-                Text("Project Managers")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: DesignSystem.Spacing.small) {
-                ForEach(managers, id: \.self) { manager in
-                    HStack {
-                        Circle()
-                            .fill(color.opacity(0.2))
-                            .frame(width: 20, height: 20)
-                            .overlay(
-                                Text(String(manager.prefix(1)))
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(color)
-                            )
-                        
-                        Text(manager)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, DesignSystem.Spacing.small)
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                    .background(Color(.quaternarySystemFill))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
-                }
-            }
-        }
-        .padding()
-        .background(Color(.tertiarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-    }
-}
 
 struct ModernActionButton: View {
     let title: String
