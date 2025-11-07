@@ -343,6 +343,7 @@ private struct CurrentPhaseView: View {
     let projectId: String
     let phaseExtensionMap: [String: Bool]
     
+    @State private var isExpanded = false // Default to expanded
     @State private var showingRequestForm = false
     @State private var showingRequestStatus = false
     @State private var hasUserRequests = false
@@ -636,16 +637,35 @@ private struct CurrentPhaseView: View {
                 }
             }
             
-            // Department Breakdown - Always visible, horizontal scrolling
+            // Department Breakdown - Expandable with horizontal scrolling
             if !phase.departments.isEmpty {
                 Divider()
                 
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                    Text("Departments")
-                        .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("Departments")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("(\(phase.departments.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                if isExpanded {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: DesignSystem.Spacing.medium) {
                             ForEach(phase.departments) { department in
@@ -654,8 +674,8 @@ private struct CurrentPhaseView: View {
                         }
                         .padding(.horizontal, DesignSystem.Spacing.small)
                     }
+                    .padding(.top, DesignSystem.Spacing.small)
                 }
-                .padding(.top, DesignSystem.Spacing.small)
             }
         }
     }
@@ -857,6 +877,7 @@ private struct ProjectDetailPhaseCardView: View {
     let isInProgress: Bool
     let projectId: String
     let phaseExtensionMap: [String: Bool]
+    @State private var isExpanded = false // Default to expanded
     @State private var showingRequestForm = false
     @State private var showingRequestStatus = false
     @State private var hasUserRequests = false
@@ -1100,17 +1121,36 @@ private struct ProjectDetailPhaseCardView: View {
                 }
             }
             
-            // Department Breakdown - Always visible, horizontal scrolling
+            // Department Breakdown - Expandable with horizontal scrolling
             if !phase.departments.isEmpty {
                 Divider()
                     .padding(.vertical, DesignSystem.Spacing.extraSmall)
                 
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                    Text("Departments")
-                        .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                    
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("Departments")
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("(\(phase.departments.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                if isExpanded {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: DesignSystem.Spacing.medium) {
                             ForEach(phase.departments) { department in
@@ -1119,8 +1159,8 @@ private struct ProjectDetailPhaseCardView: View {
                         }
                         .padding(.horizontal, DesignSystem.Spacing.small)
                     }
+                    .padding(.top, DesignSystem.Spacing.small)
                 }
-                .padding(.top, DesignSystem.Spacing.small)
             }
         }
         .padding(.vertical, DesignSystem.Spacing.small)
