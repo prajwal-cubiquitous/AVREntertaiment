@@ -427,20 +427,20 @@ struct AddExpenseView: View {
     private var categoriesHeader: some View {
         HStack {
             Text("Category")
-            Spacer()
-            Button(action: viewModel.addCategory) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title3)
-            }
+//            Spacer()
+//            Button(action: viewModel.addCategory) {
+//                Image(systemName: "plus.circle.fill")
+//                    .foregroundColor(.blue)
+//                    .font(.title3)
+//            }
         }
     }
     
-    private var categoriesFooter: some View {
-        Text("Add multiple categories by tapping the + button")
-            .font(.caption)
-            .foregroundColor(.secondary)
-    }
+//    private var categoriesFooter: some View {
+//        Text("Add multiple categories by tapping the + button")
+//            .font(.caption)
+//            .foregroundColor(.secondary)
+//    }
     
     private var categoriesView: some View {
         ForEach(Array(viewModel.categories.enumerated()), id: \.offset) { index, _ in
