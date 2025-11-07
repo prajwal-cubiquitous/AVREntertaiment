@@ -54,8 +54,8 @@ struct ProjectDetailView: View {
                 
                 // MARK: - Phase Budget Breakdown
                 PhaseBreakdownView(project: project, viewModel: viewModel)
-                    .cardStyle()
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
+//                    .cardStyle()
+//                    .padding(.horizontal, DesignSystem.Spacing.medium)
                 
                 // MARK: - Expense Section
                 ExpenseListView(project: project, currentUserPhone : phoneNumber)
@@ -297,6 +297,9 @@ private struct PhaseBreakdownView: View {
                     }
                 }
             }
+            .padding(DesignSystem.Spacing.medium)
+            .cardStyle()
+            
             
             if viewModel.isLoading {
                 HStack {
@@ -310,13 +313,15 @@ private struct PhaseBreakdownView: View {
                 }
                 .padding(.vertical, DesignSystem.Spacing.medium)
             } else if !viewModel.currentPhases.isEmpty {
-                VStack(spacing: DesignSystem.Spacing.jumbo) {
+                VStack() {
                     ForEach(Array(viewModel.currentPhases.enumerated()), id: \.element.id) { index, phase in
                         CurrentPhaseView(
                             phase: phase,
                             projectId: project.id ?? "",
                             phaseExtensionMap: viewModel.phaseExtensionMap
                         )
+                        .padding(DesignSystem.Spacing.medium)
+                        .cardStyle()
                     }
                 }
             } else {
@@ -324,6 +329,8 @@ private struct PhaseBreakdownView: View {
                     icon: "calendar.badge.clock",
                     text: "No active phase at the moment"
                 )
+                .padding(DesignSystem.Spacing.medium)
+                .cardStyle()
             }
         }
         .padding(DesignSystem.Spacing.medium)
