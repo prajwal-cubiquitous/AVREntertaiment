@@ -299,7 +299,7 @@ struct DepartmentBudgetDetailView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        Text(viewModel.totalBudgetFormatted)
+                        Text(department != "Other" ? viewModel.totalBudgetFormatted : "N/A")
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
@@ -331,7 +331,7 @@ struct DepartmentBudgetDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            Text(viewModel.remainingBudgetFormatted)
+                            Text(department != "Other" ? viewModel.remainingBudgetFormatted : "N/A")
                                 .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
