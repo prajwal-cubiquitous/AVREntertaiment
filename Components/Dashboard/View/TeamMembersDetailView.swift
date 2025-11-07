@@ -440,12 +440,68 @@ struct MemberExpensesView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Done") {
                         dismiss()
                     }
                 }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        // MARK: - Status Picker
+                        Section("Status") {
+                            Picker("Status", selection: $selectedFilter) {
+                                ForEach(ExpenseFilter.allCases, id: \.self) { filter in
+                                    Text(filter.rawValue.capitalized)
+                                        .tag(filter)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                        
+                        // MARK: - Sort Picker
+                        Section("Sort by") {
+                            Picker("Sort by", selection: $sortOption) {
+                                ForEach(SortOption.allCases, id: \.self) { option in
+                                    Label(option.rawValue, systemImage: option.icon)
+                                        .tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                        
+                        // MARK: - Date Range (only the picker button)
+                        Section("Date Range") {
+                            Button {
+                                showingDateRangePicker = true
+                            } label: {
+                                Label("Set Date Range…", systemImage: "calendar.badge.plus")
+                            }
+                        }
+                        
+                        // MARK: - Clear Filters
+                        if selectedFilter != .all || sortOption != .dateDescending {
+                            Section {
+                                Button("Clear All Filters", role: .destructive) {
+                                    selectedFilter = .all
+                                    sortOption = .dateDescending
+                                    isDateRangeActive = false
+                                }
+                            }
+                        }
+                        
+                    } label: {
+                        Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
+                            .font(.subheadline)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(member.role.color.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
             }
+
+
         }
         .onAppear {
             // Use phone number instead of ID since submittedBy stores phone number
@@ -520,50 +576,48 @@ struct MemberExpensesView: View {
     
     // MARK: - Unified Filter Menu
     private var unifiedFilterMenu: some View {
-        HStack {
-            Menu {
-                // Status Picker
-                Picker("Status", selection: $selectedFilter) {
-                    ForEach(ExpenseFilter.allCases, id: \.self) { filter in
-                        Text(filter.rawValue).tag(filter)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                // Sort Picker
-                Picker("Sort by", selection: $sortOption) {
-                    ForEach(SortOption.allCases, id: \.self) { option in
-                        Label(option.rawValue, systemImage: option.icon).tag(option)
-                    }
-                }
-                .pickerStyle(.menu)
-
-                // Date Range
-                Toggle(isOn: $isDateRangeActive) {
-                    Label("Enable Date Range", systemImage: "calendar")
-                }
-                Button { showingDateRangePicker = true } label: {
-                    Label("Set Date Range…", systemImage: "calendar.badge.plus")
-                }
-
-                // Clear
-                if selectedFilter != .all || isDateRangeActive || sortOption != .dateDescending {
-                    Button("Clear All Filters", role: .destructive) {
-                        selectedFilter = .all
-                        isDateRangeActive = false
-                        sortOption = .dateDescending
-                    }
-                }
-            } label: {
-                Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
-                    .font(.subheadline)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(member.role.color.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-
-            Spacer()
+        VStack {
+//            Menu {
+//                // Status Picker
+//                Picker("Status", selection: $selectedFilter) {
+//                    ForEach(ExpenseFilter.allCases, id: \.self) { filter in
+//                        Text(filter.rawValue).tag(filter)
+//                    }
+//                }
+//                .pickerStyle(.menu)
+//
+//                // Sort Picker
+//                Picker("Sort by", selection: $sortOption) {
+//                    ForEach(SortOption.allCases, id: \.self) { option in
+//                        Label(option.rawValue, systemImage: option.icon).tag(option)
+//                    }
+//                }
+//                .pickerStyle(.menu)
+//
+//                // Date Range
+//                Toggle(isOn: $isDateRangeActive) {
+//                    Label("Enable Date Range", systemImage: "calendar")
+//                }
+//                Button { showingDateRangePicker = true } label: {
+//                    Label("Set Date Range…", systemImage: "calendar.badge.plus")
+//                }
+//
+//                // Clear
+//                if selectedFilter != .all || isDateRangeActive || sortOption != .dateDescending {
+//                    Button("Clear All Filters", role: .destructive) {
+//                        selectedFilter = .all
+//                        isDateRangeActive = false
+//                        sortOption = .dateDescending
+//                    }
+//                }
+//            } label: {
+//                Label("Filter & Sort", systemImage: "line.3.horizontal.decrease.circle")
+//                    .font(.subheadline)
+//                    .padding(.horizontal, 12)
+//                    .padding(.vertical, 8)
+//                    .background(member.role.color.opacity(0.12))
+//                    .clipShape(RoundedRectangle(cornerRadius: 12))
+//            }
 
             // Totals Summary
             memberTotalsSummary
