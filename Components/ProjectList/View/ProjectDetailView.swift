@@ -553,7 +553,8 @@ private struct CurrentPhaseView: View {
                 PhaseRequestFormView(
                     projectId: projectId,
                     phaseId: phase.id,
-                    phaseName: phase.phaseName
+                    phaseName: phase.phaseName,
+                    phaseEndDate: phase.endDate
                 )
             }
             .sheet(isPresented: $showingRequestStatus) {
@@ -1054,7 +1055,8 @@ private struct ProjectDetailPhaseCardView: View {
                 PhaseRequestFormView(
                     projectId: projectId,
                     phaseId: phase.id,
-                    phaseName: phase.phaseName
+                    phaseName: phase.phaseName,
+                    phaseEndDate: phase.endDate
                 )
             }
             .sheet(isPresented: $showingRequestStatus) {
@@ -1583,15 +1585,33 @@ private struct PhaseRequestFormView: View {
     let projectId: String
     let phaseId: String
     let phaseName: String
+    let phaseEndDate: Date?
     
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     @StateObject private var viewModel = PhaseRequestViewModel()
     @State private var description: String = ""
-    @State private var extensionDate: Date = Date()
+    @State private var extensionDate: Date
     @State private var isSubmitting = false
     @State private var showAlert = false
     @State private var alertMessage = ""
+    
+    init(projectId: String, phaseId: String, phaseName: String, phaseEndDate: Date?) {
+        self.projectId = projectId
+        self.phaseId = phaseId
+        self.phaseName = phaseName
+        self.phaseEndDate = phaseEndDate
+        
+        // Initialize extensionDate to phaseEndDate + 1 day if available, otherwise Date() + 1 day
+        if let endDate = phaseEndDate,
+           let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: endDate) {
+            _extensionDate = State(initialValue: nextDay)
+        } else if let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: Date()) {
+            _extensionDate = State(initialValue: nextDay)
+        } else {
+            _extensionDate = State(initialValue: Date())
+        }
+    }
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -1600,12 +1620,17 @@ private struct PhaseRequestFormView: View {
     }
     
     private var isFormValid: Bool {
-        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        extensionDate > Date()
+        let comparisonDate = phaseEndDate ?? Date()
+        return !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        extensionDate > comparisonDate
     }
     
     private var minimumDate: Date {
-        Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        if let endDate = phaseEndDate,
+           let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: endDate) {
+            return nextDay
+        }
+        return Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     }
     
     private var dateRange: PartialRangeFrom<Date> {
