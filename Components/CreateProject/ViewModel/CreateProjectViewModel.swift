@@ -14,7 +14,7 @@ import Combine
 struct DepartmentItem: Identifiable {
     let id = UUID()
     var name: String = ""
-    var amount: String = "0" // Use String for TextField, convert to Double later
+    var amount: String = "" // Use String for TextField, convert to Double later
 }
 
 struct PhaseItem: Identifiable {

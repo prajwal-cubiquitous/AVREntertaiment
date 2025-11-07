@@ -981,7 +981,7 @@ private struct DepartmentInputRow: View {
                         .foregroundColor(.secondary)
                         .textCase(.uppercase)
                     
-                    TextField("₹0", text: $item.amount)
+                    TextField("", text: $item.amount)
                         .keyboardType(.decimalPad)
                         .font(DesignSystem.Typography.callout)
                         .fontWeight(.medium)
@@ -1008,7 +1008,7 @@ private struct DepartmentInputRow: View {
         .padding(.vertical, DesignSystem.Spacing.extraSmall)
         .onAppear {
             if item.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                item.amount = "0"
+                item.amount = ""
             }
         }
     }
