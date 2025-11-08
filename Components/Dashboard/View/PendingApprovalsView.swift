@@ -333,6 +333,7 @@ struct ModernExpenseApprovalRow: View {
     let onChatTapped: () -> Void
     @ObservedObject var viewModel: PendingApprovalsViewModel
     @State var UserName: String = ""
+    @State private var showingFileViewer = false
     
     
     var body: some View {
@@ -381,6 +382,17 @@ struct ModernExpenseApprovalRow: View {
 //                        .lineLimit(1)
                     
                     Spacer()
+                    
+                    // File attachment icon
+                    if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
+                        FileIconView(
+                            fileName: expense.attachmentName,
+                            fileURL: attachmentURL,
+                            onTap: {
+                                showingFileViewer = true
+                            }
+                        )
+                    }
                     
                     // Message Button
                     Button {
@@ -456,6 +468,12 @@ struct ModernExpenseApprovalRow: View {
                 .stroke(isSelected ? Color.green : Color.clear, lineWidth: 2)
         )
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .sheet(isPresented: $showingFileViewer) {
+            if let urlString = expense.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
     }
 }
 

@@ -774,6 +774,7 @@ struct DepartmentExpenseRowView: View {
     let approverName: String?
     let onChatTapped: () -> Void
     let onExpenseTapped: () -> Void
+    @State private var showingFileViewer = false
     
     var body: some View {
         Button(action: {
@@ -895,6 +896,17 @@ struct DepartmentExpenseRowView: View {
                         .foregroundColor(.secondary)
                     
                     Spacer()
+                    
+                    // File attachment icon
+                    if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
+                        FileIconView(
+                            fileName: expense.attachmentName,
+                            fileURL: attachmentURL,
+                            onTap: {
+                                showingFileViewer = true
+                            }
+                        )
+                    }
                 }
                 
                 // Remark intentionally omitted in list view; shown in detail view
@@ -910,6 +922,12 @@ struct DepartmentExpenseRowView: View {
             )
         }
         .buttonStyle(.plain)
+        .sheet(isPresented: $showingFileViewer) {
+            if let urlString = expense.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
     }
 }
 

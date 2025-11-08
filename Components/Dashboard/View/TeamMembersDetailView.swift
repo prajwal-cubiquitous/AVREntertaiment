@@ -847,6 +847,7 @@ class MemberExpensesViewModel: ObservableObject {
 // MARK: - Member Expense Row View
 struct MemberExpenseRowView: View {
     let expense: Expense
+    @State private var showingFileViewer = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -908,6 +909,17 @@ struct MemberExpenseRowView: View {
                     Text(expense.modeOfPayment.rawValue)
                         .font(.caption)
                         .foregroundColor(.blue)
+                    
+                    // File attachment icon
+                    if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
+                        FileIconView(
+                            fileName: expense.attachmentName,
+                            fileURL: attachmentURL,
+                            onTap: {
+                                showingFileViewer = true
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -919,6 +931,12 @@ struct MemberExpenseRowView: View {
                 .stroke(statusColor.opacity(0.3), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .sheet(isPresented: $showingFileViewer) {
+            if let urlString = expense.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
     }
     
     private var statusColor: Color {

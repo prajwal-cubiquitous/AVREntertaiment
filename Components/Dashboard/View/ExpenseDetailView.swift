@@ -22,6 +22,7 @@ struct ExpenseDetailView: View {
     @State private var spentAmount: Double = 0
     @State private var isLoadingBudget = false
     @State private var phaseName: String? = nil
+    @State private var showingFileViewer = false
     
     private let db = Firestore.firestore()
     private let currentUserPhone: String
@@ -490,37 +491,46 @@ struct ExpenseDetailView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
-            HStack {
-                Image(systemName: "doc.fill")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
-                    .frame(width: 30)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(expense.attachmentName ?? "Document")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+            Button(action: {
+                HapticManager.selection()
+                showingFileViewer = true
+            }) {
+                HStack {
+                    Image(systemName: "doc.fill")
+                        .font(.title2)
+                        .foregroundColor(.accentColor)
+                        .frame(width: 30)
                     
-                    Text("Tap to view")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.attachmentName ?? "Document")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("Tap to view")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundColor(.accentColor)
                 }
-                
-                Spacer()
-                
-                Button("View") {
-                    // Handle attachment view
-                }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.accentColor)
             }
+            .buttonStyle(.plain)
         }
         .padding(DesignSystem.Spacing.medium)
         .background(Color(.systemBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .sheet(isPresented: $showingFileViewer) {
+            if let urlString = expense.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
     }
     
     // MARK: - Remark Section

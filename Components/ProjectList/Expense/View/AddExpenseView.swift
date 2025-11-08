@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import PhotosUI
 
 struct AddExpenseView: View {
     let project: Project
@@ -180,7 +181,7 @@ struct AddExpenseView: View {
                 Section {
                     attachmentView
                 } header: {
-                    Text("Attachment (Optional)")
+                    Text("Attachment")
                         .textCase(.none)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
@@ -213,12 +214,31 @@ struct AddExpenseView: View {
             }
             .alert("Status", isPresented: $viewModel.showAlert) {
                 Button("OK") {
-                    if viewModel.alertMessage.contains("successfully") {
+                    if viewModel.shouldDismissOnAlert {
                         dismiss()
                     }
                 }
             } message: {
                 Text(viewModel.alertMessage)
+            }
+            .confirmationDialog("Select Attachment", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
+                Button("Select from Photos") {
+                    viewModel.showingImagePicker = true
+                }
+                
+                Button("Select from Files") {
+                    viewModel.showingDocumentPicker = true
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .sheet(isPresented: $viewModel.showingImagePicker) {
+                ExpenseImagePicker(selectedImage: Binding(
+                    get: { nil },
+                    set: { image in
+                        viewModel.handleImageSelection(image)
+                    }
+                ))
             }
             .sheet(isPresented: $viewModel.showingDocumentPicker) {
                 DocumentPicker(
@@ -555,7 +575,7 @@ struct AddExpenseView: View {
     
     // MARK: - Attachment Section
     private var attachmentView: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             if let attachmentName = viewModel.attachmentName {
                 // Show attached file
                 HStack {
@@ -579,7 +599,7 @@ struct AddExpenseView: View {
             } else {
                 // Add attachment button
                 Button(action: {
-                    viewModel.showingDocumentPicker = true
+                    viewModel.showingAttachmentOptions = true
                 }) {
                     HStack {
                         Image(systemName: "paperclip")
@@ -592,6 +612,10 @@ struct AddExpenseView: View {
                     .padding()
                     .background(Color(UIColor.tertiarySystemFill))
                     .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(viewModel.attachmentError != nil ? Color.red : Color.clear, lineWidth: 1)
+                    )
                 }
                 .buttonStyle(.plain)
             }
@@ -606,7 +630,14 @@ struct AddExpenseView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
+            // Error message
+            if let error = viewModel.attachmentError {
+                InlineErrorMessage(message: error)
+            }
         }
+        .id("attachment")
+        .padding(.vertical, 4)
     }
     
     // MARK: - Submit Button
@@ -654,6 +685,8 @@ struct DocumentPicker: UIViewControllerRepresentable {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedTypes)
         picker.delegate = context.coordinator
         picker.allowsMultipleSelection = false
+        // Enable access to files outside the app's sandbox
+        picker.shouldShowFileExtensions = true
         return picker
     }
     
@@ -671,11 +704,62 @@ struct DocumentPicker: UIViewControllerRepresentable {
         }
         
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            // URLs are already accessible, no need for security-scoped resource handling here
+            // The ViewModel will handle copying to a temporary location
             parent.onDocumentPicked(.success(urls))
         }
         
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             // Handle cancellation if needed
+        }
+    }
+}
+
+// MARK: - Expense Image Picker
+struct ExpenseImagePicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        config.preferredAssetRepresentationMode = .current
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ExpenseImagePicker
+        
+        init(_ parent: ExpenseImagePicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            guard let provider = results.first?.itemProvider else { return }
+            
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { image, error in
+                    DispatchQueue.main.async {
+                        if let error = error {
+                            print("Error loading image: \(error.localizedDescription)")
+                            return
+                        }
+                        self.parent.selectedImage = image as? UIImage
+                    }
+                }
+            }
         }
     }
 }
