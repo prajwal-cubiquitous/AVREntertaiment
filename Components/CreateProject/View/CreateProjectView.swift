@@ -8,12 +8,15 @@
 // CreateProjectView.swift
 
 import SwiftUI
+import UniformTypeIdentifiers
+import PhotosUI
 
 struct CreateProjectView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @StateObject private var viewModel = CreateProjectViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var showingReviewScreen = false
+    @State private var showingFileViewer = false
     
     let currencies = [
         ("₹ Indian Rupee", "INR"),
@@ -38,6 +41,9 @@ struct CreateProjectView: View {
 
                         // MARK: - Template Overrides Section
                         templateOverridesSectionScrollView
+                        
+                        // MARK: - Attachment Section
+                        attachmentSectionScrollView
                         
                         // MARK: - Submit Action
                         submitSectionScrollView
@@ -79,6 +85,37 @@ struct CreateProjectView: View {
                     }
                 } message: {
                     Text(viewModel.alertMessage)
+                }
+                .confirmationDialog("Select Attachment", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
+                    Button("Select from Photos") {
+                        viewModel.showingImagePicker = true
+                    }
+                    
+                    Button("Select from Files") {
+                        viewModel.showingDocumentPicker = true
+                    }
+                    
+                    Button("Cancel", role: .cancel) { }
+                }
+                .sheet(isPresented: $viewModel.showingImagePicker) {
+                    ProjectImagePicker(selectedImage: Binding(
+                        get: { nil },
+                        set: { image in
+                            viewModel.handleImageSelection(image)
+                        }
+                    ))
+                }
+                .sheet(isPresented: $viewModel.showingDocumentPicker) {
+                    ProjectDocumentPicker(
+                        allowedTypes: [.pdf, .image],
+                        onDocumentPicked: viewModel.handleDocumentSelection
+                    )
+                }
+                .sheet(isPresented: $showingFileViewer) {
+                    if let urlString = viewModel.attachmentURL,
+                       let url = URL(string: urlString) {
+                        FileViewerSheet(fileURL: url, fileName: viewModel.attachmentName)
+                    }
                 }
                 .sheet(isPresented: $showingReviewScreen) {
                     NavigationView {
@@ -597,11 +634,125 @@ struct CreateProjectView: View {
         }
     }
     
+    private var attachmentSectionScrollView: some View {
+        FormSectionView(header: SectionHeaderLabel(title: "Project Attachment", icon: "paperclip")) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                if let attachmentName = viewModel.attachmentName {
+                    // Show attached file
+                    HStack(spacing: 12) {
+                        // File info - not clickable
+                        HStack {
+                            Image(systemName: fileIcon(for: attachmentName))
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(attachmentName)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                    .lineLimit(1)
+                                
+                                Text("Tap preview to view")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        
+                        // Preview button - separate icon button
+                        Button(action: {
+                            HapticManager.selection()
+                            showingFileViewer = true
+                        }) {
+                            Image(systemName: "eye.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
+                                .frame(width: 44, height: 44)
+                                .background(Color.blue.opacity(0.1))
+                                .clipShape(Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // Remove button - separate action
+                        Button(action: {
+                            HapticManager.selection()
+                            withAnimation(.easeInOut) {
+                                viewModel.removeAttachment()
+                            }
+                        }) {
+                            Image(systemName: "trash.fill")
+                                .font(.title3)
+                                .foregroundColor(.red)
+                                .frame(width: 44, height: 44)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else {
+                    // Add attachment button
+                    Button(action: {
+                        viewModel.showingAttachmentOptions = true
+                    }) {
+                        HStack {
+                            Image(systemName: "paperclip")
+                                .font(.title3)
+                            Text("Add Attachment")
+                                .fontWeight(.medium)
+                            Spacer()
+                        }
+                        .foregroundColor(.blue)
+                        .padding()
+                        .background(Color(UIColor.tertiarySystemFill))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+                
+                // Upload progress
+                if viewModel.isUploading {
+                    VStack(spacing: 8) {
+                        ProgressView(value: viewModel.uploadProgress)
+                            .progressViewStyle(LinearProgressViewStyle())
+                        Text("Uploading... \(Int(viewModel.uploadProgress * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, DesignSystem.Spacing.medium)
+            .padding(.vertical, DesignSystem.Spacing.small)
+        }
+    }
+    
     private var submitSectionScrollView: some View {
         VStack {
             submitButton
                 .padding(.horizontal, DesignSystem.Spacing.medium)
                 .padding(.vertical, DesignSystem.Spacing.medium)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
+            return "photo.fill"
+        } else if lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
         }
     }
     
@@ -1137,6 +1288,91 @@ struct InlineErrorMessage: View {
         .padding(.horizontal, DesignSystem.Spacing.small)
         .padding(.top, DesignSystem.Spacing.extraSmall)
         .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
+
+// MARK: - Project Document Picker
+struct ProjectDocumentPicker: UIViewControllerRepresentable {
+    let allowedTypes: [UTType]
+    let onDocumentPicked: (Result<[URL], Error>) -> Void
+    
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedTypes)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        picker.shouldShowFileExtensions = true
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: ProjectDocumentPicker
+        
+        init(_ parent: ProjectDocumentPicker) {
+            self.parent = parent
+        }
+        
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            parent.onDocumentPicked(.success(urls))
+        }
+        
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            // Handle cancellation if needed
+        }
+    }
+}
+
+// MARK: - Project Image Picker
+struct ProjectImagePicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        config.preferredAssetRepresentationMode = .current
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ProjectImagePicker
+        
+        init(_ parent: ProjectImagePicker) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            guard let provider = results.first?.itemProvider else { return }
+            
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { image, error in
+                    DispatchQueue.main.async {
+                        if let error = error {
+                            print("Error loading image: \(error.localizedDescription)")
+                            return
+                        }
+                        self.parent.selectedImage = image as? UIImage
+                    }
+                }
+            }
+        }
     }
 }
 

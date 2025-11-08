@@ -9,7 +9,10 @@
 
 import Foundation
 import FirebaseFirestore
+import FirebaseStorage
 import Combine
+import UIKit
+import UniformTypeIdentifiers
 
 struct DepartmentItem: Identifiable {
     let id = UUID()
@@ -67,12 +70,22 @@ class CreateProjectViewModel: ObservableObject {
     @Published var errorMessage: String? = nil
     @Published var showSuccessMessage: Bool = false
     
+    // MARK: - Attachment State
+    @Published var attachmentURL: String?
+    @Published var attachmentName: String?
+    @Published var showingDocumentPicker: Bool = false
+    @Published var showingImagePicker: Bool = false
+    @Published var showingAttachmentOptions: Bool = false
+    @Published var uploadProgress: Double = 0.0
+    @Published var isUploading: Bool = false
+    
     // MARK: - Validation State
     @Published var shouldShowValidationErrors: Bool = false
     @Published var firstInvalidFieldId: String? = nil
     
     private var db = Firestore.firestore()
     private var authService: FirebaseAuthService?
+    private let storage = Storage.storage()
     
     // MARK: - Computed Properties for Filtering
     
@@ -712,7 +725,300 @@ class CreateProjectViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Helper Methods
+    // MARK: - Set AuthService
+    func setAuthService(_ authService: FirebaseAuthService) {
+        self.authService = authService
+        Task {
+            await fetchUsers() // Refresh users with new auth service
+        }
+    }
+    
+    // MARK: - File Upload
+    func uploadAttachment(_ url: URL) {
+        isUploading = true
+        uploadProgress = 0.0
+        
+        // Get file name and extension
+        let fileName = url.lastPathComponent
+        attachmentName = fileName
+        
+        // Create unique file path
+        guard let customerId = authService?.currentCustomerId else {
+            isUploading = false
+            alertMessage = "Customer ID not found. Please log in again."
+            showAlert = true
+            return
+        }
+        
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let storageRef = storage.reference()
+            .child("customers")
+            .child(customerId)
+            .child("projects")
+            .child("drafts")
+            .child("\(timestamp)_\(fileName)")
+        
+        // Process and compress file before upload
+        Task {
+            do {
+                // Handle security-scoped resources properly
+                let accessibleURL = try await getAccessibleFileURL(from: url)
+                let (compressedData, contentType) = try await compressFile(at: accessibleURL)
+                
+                // Create metadata with content type
+                let metadata = StorageMetadata()
+                metadata.contentType = contentType
+                
+                // Upload compressed file
+                let uploadTask = storageRef.putData(compressedData, metadata: metadata) { [weak self] metadata, error in
+                    guard let self = self else { return }
+                    
+                    DispatchQueue.main.async {
+                        self.isUploading = false
+                        
+                        if let error = error {
+                            self.alertMessage = "Upload failed: \(error.localizedDescription)"
+                            self.showAlert = true
+                            return
+                        }
+                        
+                        // Get download URL
+                        storageRef.downloadURL { url, error in
+                            if let error = error {
+                                self.alertMessage = "Failed to get download URL: \(error.localizedDescription)"
+                                self.showAlert = true
+                                return
+                            }
+                            
+                            if let downloadURL = url {
+                                self.attachmentURL = downloadURL.absoluteString
+                                self.alertMessage = "File uploaded successfully!"
+                                self.showAlert = true
+                            }
+                        }
+                    }
+                }
+                
+                // Observe upload progress
+                uploadTask.observe(.progress) { [weak self] snapshot in
+                    guard let progress = snapshot.progress else { return }
+                    
+                    DispatchQueue.main.async {
+                        self?.uploadProgress = Double(progress.fractionCompleted)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isUploading = false
+                    self.alertMessage = "Failed to process file: \(error.localizedDescription)"
+                    self.showAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Handle Security-Scoped Resources
+    private func getAccessibleFileURL(from url: URL) async throws -> URL {
+        // Check if URL is a security-scoped resource
+        let isAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Copy file to temporary directory for processing
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFileName = "\(UUID().uuidString)_\(url.lastPathComponent)"
+        let tempFileURL = tempDir.appendingPathComponent(tempFileName)
+        
+        // Remove file if it already exists
+        if FileManager.default.fileExists(atPath: tempFileURL.path) {
+            try FileManager.default.removeItem(at: tempFileURL)
+        }
+        
+        // Copy file to temporary location
+        try FileManager.default.copyItem(at: url, to: tempFileURL)
+        
+        return tempFileURL
+    }
+    
+    // MARK: - Upload Image
+    func uploadImage(_ image: UIImage) {
+        isUploading = true
+        uploadProgress = 0.0
+        
+        // Generate file name
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let fileName = "project_\(timestamp).jpg"
+        attachmentName = fileName
+        
+        // Create unique file path
+        guard let customerId = authService?.currentCustomerId else {
+            isUploading = false
+            alertMessage = "Customer ID not found. Please log in again."
+            showAlert = true
+            return
+        }
+        
+        let storageRef = storage.reference()
+            .child("customers")
+            .child(customerId)
+            .child("projects")
+            .child("drafts")
+            .child(fileName)
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            isUploading = false
+            alertMessage = "Failed to process image"
+            showAlert = true
+            return
+        }
+        
+        // Create metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        // Upload image
+        let uploadTask = storageRef.putData(imageData, metadata: metadata) { [weak self] metadata, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isUploading = false
+                
+                if let error = error {
+                    self.alertMessage = "Upload failed: \(error.localizedDescription)"
+                    self.showAlert = true
+                    return
+                }
+                
+                // Get download URL
+                storageRef.downloadURL { url, error in
+                    if let error = error {
+                        self.alertMessage = "Failed to get download URL: \(error.localizedDescription)"
+                        self.showAlert = true
+                        return
+                    }
+                    
+                    if let downloadURL = url {
+                        self.attachmentURL = downloadURL.absoluteString
+                        self.alertMessage = "Image uploaded successfully!"
+                        self.showAlert = true
+                    }
+                }
+            }
+        }
+        
+        // Observe upload progress
+        uploadTask.observe(.progress) { [weak self] snapshot in
+            guard let progress = snapshot.progress else { return }
+            
+            DispatchQueue.main.async {
+                self?.uploadProgress = Double(progress.fractionCompleted)
+            }
+        }
+    }
+    
+    // MARK: - File Compression
+    private func compressFile(at url: URL) async throws -> (Data, String) {
+        let fileExtension = url.pathExtension.lowercased()
+        let fileData = try Data(contentsOf: url)
+        
+        // Determine content type
+        let contentType: String
+        let compressedData: Data
+        
+        switch fileExtension {
+        case "jpg", "jpeg":
+            // Compress JPEG images
+            if let image = UIImage(data: fileData) {
+                // Use 0.7 quality for good compression while maintaining quality
+                if let jpegData = image.jpegData(compressionQuality: 0.7) {
+                    compressedData = jpegData
+                    contentType = "image/jpeg"
+                } else {
+                    compressedData = fileData
+                    contentType = "image/jpeg"
+                }
+            } else {
+                compressedData = fileData
+                contentType = "image/jpeg"
+            }
+            
+        case "png":
+            // Compress PNG images by converting to JPEG if possible
+            if let image = UIImage(data: fileData) {
+                // Convert PNG to JPEG for better compression
+                if let jpegData = image.jpegData(compressionQuality: 0.75) {
+                    compressedData = jpegData
+                    contentType = "image/jpeg"
+                } else {
+                    // If conversion fails, use original PNG
+                    compressedData = fileData
+                    contentType = "image/png"
+                }
+            } else {
+                compressedData = fileData
+                contentType = "image/png"
+            }
+            
+        case "pdf":
+            // For PDFs, we can't easily compress them without external libraries
+            // But we can check if the file is already reasonably sized
+            if fileData.count > 5 * 1024 * 1024 {
+                // For very large PDFs, we could add PDF compression here if needed
+                // For now, we'll use the original file
+                compressedData = fileData
+            } else {
+                compressedData = fileData
+            }
+            contentType = "application/pdf"
+            
+        default:
+            // For other file types, use as-is
+            compressedData = fileData
+            contentType = "application/octet-stream"
+        }
+        
+        return (compressedData, contentType)
+    }
+    
+    func removeAttachment() {
+        // If there's an existing attachment URL, optionally delete it from storage
+        if let urlString = attachmentURL,
+           let url = URL(string: urlString) {
+            let storageRef = Storage.storage().reference(forURL: urlString)
+            storageRef.delete { [weak self] error in
+                if let error = error {
+                    print("Failed to delete file: \(error.localizedDescription)")
+                }
+            }
+        }
+        
+        attachmentURL = nil
+        attachmentName = nil
+    }
+    
+    // MARK: - Document Picker Support
+    func handleDocumentSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            uploadAttachment(url)
+            
+        case .failure(let error):
+            alertMessage = "Failed to select file: \(error.localizedDescription)"
+            showAlert = true
+        }
+    }
+    
+    func handleImageSelection(_ image: UIImage?) {
+        guard let image = image else { return }
+        uploadImage(image)
+    }
+    
+    // MARK: - Reset Form
     private func resetForm() {
         projectName = ""
         projectDescription = ""
@@ -732,13 +1038,8 @@ class CreateProjectViewModel: ObservableObject {
         errorMessage = nil
         shouldShowValidationErrors = false
         firstInvalidFieldId = nil
-    }
-    
-    // MARK: - Set AuthService
-    func setAuthService(_ authService: FirebaseAuthService) {
-        self.authService = authService
-        Task {
-            await fetchUsers() // Refresh users with new auth service
-        }
+        attachmentURL = nil
+        attachmentName = nil
+        uploadProgress = 0.0
     }
 }

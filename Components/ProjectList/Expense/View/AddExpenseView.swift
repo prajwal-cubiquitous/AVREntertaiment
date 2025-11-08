@@ -7,6 +7,7 @@ struct AddExpenseView: View {
     @StateObject private var viewModel: AddExpenseViewModel
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
+    @State private var showingFileViewer = false
     
     init(project: Project) {
         self.project = project
@@ -23,6 +24,19 @@ struct AddExpenseView: View {
         formatter.numberStyle = .currency
         formatter.locale = Locale(identifier: "en_IN")
         return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
+    }
+    
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
+            return "photo.fill"
+        } else if lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
+        }
     }
     
     var body: some View {
@@ -245,6 +259,12 @@ struct AddExpenseView: View {
                     allowedTypes: [.pdf, .image],
                     onDocumentPicked: viewModel.handleDocumentSelection
                 )
+            }
+            .sheet(isPresented: $showingFileViewer) {
+                if let urlString = viewModel.attachmentURL,
+                   let url = URL(string: urlString) {
+                    FileViewerSheet(fileURL: url, fileName: viewModel.attachmentName)
+                }
             }
             }
         }
@@ -578,24 +598,64 @@ struct AddExpenseView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let attachmentName = viewModel.attachmentName {
                 // Show attached file
-                HStack {
-                    Image(systemName: "doc.fill")
-                        .foregroundColor(.blue)
-                    Text(attachmentName)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                    Spacer()
-                    Button("Remove") {
+                HStack(spacing: 12) {
+                    // File info - not clickable
+                    HStack {
+                        Image(systemName: fileIcon(for: attachmentName))
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(attachmentName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            
+                            Text("Tap preview to view")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // Preview button - separate icon button
+                    Button(action: {
+                        HapticManager.selection()
+                        showingFileViewer = true
+                    }) {
+                        Image(systemName: "eye.fill")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                            .frame(width: 44, height: 44)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Remove button - separate action
+                    Button(action: {
+                        HapticManager.selection()
                         withAnimation(.easeInOut) {
                             viewModel.removeAttachment()
                         }
+                    }) {
+                        Image(systemName: "trash.fill")
+                            .font(.title3)
+                            .foregroundColor(.red)
+                            .frame(width: 44, height: 44)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                            .contentShape(Circle())
                     }
-                    .foregroundColor(.red)
-                    .font(.caption)
+                    .buttonStyle(.plain)
                 }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
             } else {
                 // Add attachment button
                 Button(action: {
