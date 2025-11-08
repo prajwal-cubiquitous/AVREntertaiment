@@ -1895,7 +1895,7 @@ struct EnhancedDepartmentBudgetCard: View {
                 
                 // Spent amount (Approved expenses)
                 HStack {
-                    Text("Spent:")
+                    Text("Approved:")
                         .font(DesignSystem.Typography.caption1)
                         .foregroundColor(.secondary)
                     
@@ -2064,14 +2064,14 @@ private struct OtherDepartmentCard: View {
                         .foregroundColor(.secondary)
                 }
                 HStack {
-                    Text("Spent:")
+                    Text("Approved:")
                         .font(DesignSystem.Typography.caption1)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text("\(Int(spent).formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.orange)
+                        .foregroundColor(.blue)
                 }
                 HStack {
                     Text("Remaining:")
@@ -2156,14 +2156,14 @@ private struct DepartmentMiniCard: View {
                         .fontWeight(.semibold)
                 }
                 HStack {
-                    Text("Spent:")
+                    Text("Approved:")
                         .font(DesignSystem.Typography.caption1)
                         .foregroundColor(.secondary)
                     Spacer()
                     Text("\(Int(spent).formattedCurrency)")
                         .font(DesignSystem.Typography.subheadline)
                         .fontWeight(.semibold)
-                        .foregroundColor(.orange)
+                        .foregroundColor(.blue)
                 }
                 HStack {
                     Text("Remaining:")

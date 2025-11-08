@@ -662,9 +662,12 @@ struct MemberExpensesView: View {
         let rejected = viewModel.expenses.filter { $0.status == .rejected }.reduce(0.0) { $0 + $1.amount }
         return HStack(spacing: 8) {
             amountBadge(title: "Approved", amount: approved, color: .green)
+            Spacer()
             amountBadge(title: "Pending", amount: pending, color: .orange)
+            Spacer()
             amountBadge(title: "Rejected", amount: rejected, color: .red)
         }
+        .padding(.horizontal, 20)
     }
 
     private func amountBadge(title: String, amount: Double, color: Color) -> some View {

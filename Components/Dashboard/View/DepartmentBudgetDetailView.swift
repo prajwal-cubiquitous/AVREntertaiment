@@ -326,14 +326,14 @@ struct DepartmentBudgetDetailView: View {
                     // 🔹 Spent and Remaining (Bottom Row)
                     HStack {
                         VStack(spacing: 4) {
-                            Text("Spent")
+                            Text("Approved")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
                             Text(viewModel.totalSpentFormatted)
                                 .font(.title3)
                                 .fontWeight(.bold)
-                                .foregroundColor(.green)
+                                .foregroundColor(.blue)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .multilineTextAlignment(.leading)
@@ -348,7 +348,7 @@ struct DepartmentBudgetDetailView: View {
                             Text(department != "Other" ? viewModel.remainingBudgetFormatted : "N/A")
                                 .font(.title3)
                                 .fontWeight(.bold)
-                                .foregroundColor(viewModel.remainingBudget >= 0 ? .blue : .red)
+                                .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .multilineTextAlignment(.trailing)
@@ -654,11 +654,14 @@ struct DepartmentBudgetDetailView: View {
         let approved = viewModel.expenses.filter { $0.status == .approved }.reduce(0.0) { $0 + $1.amount }
         let pending = viewModel.expenses.filter { $0.status == .pending }.reduce(0.0) { $0 + $1.amount }
         let rejected = viewModel.expenses.filter { $0.status == .rejected }.reduce(0.0) { $0 + $1.amount }
-        return HStack(spacing: 8) {
+        return HStack() {
             amountBadge(title: "Approved", amount: approved, color: .green)
+            Spacer()
             amountBadge(title: "Pending", amount: pending, color: .orange)
+            Spacer()
             amountBadge(title: "Rejected", amount: rejected, color: .red)
         }
+        .padding(.horizontal, 20)
     }
 
     private func amountBadge(title: String, amount: Double, color: Color) -> some View {
