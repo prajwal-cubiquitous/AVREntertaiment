@@ -1,16 +1,29 @@
 import SwiftUI
 import FirebaseFirestore
+import Contacts
+import ContactsUI
 
 struct CreateUserView: View {
     @StateObject private var viewModel = CreateUserViewModel()
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
+    @State private var showingContactPicker = false
     
     var body: some View {
         NavigationView {
             Form {
                 Section {
-                    // Phone Number Field
+                    // Name Field - moved to top
+                    HStack {
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.accentColor)
+                            .frame(width: 20)
+                        
+                        TextField("Full Name", text: $viewModel.name)
+                            .textContentType(.name)
+                    }
+                    
+                    // Phone Number Field - moved below name
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Image(systemName: "phone.fill")
@@ -20,6 +33,16 @@ struct CreateUserView: View {
                             TextField("Phone Number", text: $viewModel.phoneNumber)
                                 .keyboardType(.phonePad)
                                 .textContentType(.telephoneNumber)
+                            
+                            // Contact picker button
+                            Button(action: {
+                                showingContactPicker = true
+                            }) {
+                                Image(systemName: "person.crop.circle.badge.plus")
+                                    .foregroundColor(.accentColor)
+                                    .font(.title3)
+                            }
+                            .buttonStyle(.plain)
                         }
                         
                         // Show phone number error only when validation has been attempted
@@ -29,16 +52,6 @@ struct CreateUserView: View {
                                 .foregroundColor(.red)
                                 .padding(.leading, 28) // Align with text field
                         }
-                    }
-                    
-                    // Name Field
-                    HStack {
-                        Image(systemName: "person.fill")
-                            .foregroundColor(.accentColor)
-                            .frame(width: 20)
-                        
-                        TextField("Full Name", text: $viewModel.name)
-                            .textContentType(.name)
                     }
                     
                     // Role Selection
@@ -152,6 +165,32 @@ struct CreateUserView: View {
             } message: {
                 Text("A user with this phone number already exists. Do you want to overwrite their information?")
             }
+            .sheet(isPresented: $showingContactPicker) {
+                ContactPickerView(
+                    onContactSelected: { contact in
+                        // Extract phone number from contact
+                        if let phoneNumber = contact.phoneNumbers.first?.value.stringValue {
+                            // Clean phone number - remove spaces, dashes, parentheses
+                            let cleaned = phoneNumber.replacingOccurrences(of: " ", with: "")
+                                .replacingOccurrences(of: "-", with: "")
+                                .replacingOccurrences(of: "(", with: "")
+                                .replacingOccurrences(of: ")", with: "")
+                                .replacingOccurrences(of: "+91", with: "")
+                            
+                            viewModel.phoneNumber = cleaned
+                        }
+                        
+                        // Extract name from contact
+                        let fullName = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
+                        if !fullName.isEmpty {
+                            viewModel.name = fullName
+                        }
+                    },
+                    onDismiss: {
+                        showingContactPicker = false
+                    }
+                )
+            }
         }
     }
 }
@@ -217,6 +256,55 @@ struct LoadingView: View {
             .background(Color(.systemBackground))
             .cornerRadius(16)
             .shadow(radius: 10)
+        }
+    }
+}
+
+// MARK: - Contact Picker View
+struct ContactPickerView: UIViewControllerRepresentable {
+    let onContactSelected: (CNContact) -> Void
+    let onDismiss: () -> Void
+    
+    func makeUIViewController(context: Context) -> CNContactPickerViewController {
+        let picker = CNContactPickerViewController()
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, CNContactPickerDelegate {
+        let parent: ContactPickerView
+        
+        init(_ parent: ContactPickerView) {
+            self.parent = parent
+        }
+        
+        func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
+            // Call the completion handler on main thread
+            DispatchQueue.main.async {
+                self.parent.onContactSelected(contact)
+                // Dismiss the picker
+                picker.dismiss(animated: true) {
+                    // After picker dismisses, dismiss the sheet
+                    DispatchQueue.main.async {
+                        self.parent.onDismiss()
+                    }
+                }
+            }
+        }
+        
+        func contactPickerDidCancel(_ picker: CNContactPickerViewController) {
+            picker.dismiss(animated: true) {
+                // After picker dismisses, dismiss the sheet
+                DispatchQueue.main.async {
+                    self.parent.onDismiss()
+                }
+            }
         }
     }
 }

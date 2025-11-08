@@ -22,5 +22,9 @@
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to your camera to take photos for project attachments.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>We need access to your contacts to select phone numbers when creating users.</string>
 </dict>
 </plist>

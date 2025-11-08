@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import PhotosUI
+import AVFoundation
 
 struct AddExpenseView: View {
     let project: Project
@@ -8,6 +9,7 @@ struct AddExpenseView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var showingFileViewer = false
+    @State private var showingCamera = false
     
     init(project: Project) {
         self.project = project
@@ -236,6 +238,10 @@ struct AddExpenseView: View {
                 Text(viewModel.alertMessage)
             }
             .confirmationDialog("Select Attachment", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
+                Button("Camera") {
+                    showingCamera = true
+                }
+                
                 Button("Select from Photos") {
                     viewModel.showingImagePicker = true
                 }
@@ -253,6 +259,19 @@ struct AddExpenseView: View {
                         viewModel.handleImageSelection(image)
                     }
                 ))
+            }
+            .sheet(isPresented: $showingCamera) {
+                ExpenseCameraPicker(
+                    selectedImage: Binding(
+                        get: { nil },
+                        set: { image in
+                            viewModel.handleImageSelection(image)
+                        }
+                    ),
+                    onDismiss: {
+                        showingCamera = false
+                    }
+                )
             }
             .sheet(isPresented: $viewModel.showingDocumentPicker) {
                 DocumentPicker(
@@ -818,6 +837,64 @@ struct ExpenseImagePicker: UIViewControllerRepresentable {
                         }
                         self.parent.selectedImage = image as? UIImage
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Expense Camera Picker
+struct ExpenseCameraPicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    let onDismiss: () -> Void
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .camera
+        picker.allowsEditing = true
+        picker.cameraCaptureMode = .photo
+        picker.cameraDevice = .rear
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ExpenseCameraPicker
+        
+        init(_ parent: ExpenseCameraPicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            // Extract image on main thread
+            DispatchQueue.main.async {
+                if let editedImage = info[.editedImage] as? UIImage {
+                    self.parent.selectedImage = editedImage
+                } else if let originalImage = info[.originalImage] as? UIImage {
+                    self.parent.selectedImage = originalImage
+                }
+            }
+            
+            // Dismiss the picker first
+            picker.dismiss(animated: true) {
+                // After picker dismisses, dismiss the sheet
+                DispatchQueue.main.async {
+                    self.parent.onDismiss()
+                }
+            }
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            picker.dismiss(animated: true) {
+                // After picker dismisses, dismiss the sheet
+                DispatchQueue.main.async {
+                    self.parent.onDismiss()
                 }
             }
         }
