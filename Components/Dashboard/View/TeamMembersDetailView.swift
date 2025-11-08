@@ -371,6 +371,8 @@ struct MemberExpensesView: View {
     @State private var endDate = Date()
     @State private var isDateRangeActive = false
     @State private var searchText = ""
+    @State private var selectedExpense: Expense?
+    @State private var showingExpenseDetail = false
     
     enum ExpenseFilter: String, CaseIterable {
         case all = "All"
@@ -763,10 +765,25 @@ struct MemberExpensesView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(filteredExpenses, id: \.id) { expense in
-                    MemberExpenseRowView(expense: expense)
+                    MemberExpenseRowView(
+                        expense: expense,
+                        onTap: {
+                            selectedExpense = expense
+                            showingExpenseDetail = true
+                        }
+                    )
                 }
             }
             .padding()
+        }
+        .sheet(isPresented: $showingExpenseDetail) {
+            if let expense = selectedExpense {
+                if expense.status == .pending {
+                    ExpenseDetailView(expense: expense, role: nil)
+                } else {
+                    ExpenseDetailReadOnlyView(expense: expense)
+                }
+            }
         }
     }
 }
@@ -847,90 +864,97 @@ class MemberExpensesViewModel: ObservableObject {
 // MARK: - Member Expense Row View
 struct MemberExpenseRowView: View {
     let expense: Expense
+    let onTap: () -> Void
     @State private var showingFileViewer = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header
-            HStack {
-                // Status Badge
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                    Text(expense.status.rawValue.capitalized)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(statusColor)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(statusColor.opacity(0.1))
-                .cornerRadius(8)
-                
-                Spacer()
-                
-                Text(expense.amountFormatted)
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-            }
-            
-            // Description
-            Text(expense.description)
-                .font(.body)
-                .foregroundColor(.primary)
-                .lineLimit(2)
-            
-            // Details
-            VStack(alignment: .leading, spacing: 6) {
+        Button(action: {
+            HapticManager.selection()
+            onTap()
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Header
                 HStack {
-                    Image(systemName: "folder.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(expense.department)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                HStack {
-                    Image(systemName: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(expense.createdAt.dateValue().formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    // Status Badge
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                        Text(expense.status.rawValue.capitalized)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(statusColor)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(statusColor.opacity(0.1))
+                    .cornerRadius(8)
                     
                     Spacer()
                     
-                    Image(systemName: expense.modeOfPayment == .cash ? "dollarsign.circle.fill" : "creditcard.fill")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    Text(expense.modeOfPayment.rawValue)
-                        .font(.caption)
-                        .foregroundColor(.blue)
+                    Text(expense.amountFormatted)
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                }
+                
+                // Description
+                Text(expense.description)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                
+                // Details
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Image(systemName: "folder.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(expense.department)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
-                    // File attachment icon
-                    if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
-                        FileIconView(
-                            fileName: expense.attachmentName,
-                            fileURL: attachmentURL,
-                            onTap: {
-                                showingFileViewer = true
-                            }
-                        )
+                    HStack {
+                        Image(systemName: "calendar")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(expense.createdAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: expense.modeOfPayment == .cash ? "dollarsign.circle.fill" : "creditcard.fill")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        Text(expense.modeOfPayment.rawValue)
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        
+                        // File attachment icon
+                        if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
+                            FileIconView(
+                                fileName: expense.attachmentName,
+                                fileURL: attachmentURL,
+                                onTap: {
+                                    showingFileViewer = true
+                                }
+                            )
+                        }
                     }
                 }
             }
+            .padding()
+            .background(Color(.secondarySystemGroupedBackground))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(statusColor.opacity(0.3), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(statusColor.opacity(0.3), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+        .buttonStyle(.plain)
         .sheet(isPresented: $showingFileViewer) {
             if let urlString = expense.attachmentURL,
                let url = URL(string: urlString) {
