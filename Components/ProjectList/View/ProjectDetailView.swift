@@ -581,47 +581,59 @@ private struct CurrentPhaseView: View {
             
             // Phase Budget Summary
             VStack(spacing: DesignSystem.Spacing.small) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                VStack(spacing: 12) {
+                    // Total Budget - Centered
+                    VStack(spacing: 4) {
                         Text("TOTAL BUDGET")
                             .font(DesignSystem.Typography.caption2)
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
                         
                         Text(formatCurrency(phase.totalBudget))
-                            .font(DesignSystem.Typography.footnote)
-                            .fontWeight(.semibold)
+                            .font(DesignSystem.Typography.title3)
+                            .fontWeight(.bold)
                             .foregroundColor(.primary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .center)
                     
-                    Spacer()
+                    // Divider line (optional)
+                    Divider()
+                        .padding(.horizontal, 16)
                     
-                    VStack(alignment: .center, spacing: 2) {
-                        Text("APPROVED")
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
+                    // Approved and Remaining - Left and Right
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("APPROVED")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                            
+                            Text(formatCurrency(phase.approvedAmount))
+                                .font(DesignSystem.Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         
-                        Text(formatCurrency(phase.approvedAmount))
-                            .font(DesignSystem.Typography.footnote)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("REMAINING")
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
-                        
-                        Text(formatCurrency(phase.remainingAmount))
-                            .font(DesignSystem.Typography.footnote)
-                            .fontWeight(.semibold)
-                            .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("REMAINING")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                            
+                            Text(formatCurrency(phase.remainingAmount))
+                                .font(DesignSystem.Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(color: .gray.opacity(0.1), radius: 4, x: 0, y: 2)
+
                 
                 // Progress bar
                 ProgressView(value: min(phase.spentPercentage, 1.0))
@@ -1083,46 +1095,59 @@ private struct ProjectDetailPhaseCardView: View {
                 .padding(.vertical, DesignSystem.Spacing.extraSmall)
             
             // Budget Summary - Compact
-            HStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 4) {
+            VStack(spacing: 12) {
+                // Total Budget - Centered
+                VStack(spacing: 4) {
                     Text("TOTAL BUDGET")
                         .font(DesignSystem.Typography.caption2)
                         .foregroundColor(.secondary)
                         .fontWeight(.medium)
                     
                     Text(formatCurrency(phase.totalBudget))
-                        .font(DesignSystem.Typography.footnote)
-                        .fontWeight(.semibold)
+                        .font(DesignSystem.Typography.title3)
+                        .fontWeight(.bold)
                         .foregroundColor(.primary)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
                 
-                VStack(alignment: .center, spacing: 4) {
-                    Text("APPROVED")
-                        .font(DesignSystem.Typography.caption2)
-                        .foregroundColor(.secondary)
-                        .fontWeight(.medium)
-                    
-                    Text(formatCurrency(phase.approvedAmount))
-                        .font(DesignSystem.Typography.footnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.blue)
-                }
-                .frame(maxWidth: .infinity)
+                // Divider line (optional)
+                Divider()
+                    .padding(.horizontal, 16)
                 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("REMAINING")
-                        .font(DesignSystem.Typography.caption2)
-                        .foregroundColor(.secondary)
-                        .fontWeight(.medium)
+                // Approved and Remaining - Left and Right
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("APPROVED")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(phase.approvedAmount))
+                            .font(DesignSystem.Typography.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.blue)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    Text(formatCurrency(phase.remainingAmount))
-                        .font(DesignSystem.Typography.footnote)
-                        .fontWeight(.semibold)
-                        .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("REMAINING")
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
+                        
+                        Text(formatCurrency(phase.remainingAmount))
+                            .font(DesignSystem.Typography.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(phase.remainingAmount >= 0 ? .green : .red)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
             }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(12)
+            .shadow(color: .gray.opacity(0.1), radius: 4, x: 0, y: 2)
+
             
             // Progress Bar
             ProgressView(value: min(phase.spentPercentage, 1.0))
