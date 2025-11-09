@@ -56,9 +56,14 @@ struct ExpenseDetailView: View {
                         // Payment Information Card
                         paymentInfoCard
                         
-                        // Attachment Card (if exists)
-                        if expense.attachmentURL != nil {
+                        // Receipt Card (if exists)
+                        if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
                             attachmentCard
+                        }
+                        
+                        // Payment Proof Card (if exists)
+                        if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
+                            paymentProofCard
                         }
                         
                         // Remark Section
@@ -486,7 +491,7 @@ struct ExpenseDetailView: View {
     // MARK: - Attachment Card
     private var attachmentCard: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            Text("Attachment")
+            Text("Receipt")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
@@ -496,7 +501,7 @@ struct ExpenseDetailView: View {
                 showingFileViewer = true
             }) {
                 HStack {
-                    Image(systemName: "doc.fill")
+                    Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
                         .font(.title2)
                         .foregroundColor(.accentColor)
                         .frame(width: 30)
@@ -530,6 +535,72 @@ struct ExpenseDetailView: View {
                let url = URL(string: urlString) {
                 FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
             }
+        }
+    }
+    
+    // MARK: - Payment Proof Card
+    @State private var showingPaymentProofViewer = false
+    
+    private var paymentProofCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Payment Proof")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            Button(action: {
+                HapticManager.selection()
+                showingPaymentProofViewer = true
+            }) {
+                HStack {
+                    Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
+                        .font(.title2)
+                        .foregroundColor(.green)
+                        .frame(width: 30)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.paymentProofName ?? "Document")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("Tap to view")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(Color(.systemBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .sheet(isPresented: $showingPaymentProofViewer) {
+            if let urlString = expense.paymentProofURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.paymentProofName)
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
+            return "photo.fill"
+        } else if lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
         }
     }
     

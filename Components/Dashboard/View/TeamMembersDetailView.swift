@@ -869,6 +869,7 @@ struct MemberExpenseRowView: View {
     let expense: Expense
     let onTap: () -> Void
     @State private var showingFileViewer = false
+    @State private var showingPaymentProofViewer = false
     
     var body: some View {
         Button(action: {
@@ -935,7 +936,7 @@ struct MemberExpenseRowView: View {
                             .font(.caption)
                             .foregroundColor(.blue)
                         
-                        // File attachment icon
+                        // Receipt icon
                         if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
                             FileIconView(
                                 fileName: expense.attachmentName,
@@ -944,6 +945,19 @@ struct MemberExpenseRowView: View {
                                     showingFileViewer = true
                                 }
                             )
+                            .padding(.leading, 4)
+                        }
+                        
+                        // Payment proof icon
+                        if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
+                            FileIconView(
+                                fileName: expense.paymentProofName,
+                                fileURL: paymentProofURL,
+                                onTap: {
+                                    showingPaymentProofViewer = true
+                                }
+                            )
+                            .padding(.leading, 4)
                         }
                     }
                 }
@@ -962,6 +976,12 @@ struct MemberExpenseRowView: View {
             if let urlString = expense.attachmentURL,
                let url = URL(string: urlString) {
                 FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
+        .sheet(isPresented: $showingPaymentProofViewer) {
+            if let urlString = expense.paymentProofURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.paymentProofName)
             }
         }
     }

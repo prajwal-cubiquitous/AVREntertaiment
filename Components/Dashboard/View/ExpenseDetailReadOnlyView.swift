@@ -31,8 +31,13 @@ struct ExpenseDetailReadOnlyView: View {
                         paymentInfoCard
                         
                         // Attachment Card (if exists)
-                        if expense.attachmentURL != nil {
+                        if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
                             attachmentCard
+                        }
+                        
+                        // Payment Proof Card (if exists)
+                        if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
+                            paymentProofCard
                         }
                         
                         // Approval Information Card
@@ -216,45 +221,44 @@ struct ExpenseDetailReadOnlyView: View {
     }
     
     // MARK: - Attachment Card
+    @State private var showingAttachmentViewer = false
+    
     private var attachmentCard: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            Text("Attachment")
+            Text("Receipt")
                 .font(.headline)
                 .fontWeight(.semibold)
                 .foregroundColor(.primary)
             
-            HStack(spacing: 16) {
-                Image(systemName: "doc.fill")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
-                    .frame(width: 30)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(expense.attachmentName ?? "Document")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
+            Button(action: {
+                HapticManager.selection()
+                showingAttachmentViewer = true
+            }) {
+                HStack {
+                    Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                        .frame(width: 30)
                     
-                    Text("Tap to view")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.attachmentName ?? "Document")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("Tap to view")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
                 }
-                
-                Spacer()
-                
-                Button("View") {
-                    // Handle attachment view
-                }
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.accentColor)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.accentColor.opacity(0.1))
-                )
             }
+            .buttonStyle(.plain)
         }
         .padding(DesignSystem.Spacing.medium)
         .background(
@@ -262,6 +266,80 @@ struct ExpenseDetailReadOnlyView: View {
                 .fill(Color(.systemBackground))
                 .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         )
+        .sheet(isPresented: $showingAttachmentViewer) {
+            if let urlString = expense.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
+    }
+    
+    // MARK: - Payment Proof Card
+    @State private var showingPaymentProofViewer = false
+    
+    private var paymentProofCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            Text("Payment Proof")
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            Button(action: {
+                HapticManager.selection()
+                showingPaymentProofViewer = true
+            }) {
+                HStack {
+                    Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
+                        .font(.title2)
+                        .foregroundColor(.green)
+                        .frame(width: 30)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(expense.paymentProofName ?? "Document")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text("Tap to view")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+        .sheet(isPresented: $showingPaymentProofViewer) {
+            if let urlString = expense.paymentProofURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: expense.paymentProofName)
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
+            return "photo.fill"
+        } else if lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
+        }
     }
     
     // MARK: - Approval Information Card

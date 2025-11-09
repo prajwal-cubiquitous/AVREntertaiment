@@ -5,6 +5,7 @@ struct ExpenseDetailPopupView: View {
     let expense: Expense
     @Binding var isPresented: Bool
     @State private var showingAttachment = false
+    @State private var showingPaymentProof = false
     @State private var reviewerNote: String = ""
     @State private var showingRemarkEditor = false
     let onApprove: ((String) -> Void)?
@@ -84,20 +85,39 @@ struct ExpenseDetailPopupView: View {
                             detailRow(title: "Amount:", value: expense.amountFormatted)
                             detailRow(title: "Submitted By", value: expense.submittedBy)
                             
-                            // Attachment
-                            if let attachmentName = expense.attachmentName {
+                            // Receipt (Attachment)
+                            if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
                                 HStack {
-                                    Text("Invoice Attachment")
+                                    Text("Receipt")
                                         .font(.body)
                                     Spacer()
                                     Button {
                                         showingAttachment = true
                                     } label: {
                                         HStack {
-                                            Image(systemName: "doc.text")
+                                            Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
                                                 .foregroundColor(.blue)
                                             Text("View Full")
                                                 .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Payment Proof
+                            if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
+                                HStack {
+                                    Text("Payment Proof")
+                                        .font(.body)
+                                    Spacer()
+                                    Button {
+                                        showingPaymentProof = true
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
+                                                .foregroundColor(.green)
+                                            Text("View Full")
+                                                .foregroundColor(.green)
                                         }
                                     }
                                 }
@@ -188,7 +208,13 @@ struct ExpenseDetailPopupView: View {
         .sheet(isPresented: $showingAttachment) {
             if let attachmentURL = expense.attachmentURL,
                let url = URL(string: attachmentURL) {
-                SafariView(url: url)
+                FileViewerSheet(fileURL: url, fileName: expense.attachmentName)
+            }
+        }
+        .sheet(isPresented: $showingPaymentProof) {
+            if let paymentProofURL = expense.paymentProofURL,
+               let url = URL(string: paymentProofURL) {
+                FileViewerSheet(fileURL: url, fileName: expense.paymentProofName)
             }
         }
     }
@@ -200,6 +226,20 @@ struct ExpenseDetailPopupView: View {
             Spacer()
             Text(value)
                 .font(.body)
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
+            return "photo.fill"
+        } else if lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
         }
     }
 }
