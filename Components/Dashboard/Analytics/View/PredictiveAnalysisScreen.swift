@@ -82,11 +82,7 @@ struct PredictiveAnalysisScreen: View {
         VStack(spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("AVR Entertainment")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
+//                   
                     Text("Predictive Analysis")
                         .font(.subheadline)
                         .foregroundColor(.secondary)

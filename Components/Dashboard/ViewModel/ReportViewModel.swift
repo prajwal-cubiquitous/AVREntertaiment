@@ -371,14 +371,14 @@ class ReportViewModel: ObservableObject {
                 .font: UIFont.boldSystemFont(ofSize: 16),
                 .foregroundColor: UIColor.white
             ]
-            "AVR".draw(in: logoRect, withAttributes: logoAttributes)
+            "".draw(in: logoRect, withAttributes: logoAttributes)
             
             // Company Header
             let headerAttributes: [NSAttributedString.Key: Any] = [
                 .font: UIFont.boldSystemFont(ofSize: 28),
                 .foregroundColor: UIColor.black
             ]
-            "AVR Entertainment".draw(at: CGPoint(x: leftMargin + 50, y: yPosition), withAttributes: headerAttributes)
+            "".draw(at: CGPoint(x: leftMargin + 50, y: yPosition), withAttributes: headerAttributes)
             
             let subHeaderAttributes: [NSAttributedString.Key: Any] = [
                 .font: UIFont.systemFont(ofSize: 14),
@@ -412,7 +412,7 @@ class ReportViewModel: ObservableObject {
             Date().formatted(.dateTime.day().month().year().hour().minute()).draw(at: CGPoint(x: leftMargin + 15, y: metaBoxY + 35), withAttributes: metaValueAttributes)
             
             "System Version:".draw(at: CGPoint(x: leftMargin + 15, y: metaBoxY + 50), withAttributes: metaLabelAttributes)
-            "AVR Entertainment v1.0.2".draw(at: CGPoint(x: leftMargin + 15, y: metaBoxY + 65), withAttributes: metaValueAttributes)
+            "v1.0.2".draw(at: CGPoint(x: leftMargin + 15, y: metaBoxY + 65), withAttributes: metaValueAttributes)
             
             // Right column metadata
             "Report Period:".draw(at: CGPoint(x: leftMargin + 250, y: metaBoxY + 15), withAttributes: metaLabelAttributes)
@@ -622,7 +622,7 @@ class ReportViewModel: ObservableObject {
                 .foregroundColor: UIColor(red: 0.4, green: 0.4, blue: 0.4, alpha: 1.0)
             ]
             
-            "© 2024 AVR Entertainment Management System • Confidential Financial Report".draw(at: CGPoint(x: leftMargin, y: yPosition + 10), withAttributes: footerAttributes)
+            "© 2024 Management System • Confidential Financial Report".draw(at: CGPoint(x: leftMargin, y: yPosition + 10), withAttributes: footerAttributes)
             "Generated on \(Date().formatted(.dateTime.day().month().year())) • For authorized personnel only".draw(at: CGPoint(x: leftMargin, y: yPosition + 25), withAttributes: footerAttributes)
             
             // Contact info (right aligned)
@@ -772,7 +772,7 @@ class ReportViewModel: ObservableObject {
         var csvContent = ""
         
         // MARK: - Report Header
-        csvContent += "AVR ENTERTAINMENT - PROJECT FINANCIAL REPORT\n"
+        csvContent += "PROJECT FINANCIAL REPORT\n"
         csvContent += "Report Generated: \(Date().formatted(.dateTime.day().month().year().hour().minute()))\n"
         csvContent += "Filter Period: \(selectedDateRange.description)\n"
         csvContent += "Department: \(selectedDepartment)\n\n"

@@ -11,6 +11,7 @@ struct FullExpenseListView: View {
     let currentUserPhone: String
     let projectId: String
     let project: Project
+    let CustomerId: String?
     
     var body: some View {
         NavigationView {
@@ -58,7 +59,7 @@ struct FullExpenseListView: View {
         }
         .sheet(isPresented: $showingEditExpense) {
             if let expense = selectedExpenseForEdit {
-                EditExpenseView(expense: expense, project: project)
+                EditExpenseView(expense: expense, project: project, customerId: CustomerId)
             }
         }
     }

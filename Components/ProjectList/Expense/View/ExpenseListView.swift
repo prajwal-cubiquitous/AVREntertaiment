@@ -48,7 +48,7 @@ struct ExpenseListView: View {
                 viewModel: viewModel,
                 currentUserPhone: currentUserPhone,
                 projectId: project.id ?? "",
-                project: project
+                project: project, CustomerId: customerId
             )
         }
         .sheet(item: $selectedExpenseForChat) { expense in
@@ -60,7 +60,7 @@ struct ExpenseListView: View {
             )
         }
         .sheet(item: $selectedExpenseForEdit) { expense in
-            EditExpenseView(expense: expense, project: project)
+            EditExpenseView(expense: expense, project: project, customerId: customerId)
         }
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpenseForDetail {

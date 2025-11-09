@@ -11,10 +11,10 @@ struct EditExpenseView: View {
     @State private var customerId: String?
     @State private var hasLoadedExpenseData = false
     
-    init(expense: Expense, project: Project) {
+    init(expense: Expense, project: Project, customerId: String?) {
         self.expense = expense
         self.project = project
-        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project, customerId: nil))
+        self._viewModel = StateObject(wrappedValue: AddExpenseViewModel(project: project, customerId: customerId))
     }
     
     var body: some View {
@@ -28,13 +28,13 @@ struct EditExpenseView: View {
                             .fontWeight(.semibold)
                             .foregroundColor(.primary)
                         
-                        HStack {
-                            Image(systemName: "building.2")
-                                .foregroundColor(.secondary)
-                            Text("AVR Entertainment")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
+//                        HStack {
+//                            Image(systemName: "building.2")
+//                                .foregroundColor(.secondary)
+//                            Text("AVR Entertainment")
+//                                .font(.subheadline)
+//                                .foregroundColor(.secondary)
+//                        }
                     }
                     .padding(.vertical, 8)
                 }
