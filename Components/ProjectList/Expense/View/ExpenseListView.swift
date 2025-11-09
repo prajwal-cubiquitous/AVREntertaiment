@@ -64,12 +64,16 @@ struct ExpenseListView: View {
         }
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpenseForDetail {
-                if expense.status == .pending {
-                    ExpenseDetailView(expense: expense, role: nil)
-                } else {
-                    ExpenseDetailReadOnlyView(expense: expense)
-                }
+                ExpenseDetailPopupView(
+                    expense: expense,
+                    isPresented: Binding(
+                        get: { selectedExpenseForDetail != nil },
+                        set: { if !$0 { selectedExpenseForDetail = nil } }
+                    ),
+                    isPendingApproval: false
+                )
             }
+
         }
 
     }

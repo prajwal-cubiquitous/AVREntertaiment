@@ -124,7 +124,7 @@ struct ExpenseChatView: View {
                 ForEach(viewModel.messages) { message in
                     ChatMessageBubble(
                         message: message,
-                        isFromCurrentUser: message.senderId == userPhoneNumber,
+                        isFromCurrentUser: isMessageFromCurrentUser(message),
                         onImageTapped: { url, index in
                             selectedImageURL = url
                             selectedImageIndex = index
@@ -203,7 +203,7 @@ struct ExpenseChatView: View {
                     
                     if !messageText.isEmpty || !selectedImages.isEmpty {
                         Button {
-                            task{
+                            Task {
                                 await sendMessage()
                             }
                         } label: {
@@ -254,6 +254,23 @@ struct ExpenseChatView: View {
     }
     
     // MARK: - Helper Methods
+    private var senderId: String {
+        // For admin/approver roles, use "Admin" as identifier, otherwise use phone number
+        if role == .ADMIN || role == .APPROVER {
+            return "Admin"
+        }
+        return userPhoneNumber
+    }
+    
+    private func isMessageFromCurrentUser(_ message: ExpenseChat) -> Bool {
+        // For admin/approver, check if senderId is "Admin" and current user is admin/approver
+        if message.senderId == "Admin" {
+            return role == .ADMIN || role == .APPROVER
+        }
+        // For regular users, check phone number match
+        return message.senderId == userPhoneNumber
+    }
+    
     private func sendMessage() async {
         guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty else { return }
         
@@ -266,7 +283,7 @@ struct ExpenseChatView: View {
                 textMessage: messageText,
                 mediaURL: [],
                 mention: [],
-                senderId: userPhoneNumber,
+                senderId: senderId,
                 senderRole: role
             )
             
@@ -330,7 +347,7 @@ struct ExpenseChatView: View {
                 textMessage: messageText.isEmpty ? "📷 Image" : messageText,
                 mediaURL: uploadedURLs,
                 mention: [],
-                senderId: userPhoneNumber,
+                senderId: senderId,
                 senderRole: role
             )
             
@@ -358,8 +375,8 @@ struct ExpenseChatView: View {
         // Create unique filename with user UID for better permissions
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "expense_chat_\(expense.id ?? "unknown")_\(timestamp)_\(index).jpg"
-        // Use userPhoneNumber as the user identifier for storage path
-        let imageRef = storageRef.child("expense_chat_images/\(userPhoneNumber)/\(filename)")
+        // Use senderId (which handles admin/approver correctly) as the user identifier for storage path
+        let imageRef = storageRef.child("expense_chat_images/\(senderId)/\(filename)")
         
         // Upload the image
         let metadata = StorageMetadata()
@@ -379,6 +396,16 @@ struct ChatMessageBubble: View {
     let isFromCurrentUser: Bool
     let onImageTapped: (String, Int) -> Void
     
+    private var senderDisplayName: String {
+        if message.senderId == "Admin" {
+            return message.senderRole.rawValue
+        }
+        if message.senderRole == .APPROVER {
+            return "\(message.senderRole.rawValue) - \(message.senderId)"
+        }
+        return message.senderRole.rawValue
+    }
+    
     var body: some View {
         HStack {
             if isFromCurrentUser {
@@ -388,7 +415,7 @@ struct ChatMessageBubble: View {
             VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
                 // Sender Name (only show for other users)
                 if !isFromCurrentUser {
-                    Text(message.senderRole.rawValue == "APPROVER" ? "\(message.senderRole.rawValue) - \(message.senderId)" : message.senderRole.rawValue)
+                    Text(senderDisplayName)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, DesignSystem.Spacing.medium)

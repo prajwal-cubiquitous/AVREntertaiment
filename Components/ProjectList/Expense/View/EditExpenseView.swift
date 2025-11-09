@@ -92,8 +92,15 @@ struct EditExpenseView: View {
                 }
                 
                 // MARK: - Attachment
-                Section(header: Text("Attachment (Optional)")) {
+                Section(header: Text("Receipt (Optional)")) {
                     attachmentView
+                }
+                
+                // MARK: - Payment Proof (Required for UPI and Check)
+                if viewModel.selectedPaymentMode == .upi || viewModel.selectedPaymentMode == .check {
+                    Section(header: Text("Payment Proof"), footer: Text("Payment proof is required for UPI and check payments")) {
+                        paymentProofView
+                    }
                 }
                 
                 // MARK: - Update Button
@@ -125,6 +132,48 @@ struct EditExpenseView: View {
                     onDocumentPicked: viewModel.handleDocumentSelection
                 )
             }
+            .confirmationDialog("Select Payment Proof", isPresented: $viewModel.showingPaymentProofOptions, titleVisibility: .visible) {
+                Button("Camera") {
+                    showingPaymentProofCamera = true
+                }
+                
+                Button("Select from Photos") {
+                    viewModel.showingPaymentProofImagePicker = true
+                }
+                
+                Button("Select from Files") {
+                    viewModel.showingPaymentProofDocumentPicker = true
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .sheet(isPresented: $viewModel.showingPaymentProofImagePicker) {
+                ExpenseImagePicker(selectedImage: Binding(
+                    get: { nil },
+                    set: { image in
+                        viewModel.handlePaymentProofImageSelection(image)
+                    }
+                ))
+            }
+            .sheet(isPresented: $showingPaymentProofCamera) {
+                ExpenseCameraPicker(
+                    selectedImage: Binding(
+                        get: { nil },
+                        set: { image in
+                            viewModel.handlePaymentProofImageSelection(image)
+                        }
+                    ),
+                    onDismiss: {
+                        showingPaymentProofCamera = false
+                    }
+                )
+            }
+            .sheet(isPresented: $viewModel.showingPaymentProofDocumentPicker) {
+                DocumentPicker(
+                    allowedTypes: [.pdf, .image],
+                    onDocumentPicked: viewModel.handlePaymentProofDocumentSelection
+                )
+            }
         }
         .onAppear {
             // Fetch customerId from users collection using current user UID
@@ -133,19 +182,26 @@ struct EditExpenseView: View {
                 // Update customerId in ViewModel when it becomes available
                 if let customerId = customerId {
                     viewModel.updateCustomerId(customerId)
-                }
-                // Wait for phases to load, then pre-fill the form
-                // Small delay to ensure phases are loaded
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                await MainActor.run {
-                    loadExpenseData()
+                    // Wait for phases to load by checking availablePhases
+                    var attempts = 0
+                    while viewModel.availablePhases.isEmpty && attempts < 20 {
+                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                        attempts += 1
+                    }
+                    // Additional small delay to ensure everything is ready
+                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                    await MainActor.run {
+                        loadExpenseData()
+                    }
                 }
             }
         }
-        .onChange(of: viewModel.availablePhases) { _ in
+        .onChange(of: viewModel.availablePhases) { newPhases in
             // When phases load, update the form if phaseId is set but not selected
-            if let phaseId = expense.phaseId, !phaseId.isEmpty, viewModel.selectedPhaseId.isEmpty {
-                loadExpenseData()
+            if !newPhases.isEmpty {
+                if let phaseId = expense.phaseId, !phaseId.isEmpty, viewModel.selectedPhaseId.isEmpty {
+                    loadExpenseData()
+                }
             }
         }
     }
@@ -192,6 +248,10 @@ struct EditExpenseView: View {
         // Set existing attachment info if present
         viewModel.attachmentURL = expense.attachmentURL
         viewModel.attachmentName = expense.attachmentName
+        
+        // Set existing payment proof info if present
+        viewModel.paymentProofURL = expense.paymentProofURL
+        viewModel.paymentProofName = expense.paymentProofName
     }
     
     // MARK: - Phase Picker
@@ -424,17 +484,42 @@ struct EditExpenseView: View {
     }
     
     // MARK: - Attachment Section
+    @State private var showingFileViewer = false
+    @State private var showingPaymentProofFileViewer = false
+    @State private var showingPaymentProofCamera = false
+    
     private var attachmentView: some View {
         VStack(spacing: 12) {
             if let attachmentName = viewModel.attachmentName {
                 // Show attached file
-                HStack {
-                    Image(systemName: "doc.fill")
-                        .foregroundColor(.blue)
-                    Text(attachmentName)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                    Spacer()
+                HStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: fileIcon(for: attachmentName))
+                            .foregroundColor(.blue)
+                        Text(attachmentName)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // Preview button
+                    Button(action: {
+                        showingFileViewer = true
+                    }) {
+                        Image(systemName: "eye.fill")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                            .frame(width: 44, height: 44)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Remove button
                     Button("Remove") {
                         withAnimation(.easeInOut) {
                             viewModel.removeAttachment()
@@ -442,10 +527,11 @@ struct EditExpenseView: View {
                     }
                     .foregroundColor(.red)
                     .font(.caption)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
                 }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
             } else {
                 // Add attachment button
                 Button(action: {
@@ -454,7 +540,7 @@ struct EditExpenseView: View {
                     HStack {
                         Image(systemName: "paperclip")
                             .font(.title3)
-                        Text("Add Attachment")
+                        Text("Add Receipt")
                             .fontWeight(.medium)
                         Spacer()
                     }
@@ -476,6 +562,110 @@ struct EditExpenseView: View {
                         .foregroundColor(.secondary)
                 }
             }
+        }
+        .sheet(isPresented: $showingFileViewer) {
+            if let urlString = viewModel.attachmentURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: viewModel.attachmentName)
+            }
+        }
+    }
+    
+    // MARK: - Payment Proof Section
+    private var paymentProofView: some View {
+        VStack(spacing: 12) {
+            if let paymentProofName = viewModel.paymentProofName {
+                // Show attached file
+                HStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: fileIcon(for: paymentProofName))
+                            .foregroundColor(.green)
+                        Text(paymentProofName)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // Preview button
+                    Button(action: {
+                        showingPaymentProofFileViewer = true
+                    }) {
+                        Image(systemName: "eye.fill")
+                            .font(.title3)
+                            .foregroundColor(.green)
+                            .frame(width: 44, height: 44)
+                            .background(Color.green.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Remove button
+                    Button(action: {
+                        withAnimation(.easeInOut) {
+                            viewModel.removePaymentProof()
+                        }
+                    }) {
+                        Image(systemName: "trash.fill")
+                            .font(.title3)
+                            .foregroundColor(.red)
+                            .frame(width: 44, height: 44)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                // Add payment proof button
+                Button(action: {
+                    viewModel.showingPaymentProofOptions = true
+                }) {
+                    HStack {
+                        Image(systemName: "paperclip")
+                            .font(.title3)
+                        Text("Add Payment Proof")
+                            .fontWeight(.medium)
+                        Spacer()
+                    }
+                    .foregroundColor(.green)
+                    .padding()
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // Upload progress
+            if viewModel.isUploadingPaymentProof {
+                VStack(spacing: 8) {
+                    ProgressView(value: viewModel.paymentProofUploadProgress)
+                        .progressViewStyle(LinearProgressViewStyle())
+                    Text("Uploading... \(Int(viewModel.paymentProofUploadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .sheet(isPresented: $showingPaymentProofFileViewer) {
+            if let urlString = viewModel.paymentProofURL,
+               let url = URL(string: urlString) {
+                FileViewerSheet(fileURL: url, fileName: viewModel.paymentProofName)
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func fileIcon(for fileName: String) -> String {
+        let lowercased = fileName.lowercased()
+        if lowercased.hasSuffix(".pdf") {
+            return "doc.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") || lowercased.hasSuffix(".png") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
         }
     }
     

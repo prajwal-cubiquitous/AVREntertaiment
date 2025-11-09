@@ -1257,6 +1257,14 @@ class AddExpenseViewModel: ObservableObject {
             updateData["attachmentName"] = name
         }
         
+        // Only update payment proof if it has changed
+        if let url = paymentProofURL {
+            updateData["paymentProofURL"] = url
+        }
+        if let name = paymentProofName {
+            updateData["paymentProofName"] = name
+        }
+        
         // Update document in Firestore
         FirebasePathHelper.shared
             .expensesCollection(customerId: customerId, projectId: projectId)
