@@ -21,7 +21,7 @@ struct AdminProjectDetailView: View {
                 basicInfoSection
                 
                 // Timeline Section
-                timelineSection
+//                timelineSection
                 
                 // Team Management Section
                 teamSection
@@ -118,7 +118,7 @@ struct AdminProjectDetailView: View {
             
             // Client
             ModernEditableCard(
-                title: "Client",
+                title: "Client Name",
                 value: viewModel.client,
                 isEditing: $viewModel.isEditingClient,
                 icon: "person.2.fill",
@@ -130,7 +130,7 @@ struct AdminProjectDetailView: View {
                 title: "Location",
                 value: viewModel.location,
                 isEditing: $viewModel.isEditingLocation,
-                icon: "mappin.circle.fill",
+                icon: "location.fill",
                 onSave: viewModel.updateProjectLocation
             )
             

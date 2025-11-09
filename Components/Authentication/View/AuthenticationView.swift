@@ -208,7 +208,7 @@ struct AuthenticationView: View {
                 ModernTextField(
                     title: "Email Address",
                     text: $email,
-                    placeholder: "admin@avrenterainment.com",
+                    placeholder: "your@gmail.com",
                     icon: "envelope",
                     keyboardType: .emailAddress
                 )

@@ -120,7 +120,7 @@ struct CreateUserView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button("Back") {
                         dismiss()
                     }
                 }
