@@ -390,7 +390,7 @@ struct ModernExpenseApprovalRow: View {
                             fileURL: attachmentURL,
                             onTap: {
                                 showingFileViewer = true
-                            }
+                            }, isReciept: true
                         )
                     }
                     

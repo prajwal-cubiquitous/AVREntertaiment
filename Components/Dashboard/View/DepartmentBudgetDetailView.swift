@@ -908,7 +908,7 @@ struct DepartmentExpenseRowView: View {
                             fileURL: attachmentURL,
                             onTap: {
                                 showingFileViewer = true
-                            }
+                            }, isReciept: true
                         )
                         .padding(.leading, 4)
                     }
@@ -920,7 +920,7 @@ struct DepartmentExpenseRowView: View {
                             fileURL: paymentProofURL,
                             onTap: {
                                 showingPaymentProofViewer = true
-                            }
+                            }, isReciept: false
                         )
                         .padding(.leading, 4)
                     }

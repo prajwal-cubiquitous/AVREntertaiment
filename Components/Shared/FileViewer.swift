@@ -150,6 +150,7 @@ struct FileIconView: View {
     let fileName: String?
     let fileURL: String?
     let onTap: () -> Void
+    let isReciept: Bool
     
     var body: some View {
         if let url = fileURL, !url.isEmpty {
@@ -159,9 +160,9 @@ struct FileIconView: View {
             }) {
                 Image(systemName: fileIcon)
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.blue)
+                    .foregroundColor(isReciept ? .blue : .green)
                     .padding(8)
-                    .background(Color.blue.opacity(0.1))
+                    .background(isReciept ? Color.blue.opacity(0.1) : Color.green.opacity(0.1))
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)

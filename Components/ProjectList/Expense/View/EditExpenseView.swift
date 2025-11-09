@@ -9,6 +9,7 @@ struct EditExpenseView: View {
     @StateObject private var viewModel: AddExpenseViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var customerId: String?
+    @State private var hasLoadedExpenseData = false
     
     init(expense: Expense, project: Project) {
         self.expense = expense
@@ -184,30 +185,39 @@ struct EditExpenseView: View {
                     viewModel.updateCustomerId(customerId)
                     // Wait for phases to load by checking availablePhases
                     var attempts = 0
-                    while viewModel.availablePhases.isEmpty && attempts < 20 {
+                    while viewModel.availablePhases.isEmpty && attempts < 30 {
                         try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
                         attempts += 1
                     }
-                    // Additional small delay to ensure everything is ready
-                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-                    await MainActor.run {
-                        loadExpenseData()
+                    // If phases are loaded, load expense data
+                    if !viewModel.availablePhases.isEmpty && !hasLoadedExpenseData {
+                        await MainActor.run {
+                            loadExpenseData()
+                            hasLoadedExpenseData = true
+                        }
                     }
                 }
             }
         }
         .onChange(of: viewModel.availablePhases) { newPhases in
-            // When phases load, update the form if phaseId is set but not selected
-            if !newPhases.isEmpty {
-                if let phaseId = expense.phaseId, !phaseId.isEmpty, viewModel.selectedPhaseId.isEmpty {
-                    loadExpenseData()
-                }
+            // When phases load, load expense data if it hasn't been loaded yet
+            if !newPhases.isEmpty && !hasLoadedExpenseData {
+                loadExpenseData()
+                hasLoadedExpenseData = true
             }
         }
     }
     
     // MARK: - Load Expense Data
     private func loadExpenseData() {
+        // Only load if phases are available
+        guard !viewModel.availablePhases.isEmpty else {
+            print("⚠️ Cannot load expense data: phases not loaded yet")
+            return
+        }
+        
+        print("📝 Loading expense data for editing...")
+        
         // Parse date
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "dd/MM/yyyy"
@@ -216,17 +226,31 @@ struct EditExpenseView: View {
         }
         
         // Set amount
-        viewModel.amount = String(expense.amount)
+        viewModel.amount = String(format: "%.2f", expense.amount)
         
         // Set description
         viewModel.description = expense.description
         
         // Set phase and department
-        if let phaseId = expense.phaseId {
-            viewModel.selectedPhaseId = phaseId
+        if let phaseId = expense.phaseId, !phaseId.isEmpty {
+            // Verify phase exists in available phases
+            if viewModel.availablePhases.contains(where: { $0.id == phaseId }) {
+                viewModel.selectedPhaseId = phaseId
+                print("✅ Phase set: \(phaseId)")
+            } else {
+                print("⚠️ Phase ID \(phaseId) not found in available phases")
+                // Try to find the phase even if it's disabled
+                if let phase = viewModel.availablePhases.first(where: { $0.id == phaseId }) {
+                    viewModel.selectedPhaseId = phaseId
+                    print("✅ Phase found (may be disabled): \(phaseId)")
+                }
+            }
         }
+        
+        // Set department
         viewModel.selectedDepartment = expense.department
         viewModel.updateDepartmentForPhase()
+        print("✅ Department set: \(expense.department)")
         
         // Set categories and check for "Misc / Other" custom names
         viewModel.categories = expense.categories.isEmpty ? [""] : expense.categories
@@ -241,9 +265,11 @@ struct EditExpenseView: View {
                 viewModel.categoryCustomNames[index] = category
             }
         }
+        print("✅ Categories set: \(viewModel.categories)")
         
         // Set payment mode
         viewModel.selectedPaymentMode = expense.modeOfPayment
+        print("✅ Payment mode set: \(expense.modeOfPayment.rawValue)")
         
         // Set existing attachment info if present
         viewModel.attachmentURL = expense.attachmentURL
@@ -252,6 +278,8 @@ struct EditExpenseView: View {
         // Set existing payment proof info if present
         viewModel.paymentProofURL = expense.paymentProofURL
         viewModel.paymentProofName = expense.paymentProofName
+        
+        print("✅ Expense data loaded successfully")
     }
     
     // MARK: - Phase Picker
