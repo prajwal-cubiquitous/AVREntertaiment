@@ -450,7 +450,7 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingTeamMembersDetail) {
             if let project = project {
-                TeamMembersDetailView(project: project)
+                TeamMembersDetailView(project: project, role: role)
                     .presentationDetents([.large])
             }
         }

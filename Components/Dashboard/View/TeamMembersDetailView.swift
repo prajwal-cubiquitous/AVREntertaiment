@@ -10,11 +10,16 @@ import FirebaseFirestore
 
 struct TeamMembersDetailView: View {
     let project: Project
+    let role: UserRole?
     @StateObject private var viewModel = TeamMembersDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var selectedMember: User?
     @State private var showingMemberExpenses = false
+    @State private var memberToDelete: User?
+    @State private var showingDeleteAlert = false
+    @State private var showingAddUser = false
+    @State private var isDeleting = false
     private var filteredMembers: [User] {
         var members = viewModel.teamMembers
         
@@ -59,6 +64,28 @@ struct TeamMembersDetailView: View {
                     .presentationDetents([.large])
             }
         }
+        .sheet(isPresented: $showingAddUser) {
+            AddTeamMemberView(project: project) {
+                viewModel.loadTeamMembers(for: project)
+            }
+            .presentationDetents([.large])
+        }
+        .alert("Remove Team Member", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) {
+                memberToDelete = nil
+            }
+            Button("Remove", role: .destructive) {
+                if let member = memberToDelete {
+                    Task {
+                        await deleteMember(member)
+                    }
+                }
+            }
+        } message: {
+            if let member = memberToDelete {
+                Text("Are you sure you want to remove \(member.name) from this project? This action cannot be undone.")
+            }
+        }
     }
     
     // MARK: - Header View
@@ -86,10 +113,28 @@ struct TeamMembersDetailView: View {
                 
                 Spacer()
                 
-                Button(action: { viewModel.refreshData() }) {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundColor(.white)
-                        .font(.title2)
+                HStack(spacing: 16) {
+                    // Add User Button (only for admin)
+                    if role == .ADMIN {
+                        Button(action: {
+                            HapticManager.selection()
+                            showingAddUser = true
+                        }) {
+                            Image(systemName: "person.badge.plus")
+                                .foregroundColor(.white)
+                                .font(.title2)
+                        }
+                    }
+                    
+                    // Refresh Button
+                    Button(action: {
+                        HapticManager.selection()
+                        viewModel.refreshData()
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.white)
+                            .font(.title2)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -177,14 +222,74 @@ struct TeamMembersDetailView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(filteredMembers) { member in
-                    TeamMemberRowView(member: member) {
-                        selectedMember = member
-                        showingMemberExpenses = true
-                        HapticManager.selection()
-                    }
+                    TeamMemberRowView(
+                        member: member,
+                        isAdmin: role == .ADMIN,
+                        onTap: {
+                            selectedMember = member
+                            showingMemberExpenses = true
+                            HapticManager.selection()
+                        },
+                        onDelete: {
+                            memberToDelete = member
+                            showingDeleteAlert = true
+                            HapticManager.selection()
+                        }
+                    )
                 }
             }
             .padding()
+        }
+    }
+    
+    // MARK: - Delete Member
+    private func deleteMember(_ member: User) async {
+        isDeleting = true
+        
+        do {
+            let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            guard let projectId = project.id else {
+                await MainActor.run {
+                    isDeleting = false
+                    memberToDelete = nil
+                }
+                return
+            }
+            
+            // Get member identifier (phone number for regular users, email for admin)
+            let memberId = member.role == .ADMIN ? (member.email ?? "") : member.phoneNumber
+            
+            // Remove member from project's teamMembers array
+            let projectRef = FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+            
+            // Get current team members
+            let projectDoc = try await projectRef.getDocument()
+            if let data = projectDoc.data(),
+               var teamMembers = data["teamMembers"] as? [String] {
+                // Remove the member from the array
+                teamMembers.removeAll { $0 == memberId }
+                
+                // Update the project
+                try await projectRef.updateData([
+                    "teamMembers": teamMembers
+                ])
+                
+                // Reload team members
+                await MainActor.run {
+                    viewModel.loadTeamMembers(for: project)
+                    isDeleting = false
+                    memberToDelete = nil
+                    HapticManager.notification(.success)
+                }
+            }
+        } catch {
+            print("❌ Error deleting team member: \(error)")
+            await MainActor.run {
+                isDeleting = false
+                memberToDelete = nil
+                HapticManager.notification(.error)
+            }
         }
     }
 }
@@ -192,75 +297,98 @@ struct TeamMembersDetailView: View {
 // MARK: - Team Member Row View
 struct TeamMemberRowView: View {
     let member: User
-    let action: () -> Void
+    let isAdmin: Bool
+    let onTap: () -> Void
+    let onDelete: () -> Void
     
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-            // Avatar
-            ZStack {
-                Circle()
-                    .fill(member.role.color.opacity(0.2))
-                    .frame(width: 50, height: 50)
-                
-                Text(member.name.prefix(1).uppercased())
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(member.role.color)
-            }
-            
-            // Member Info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(member.name)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                HStack {
-                    Image(systemName: "phone.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text(member.phoneNumber)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                }
-                
-                if let email = member.email, !email.isEmpty {
-                    HStack {
-                        Image(systemName: "envelope.fill")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+        HStack(spacing: 12) {
+            // Content area (tappable)
+            Button(action: onTap) {
+                HStack(spacing: 12) {
+                    // Avatar
+                    ZStack {
+                        Circle()
+                            .fill(member.role.color.opacity(0.2))
+                            .frame(width: 50, height: 50)
                         
-                        Text(email)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
+                        Text(member.name.prefix(1).uppercased())
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(member.role.color)
                     }
-                }
-                
-                // Status indicator
-                HStack {
-                    Circle()
-                        .fill(.blue)
-                        .frame(width: 8, height: 8)
                     
-                    Text("Team Member")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    // Member Info
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(member.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        
+                        HStack {
+                            Image(systemName: "phone.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Text(member.phoneNumber.isEmpty ? (member.email ?? "") : member.phoneNumber)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                        }
+                        
+                        if let email = member.email, !email.isEmpty, !member.phoneNumber.isEmpty {
+                            HStack {
+                                Image(systemName: "envelope.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                Text(email)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                            }
+                        }
+                        
+                        // Status indicator
+                        HStack {
+                            Circle()
+                                .fill(member.role.color)
+                                .frame(width: 8, height: 8)
+                            
+                            Text(member.role.displayName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                        }
+                    }
                     
                     Spacer()
                 }
             }
+            .buttonStyle(.plain)
+            
+            // Delete button (only for admin) - separate from content area
+            if isAdmin {
+                Button(action: {
+                    HapticManager.selection()
+                    onDelete()
+                }) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.red)
+                        .frame(width: 36, height: 36)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .cornerRadius(12)
-            .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -272,6 +400,7 @@ class TeamMembersDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     func loadTeamMembers(for project: Project) {
+        currentProject = project
         isLoading = true
         errorMessage = nil
         
@@ -332,15 +461,15 @@ class TeamMembersDetailViewModel: ObservableObject {
     func refreshData() {
         // This would be called from the refresh button
         // For now, we'll just reload the data
-        if let project = project {
+        if let project = currentProject {
             loadTeamMembers(for: project)
         }
     }
     
-    private var project: Project?
+    private var currentProject: Project?
     
     func setProject(_ project: Project) {
-        self.project = project
+        self.currentProject = project
     }
 }
 
