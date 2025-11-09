@@ -20,6 +20,8 @@ struct SignUpView: View {
     @State private var businessName: String = ""
     @State private var location: String = ""
     @State private var name: String = ""
+    @State private var showConfirmPassword = false
+    @State private var nameError: String?
     
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -34,7 +36,19 @@ struct SignUpView: View {
         password.count >= 6 &&
         password == confirmPassword &&
         !businessName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !nameContainsNumbers(name)
+    }
+    
+    // Helper function to check if name contains numbers
+    private func nameContainsNumbers(_ text: String) -> Bool {
+        let numbers = CharacterSet.decimalDigits
+        return text.unicodeScalars.contains { numbers.contains($0) }
+    }
+    
+    // Helper function to filter numbers from name
+    private func filterNumbers(from text: String) -> String {
+        return text.unicodeScalars.filter { !CharacterSet.decimalDigits.contains($0) }.map(String.init).joined()
     }
     
     var body: some View {
@@ -55,14 +69,64 @@ struct SignUpView: View {
                     
                     // Form Fields
                     VStack(spacing: DesignSystem.Spacing.medium) {
-                        // Name (Required)
-                        ModernTextField(
-                            title: "Name",
-                            text: $name,
-                            placeholder: "Enter your full name",
-                            icon: "person.fill",
-                            keyboardType: .default
-                        )
+                        // Name (Required) - No numbers allowed
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Name")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.primary)
+                            
+                            HStack(spacing: DesignSystem.Spacing.medium) {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20)
+                                
+                                TextField("Enter your full name", text: Binding(
+                                    get: { name },
+                                    set: { newValue in
+                                        // Filter out numbers
+                                        let filtered = filterNumbers(from: newValue)
+                                        name = filtered
+                                        
+                                        // Show error if user tried to enter numbers
+                                        if newValue != filtered {
+                                            nameError = "Numbers are not allowed in name"
+                                            // Clear error after 2 seconds
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                                nameError = nil
+                                            }
+                                        } else {
+                                            nameError = nil
+                                        }
+                                    }
+                                ))
+                                .keyboardType(.alphabet)
+                                .font(.system(size: 18, weight: .medium))
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.vertical, DesignSystem.Spacing.medium)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(.systemBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(nameError != nil ? Color.red : (name.isEmpty ? Color(.systemGray4) : Color.black), lineWidth: 2)
+                                    )
+                            )
+                            
+                            if let error = nameError {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                    Text(error)
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.leading, DesignSystem.Spacing.medium)
+                                .transition(.opacity.combined(with: .scale))
+                            }
+                        }
                         
                         // Email (Required)
                         ModernTextField(
@@ -82,14 +146,53 @@ struct SignUpView: View {
                             isSecure: true
                         )
                         
-                        // Confirm Password (Required)
-                        ModernTextField(
-                            title: "Confirm Password",
-                            text: $confirmPassword,
-                            placeholder: "Re-enter password",
-                            icon: "lock.fill",
-                            isSecure: true
-                        )
+                        // Confirm Password (Required) - With eye icon toggle
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Confirm Password")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.primary)
+                            
+                            HStack(spacing: DesignSystem.Spacing.medium) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 20)
+                                
+                                Group {
+                                    if showConfirmPassword {
+                                        TextField("Re-enter password", text: $confirmPassword)
+                                            .font(.system(size: 18, weight: .medium))
+                                    } else {
+                                        SecureField("Re-enter password", text: $confirmPassword)
+                                            .font(.system(size: 18, weight: .medium))
+                                    }
+                                }
+                                
+                                // Eye icon toggle button
+                                Button(action: {
+                                    HapticManager.selection()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showConfirmPassword.toggle()
+                                    }
+                                }) {
+                                    Image(systemName: showConfirmPassword ? "eye.slash.fill" : "eye.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 24, height: 24)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.vertical, DesignSystem.Spacing.medium)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color(.systemBackground))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(confirmPassword.isEmpty ? Color(.systemGray4) : Color.black, lineWidth: 2)
+                                    )
+                            )
+                        }
                         
                         // Password Match Indicator
                         if !confirmPassword.isEmpty {
