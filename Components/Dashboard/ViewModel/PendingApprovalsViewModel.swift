@@ -111,6 +111,7 @@ class PendingApprovalsViewModel: ObservableObject {
                 let expensesSnapshot = try await projectsSnapshot.reference
                     .collection("expenses")
                     .whereField("status", isEqualTo: ExpenseStatus.pending.rawValue)
+                    .whereField("isAdmin",  isNotEqualTo: true)
                     .getDocuments()
                 
                 for expenseDoc in expensesSnapshot.documents {

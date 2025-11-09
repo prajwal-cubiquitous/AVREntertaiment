@@ -10,6 +10,8 @@ struct AddExpenseView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var showingFileViewer = false
     @State private var showingCamera = false
+    @State private var showingPaymentProofFileViewer = false
+    @State private var showingPaymentProofCamera = false
     
     init(project: Project) {
         self.project = project
@@ -193,14 +195,30 @@ struct AddExpenseView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // MARK: - Attachment
+                // MARK: - Receipt
                 Section {
-                    attachmentView
+                    receiptView
                 } header: {
-                    Text("Attachment")
+                    Text("Receipt")
                         .textCase(.none)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
+                }
+                
+                // MARK: - Payment Proof (Required for UPI and Check)
+                if viewModel.selectedPaymentMode == .upi || viewModel.selectedPaymentMode == .check {
+                    Section {
+                        paymentProofView
+                    } header: {
+                        Text("Payment Proof")
+                            .textCase(.none)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } footer: {
+                        Text("Payment proof is required for UPI and check payments")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 // MARK: - Submit Button
@@ -237,7 +255,7 @@ struct AddExpenseView: View {
             } message: {
                 Text(viewModel.alertMessage)
             }
-            .confirmationDialog("Select Attachment", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
+            .confirmationDialog("Select Receipt", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
                 Button("Camera") {
                     showingCamera = true
                 }
@@ -248,6 +266,21 @@ struct AddExpenseView: View {
                 
                 Button("Select from Files") {
                     viewModel.showingDocumentPicker = true
+                }
+                
+                Button("Cancel", role: .cancel) { }
+            }
+            .confirmationDialog("Select Payment Proof", isPresented: $viewModel.showingPaymentProofOptions, titleVisibility: .visible) {
+                Button("Camera") {
+                    showingPaymentProofCamera = true
+                }
+                
+                Button("Select from Photos") {
+                    viewModel.showingPaymentProofImagePicker = true
+                }
+                
+                Button("Select from Files") {
+                    viewModel.showingPaymentProofDocumentPicker = true
                 }
                 
                 Button("Cancel", role: .cancel) { }
@@ -283,6 +316,39 @@ struct AddExpenseView: View {
                 if let urlString = viewModel.attachmentURL,
                    let url = URL(string: urlString) {
                     FileViewerSheet(fileURL: url, fileName: viewModel.attachmentName)
+                }
+            }
+            .sheet(isPresented: $viewModel.showingPaymentProofImagePicker) {
+                ExpenseImagePicker(selectedImage: Binding(
+                    get: { nil },
+                    set: { image in
+                        viewModel.handlePaymentProofImageSelection(image)
+                    }
+                ))
+            }
+            .sheet(isPresented: $showingPaymentProofCamera) {
+                ExpenseCameraPicker(
+                    selectedImage: Binding(
+                        get: { nil },
+                        set: { image in
+                            viewModel.handlePaymentProofImageSelection(image)
+                        }
+                    ),
+                    onDismiss: {
+                        showingPaymentProofCamera = false
+                    }
+                )
+            }
+            .sheet(isPresented: $viewModel.showingPaymentProofDocumentPicker) {
+                DocumentPicker(
+                    allowedTypes: [.pdf, .image],
+                    onDocumentPicked: viewModel.handlePaymentProofDocumentSelection
+                )
+            }
+            .sheet(isPresented: $showingPaymentProofFileViewer) {
+                if let urlString = viewModel.paymentProofURL,
+                   let url = URL(string: urlString) {
+                    FileViewerSheet(fileURL: url, fileName: viewModel.paymentProofName)
                 }
             }
             }
@@ -612,8 +678,8 @@ struct AddExpenseView: View {
         }
     }
     
-    // MARK: - Attachment Section
-    private var attachmentView: some View {
+    // MARK: - Receipt Section
+    private var receiptView: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let attachmentName = viewModel.attachmentName {
                 // Show attached file
@@ -676,14 +742,14 @@ struct AddExpenseView: View {
                     .buttonStyle(.plain)
                 }
             } else {
-                // Add attachment button
+                // Add receipt button
                 Button(action: {
                     viewModel.showingAttachmentOptions = true
                 }) {
                     HStack {
                         Image(systemName: "paperclip")
                             .font(.title3)
-                        Text("Add Attachment")
+                        Text("Add Receipt")
                             .fontWeight(.medium)
                         Spacer()
                     }
@@ -716,6 +782,113 @@ struct AddExpenseView: View {
             }
         }
         .id("attachment")
+        .padding(.vertical, 4)
+    }
+    
+    // MARK: - Payment Proof Section
+    private var paymentProofView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let paymentProofName = viewModel.paymentProofName {
+                // Show attached file
+                HStack(spacing: 12) {
+                    // File info - not clickable
+                    HStack {
+                        Image(systemName: fileIcon(for: paymentProofName))
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(paymentProofName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            
+                            Text("Tap preview to view")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // Preview button - separate icon button
+                    Button(action: {
+                        HapticManager.selection()
+                        showingPaymentProofFileViewer = true
+                    }) {
+                        Image(systemName: "eye.fill")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                            .frame(width: 44, height: 44)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // Remove button - separate action
+                    Button(action: {
+                        HapticManager.selection()
+                        withAnimation(.easeInOut) {
+                            viewModel.removePaymentProof()
+                        }
+                    }) {
+                        Image(systemName: "trash.fill")
+                            .font(.title3)
+                            .foregroundColor(.red)
+                            .frame(width: 44, height: 44)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                // Add payment proof button
+                Button(action: {
+                    viewModel.showingPaymentProofOptions = true
+                }) {
+                    HStack {
+                        Image(systemName: "paperclip")
+                            .font(.title3)
+                        Text("Add Payment Proof")
+                            .fontWeight(.medium)
+                        Spacer()
+                    }
+                    .foregroundColor(.blue)
+                    .padding()
+                    .background(Color(UIColor.tertiarySystemFill))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(viewModel.paymentProofError != nil ? Color.red : Color.clear, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // Upload progress
+            if viewModel.isUploadingPaymentProof {
+                VStack(spacing: 8) {
+                    ProgressView(value: viewModel.paymentProofUploadProgress)
+                        .progressViewStyle(LinearProgressViewStyle())
+                    Text("Uploading... \(Int(viewModel.paymentProofUploadProgress * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            // Error message
+            if let error = viewModel.paymentProofError {
+                InlineErrorMessage(message: error)
+            }
+        }
+        .id("paymentProof")
         .padding(.vertical, 4)
     }
     

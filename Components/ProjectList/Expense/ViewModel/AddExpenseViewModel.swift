@@ -21,6 +21,8 @@ class AddExpenseViewModel: ObservableObject {
     @Published var selectedPaymentMode: PaymentMode = .cash
     @Published var attachmentURL: String?
     @Published var attachmentName: String?
+    @Published var paymentProofURL: String?
+    @Published var paymentProofName: String?
     
     // MARK: - Predefined Categories
     static let predefinedCategories: [String] = [
@@ -62,8 +64,13 @@ class AddExpenseViewModel: ObservableObject {
     @Published var showingDocumentPicker: Bool = false
     @Published var showingImagePicker: Bool = false
     @Published var showingAttachmentOptions: Bool = false
+    @Published var showingPaymentProofOptions: Bool = false
+    @Published var showingPaymentProofImagePicker: Bool = false
+    @Published var showingPaymentProofDocumentPicker: Bool = false
     @Published var uploadProgress: Double = 0.0
     @Published var isUploading: Bool = false
+    @Published var paymentProofUploadProgress: Double = 0.0
+    @Published var isUploadingPaymentProof: Bool = false
     
     // MARK: - Validation State
     @Published var shouldShowValidationErrors: Bool = false
@@ -222,6 +229,10 @@ class AddExpenseViewModel: ObservableObject {
         let hasValidDescription = !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasValidAttachment = attachmentURL != nil && !attachmentURL!.isEmpty
         
+        // Payment proof is required for UPI and check payment modes
+        let requiresPaymentProof = selectedPaymentMode == .upi || selectedPaymentMode == .check
+        let hasValidPaymentProof = !requiresPaymentProof || (paymentProofURL != nil && !paymentProofURL!.isEmpty)
+        
         // Check categories: each must have a value, and if it's "Misc / Other", must have custom name
         let validCategories = categories.enumerated().compactMap { index, category -> String? in
             if category.isEmpty {
@@ -238,7 +249,7 @@ class AddExpenseViewModel: ObservableObject {
         }
         let hasValidCategories = !validCategories.isEmpty
         
-        return hasValidAmount && hasValidPhase && hasValidDepartment && hasValidDescription && hasValidCategories && hasValidAttachment
+        return hasValidAmount && hasValidPhase && hasValidDepartment && hasValidDescription && hasValidCategories && hasValidAttachment && hasValidPaymentProof
     }
     
     var selectedPhase: PhaseInfo? {
@@ -793,6 +804,179 @@ class AddExpenseViewModel: ObservableObject {
         attachmentName = nil
     }
     
+    // MARK: - Payment Proof Upload
+    func uploadPaymentProof(_ url: URL) {
+        guard let projectId = project.id else { return }
+        
+        isUploadingPaymentProof = true
+        paymentProofUploadProgress = 0.0
+        
+        // Get file name and extension
+        let fileName = url.lastPathComponent
+        paymentProofName = fileName
+        
+        // Create unique file path
+        guard let customerId = customerId else { return }
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let storageRef = storage.reference()
+            .child("customers")
+            .child(customerId)
+            .child("projects")
+            .child(projectId)
+            .child("expenses")
+            .child("payment_proof_\(timestamp)_\(fileName)")
+        
+        // Process and compress file before upload
+        Task {
+            do {
+                // Handle security-scoped resources properly
+                let accessibleURL = try await getAccessibleFileURL(from: url)
+                let (compressedData, contentType) = try await compressFile(at: accessibleURL)
+                
+                // Create metadata with content type
+                let metadata = StorageMetadata()
+                metadata.contentType = contentType
+                
+                // Upload compressed file
+                let uploadTask = storageRef.putData(compressedData, metadata: metadata) { [weak self] metadata, error in
+                    guard let self = self else { return }
+                    
+                    DispatchQueue.main.async {
+                        self.isUploadingPaymentProof = false
+                        
+                        if let error = error {
+                            self.alertMessage = "Upload failed: \(error.localizedDescription)"
+                            self.showAlert = true
+                            return
+                        }
+                        
+                        // Get download URL
+                        storageRef.downloadURL { url, error in
+                            if let error = error {
+                                self.alertMessage = "Failed to get download URL: \(error.localizedDescription)"
+                                self.showAlert = true
+                                return
+                            }
+                            
+                            if let downloadURL = url {
+                                self.paymentProofURL = downloadURL.absoluteString
+                                self.alertMessage = "Payment proof uploaded successfully!"
+                                self.shouldDismissOnAlert = false
+                                self.showAlert = true
+                            }
+                        }
+                    }
+                }
+                
+                // Observe upload progress
+                uploadTask.observe(.progress) { [weak self] snapshot in
+                    guard let progress = snapshot.progress else { return }
+                    
+                    DispatchQueue.main.async {
+                        self?.paymentProofUploadProgress = Double(progress.fractionCompleted)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isUploadingPaymentProof = false
+                    self.alertMessage = "Failed to process file: \(error.localizedDescription)"
+                    self.showAlert = true
+                }
+            }
+        }
+    }
+    
+    // MARK: - Upload Payment Proof Image
+    func uploadPaymentProofImage(_ image: UIImage) {
+        guard let projectId = project.id else { return }
+        
+        isUploadingPaymentProof = true
+        paymentProofUploadProgress = 0.0
+        
+        // Generate file name
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let fileName = "payment_proof_\(timestamp).jpg"
+        paymentProofName = fileName
+        
+        // Create unique file path
+        guard let customerId = customerId else { return }
+        let storageRef = storage.reference()
+            .child("customers")
+            .child(customerId)
+            .child("projects")
+            .child(projectId)
+            .child("expenses")
+            .child(fileName)
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            isUploadingPaymentProof = false
+            alertMessage = "Failed to process image"
+            showAlert = true
+            return
+        }
+        
+        // Create metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        // Upload image
+        let uploadTask = storageRef.putData(imageData, metadata: metadata) { [weak self] metadata, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.isUploadingPaymentProof = false
+                
+                if let error = error {
+                    self.alertMessage = "Upload failed: \(error.localizedDescription)"
+                    self.showAlert = true
+                    return
+                }
+                
+                // Get download URL
+                storageRef.downloadURL { url, error in
+                    if let error = error {
+                        self.alertMessage = "Failed to get download URL: \(error.localizedDescription)"
+                        self.showAlert = true
+                        return
+                    }
+                    
+                    if let downloadURL = url {
+                        self.paymentProofURL = downloadURL.absoluteString
+                        self.alertMessage = "Payment proof uploaded successfully!"
+                        self.shouldDismissOnAlert = false
+                        self.showAlert = true
+                    }
+                }
+            }
+        }
+        
+        // Observe upload progress
+        uploadTask.observe(.progress) { [weak self] snapshot in
+            guard let progress = snapshot.progress else { return }
+            
+            DispatchQueue.main.async {
+                self?.paymentProofUploadProgress = Double(progress.fractionCompleted)
+            }
+        }
+    }
+    
+    func removePaymentProof() {
+        // If there's an existing payment proof URL, optionally delete it from storage
+        if let urlString = paymentProofURL,
+           let url = URL(string: urlString) {
+            let storageRef = Storage.storage().reference(forURL: urlString)
+            storageRef.delete { [weak self] error in
+                if let error = error {
+                    print("Failed to delete file: \(error.localizedDescription)")
+                }
+            }
+        }
+        
+        paymentProofURL = nil
+        paymentProofName = nil
+    }
+    
     // MARK: - Validation Error Messages
     
     var amountError: String? {
@@ -849,7 +1033,16 @@ class AddExpenseViewModel: ObservableObject {
     var attachmentError: String? {
         guard shouldShowValidationErrors else { return nil }
         if attachmentURL == nil || attachmentURL!.isEmpty {
-            return "Attachment is required"
+            return "Receipt is required"
+        }
+        return nil
+    }
+    
+    var paymentProofError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        let requiresPaymentProof = selectedPaymentMode == .upi || selectedPaymentMode == .check
+        if requiresPaymentProof && (paymentProofURL == nil || paymentProofURL!.isEmpty) {
+            return "Payment proof is required"
         }
         return nil
     }
@@ -910,9 +1103,15 @@ class AddExpenseViewModel: ObservableObject {
             }
         }
         
-        // Check attachment
+        // Check attachment (receipt)
         if attachmentURL == nil || attachmentURL!.isEmpty {
             return "attachment"
+        }
+        
+        // Check payment proof (required for UPI and check)
+        let requiresPaymentProof = selectedPaymentMode == .upi || selectedPaymentMode == .check
+        if requiresPaymentProof && (paymentProofURL == nil || paymentProofURL!.isEmpty) {
+            return "paymentProof"
         }
         
         return nil
@@ -947,11 +1146,7 @@ class AddExpenseViewModel: ObservableObject {
             return
         }
         
-        guard let currentUserPhone = UserServices.shared.currentUserPhone else {
-            alertMessage = "User not logged in."
-            showAlert = true
-            return
-        }
+        let currentUserPhone = UserServices.shared.currentUserPhone != nil ? UserServices.shared.currentUserPhone! : "Admin"
         
         isLoading = true
         
@@ -970,6 +1165,8 @@ class AddExpenseViewModel: ObservableObject {
                     "modeOfPayment": selectedPaymentMode.rawValue,
                     "attachmentURL": attachmentURL as Any,
                     "attachmentName": attachmentName as Any,
+                    "paymentProofURL": paymentProofURL as Any,
+                    "paymentProofName": paymentProofName as Any,
                     "submittedBy": "\(currentUserPhone)",
                     "status": ExpenseStatus.pending.rawValue,
                     "isAdmin": isAdmin,
@@ -1096,7 +1293,10 @@ class AddExpenseViewModel: ObservableObject {
         selectedPaymentMode = .cash
         attachmentURL = nil
         attachmentName = nil
+        paymentProofURL = nil
+        paymentProofName = nil
         uploadProgress = 0.0
+        paymentProofUploadProgress = 0.0
         shouldShowValidationErrors = false
         firstInvalidFieldId = nil
         shouldDismissOnAlert = false // Reset dismiss flag
@@ -1126,5 +1326,22 @@ extension AddExpenseViewModel {
     func handleImageSelection(_ image: UIImage?) {
         guard let image = image else { return }
         uploadImage(image)
+    }
+    
+    func handlePaymentProofDocumentSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            uploadPaymentProof(url)
+            
+        case .failure(let error):
+            alertMessage = "Failed to select file: \(error.localizedDescription)"
+            showAlert = true
+        }
+    }
+    
+    func handlePaymentProofImageSelection(_ image: UIImage?) {
+        guard let image = image else { return }
+        uploadPaymentProofImage(image)
     }
 } 

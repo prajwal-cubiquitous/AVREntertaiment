@@ -16,6 +16,8 @@ struct Expense: Identifiable, Codable {
     let description: String // Description of the expense
     let attachmentURL: String? // Firebase Storage URL
     let attachmentName: String? // Original file name
+    let paymentProofURL: String? // Firebase Storage URL for payment proof (required for UPI and check)
+    let paymentProofName: String? // Original file name for payment proof
     let submittedBy: String // User phone number
     let status: ExpenseStatus
     let remark: String? // Optional remark for approval/rejection
@@ -33,7 +35,7 @@ struct Expense: Identifiable, Codable {
     // MARK: - Custom Decoder
     enum CodingKeys: String, CodingKey {
         case projectId, date, amount, department, phaseId, phaseName, categories
-        case modeOfPayment, description, attachmentURL, attachmentName, submittedBy
+        case modeOfPayment, description, attachmentURL, attachmentName, paymentProofURL, paymentProofName, submittedBy
         case status, remark, isAdmin, isAnonymous, originalDepartment, departmentDeletedAt
         case createdAt, updatedAt
     }
@@ -52,6 +54,8 @@ struct Expense: Identifiable, Codable {
         description: String,
         attachmentURL: String? = nil,
         attachmentName: String? = nil,
+        paymentProofURL: String? = nil,
+        paymentProofName: String? = nil,
         submittedBy: String,
         status: ExpenseStatus,
         remark: String? = nil,
@@ -74,6 +78,8 @@ struct Expense: Identifiable, Codable {
         self.description = description
         self.attachmentURL = attachmentURL
         self.attachmentName = attachmentName
+        self.paymentProofURL = paymentProofURL
+        self.paymentProofName = paymentProofName
         self.submittedBy = submittedBy
         self.status = status
         self.remark = remark
@@ -98,6 +104,8 @@ struct Expense: Identifiable, Codable {
         description = try container.decode(String.self, forKey: .description)
         attachmentURL = try container.decodeIfPresent(String.self, forKey: .attachmentURL)
         attachmentName = try container.decodeIfPresent(String.self, forKey: .attachmentName)
+        paymentProofURL = try container.decodeIfPresent(String.self, forKey: .paymentProofURL)
+        paymentProofName = try container.decodeIfPresent(String.self, forKey: .paymentProofName)
         submittedBy = try container.decode(String.self, forKey: .submittedBy)
         status = try container.decode(ExpenseStatus.self, forKey: .status)
         remark = try container.decodeIfPresent(String.self, forKey: .remark)
@@ -122,6 +130,8 @@ struct Expense: Identifiable, Codable {
         try container.encode(description, forKey: .description)
         try container.encodeIfPresent(attachmentURL, forKey: .attachmentURL)
         try container.encodeIfPresent(attachmentName, forKey: .attachmentName)
+        try container.encodeIfPresent(paymentProofURL, forKey: .paymentProofURL)
+        try container.encodeIfPresent(paymentProofName, forKey: .paymentProofName)
         try container.encode(submittedBy, forKey: .submittedBy)
         try container.encode(status, forKey: .status)
         try container.encodeIfPresent(remark, forKey: .remark)
@@ -211,6 +221,8 @@ extension Expense {
             description: "Costume rentals for lead actors and supporting cast",
             attachmentURL: nil,
             attachmentName: nil,
+            paymentProofURL: nil,
+            paymentProofName: nil,
             submittedBy: "+919876543210",
             status: .pending,
             remark: nil, isAdmin: false,

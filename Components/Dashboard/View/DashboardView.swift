@@ -666,7 +666,7 @@ struct DashboardView: View {
                     HapticManager.selection()
                 }) {
                     ProjectStatsCard(
-                        title: "Phases",
+                        title: "",
                         value: "\(allPhases.count) Phases",
                         icon: "folder.fill",
                         color: .purple
