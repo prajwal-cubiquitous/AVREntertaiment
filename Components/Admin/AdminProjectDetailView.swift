@@ -5,6 +5,8 @@ struct AdminProjectDetailView: View {
     let project: Project
     @StateObject private var viewModel: AdminProjectDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingTeamMembersDetail = false
+    @State private var pendingManagerChange: User? = nil
     
     init(project: Project) {
         self.project = project
@@ -187,175 +189,210 @@ struct AdminProjectDetailView: View {
     // MARK: - Team Section
     private var teamSection: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            ModernSectionHeader(
-                title: "Team Management",
-                icon: "person.3.fill",
-                isEditing: $viewModel.isEditingTeam
-            )
+            // Header
+            HStack {
+                Image(systemName: "person.3.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue.gradient)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Text("Team Management")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+            }
             
-            if viewModel.isEditingTeam {
-                VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Project Manager Selection (Single)
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                        HStack {
-                            Image(systemName: "person.badge.key.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.blue)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Project Manager")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.primary)
-                                
-                                Text("Select project approver (single selection)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        .padding(.bottom, DesignSystem.Spacing.small)
+            // Project Manager Selection
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                HStack {
+                    Image(systemName: "person.badge.key.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Project Manager")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
                         
-                        SingleSelectionPicker(
-                            selectedUser: $viewModel.selectedManager,
-                            users: viewModel.allApprovers.filter { $0.isActive },
-                            placeholder: "Select project manager"
-                        )
+                        Text("Select project approver (single selection)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     
-                    // Team Members Selection
-                    TeamMemberSelectionCard(
-                        title: "Team Members",
-                        subtitle: "Add team members to the project",
-                        searchText: $viewModel.teamMemberSearchText,
-                        items: viewModel.filteredTeamMembers,
-                        onSelect: viewModel.selectTeamMember,
-                        icon: "person.2.fill"
-                    )
-                    
-                    // Selected Team Members
-                    if !viewModel.selectedTeamMembers.isEmpty {
-                        SelectedTeamMembersCard(
-                            members: viewModel.selectedTeamMembers,
-                            onRemove: viewModel.removeTeamMember
-                        )
-                    }
-                    
-                    // Temporary Approvers Section
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Spacer()
+                }
+                .padding(.bottom, DesignSystem.Spacing.small)
+                
+                SingleSelectionPicker(
+                    selectedUser: Binding(
+                        get: { pendingManagerChange ?? viewModel.selectedManager },
+                        set: { newValue in
+                            pendingManagerChange = newValue
+                        }
+                    ),
+                    users: viewModel.allApprovers.filter { $0.isActive },
+                    placeholder: "Select project manager"
+                )
+                
+                // Save button (only show when there's a pending change)
+                let currentManagerId = viewModel.selectedManager?.phoneNumber
+                let pendingManagerId = pendingManagerChange?.phoneNumber
+                let hasPendingChange = currentManagerId != pendingManagerId
+                
+                if hasPendingChange {
+                    Button(action: {
+                        HapticManager.selection()
+                        if let manager = pendingManagerChange {
+                            viewModel.updateProjectManager(manager)
+                            viewModel.selectedManager = manager
+                        } else {
+                            // Removing manager (None selected)
+                            viewModel.removeProjectManager()
+                            viewModel.selectedManager = nil
+                        }
+                        pendingManagerChange = nil
+                    }) {
                         HStack {
-                            Image(systemName: "person.badge.clock.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.orange)
-                            
-                            Text("Temporary Approvers")
+                            Image(systemName: "checkmark.circle.fill")
                                 .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
                             
-                            Spacer()
-                            
-                            Button(action: {
-                                HapticManager.selection()
-                                viewModel.showingTempApproverSheet = true
-                            }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.caption)
-                                    Text("Add")
-                                        .font(.caption.weight(.medium))
-                                }
-                                .foregroundStyle(.blue)
-                            }
+                            Text("Save Project Manager")
+                                .font(.subheadline.weight(.medium))
                         }
-                        
-                   if let tempApprover = viewModel.tempApprover {
-                       TempApproverInlineCard(
-                           tempApprover: tempApprover,
-                           tempApproverName: viewModel.tempApproverName,
-                           onRemove: { viewModel.removeTempApprover() }
-                       )
-                   } else {
-                       Text("No temporary approver assigned")
-                           .font(.caption)
-                           .foregroundStyle(.tertiary)
-                           .italic()
-                   }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue.gradient)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                        .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
-                    .padding()
-                    .background(Color(.tertiarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                    .buttonStyle(.plain)
+                    .padding(.top, DesignSystem.Spacing.small)
+                }
+            }
+            .padding()
+            .background(Color(.quaternarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            
+            // Team Members Preview (2-3 users)
+            if !viewModel.loadedTeamMembers.isEmpty {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    HStack {
+                        Image(systemName: "person.2.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.green)
+                        
+                        Text("Team Members")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        if viewModel.loadedTeamMembers.count > 3 {
+                            Text("\(viewModel.loadedTeamMembers.count) total")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                     
-                    ModernActionButton(
-                        title: "Save Team",
-                        icon: "checkmark.circle.fill",
-                        color: .green,
-                        action: viewModel.updateProjectTeam
+                    // Display first 2-3 team members
+                    VStack(spacing: DesignSystem.Spacing.small) {
+                        ForEach(Array(viewModel.loadedTeamMembers.prefix(3))) { member in
+                            TeamMemberPreviewRow(member: member)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            } else {
+                VStack(spacing: DesignSystem.Spacing.small) {
+                    HStack {
+                        Image(systemName: "person.2.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.gray)
+                        
+                        Text("Team Members")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                    }
+                    
+                    Text("No team members added yet")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .italic()
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+            
+            // View All Users Button
+            Button(action: {
+                HapticManager.selection()
+                showingTeamMembersDetail = true
+            }) {
+                HStack {
+                    Image(systemName: "person.3.fill")
+                        .font(.subheadline.weight(.medium))
+                    
+                    Text("View All Team Members")
+                        .font(.subheadline.weight(.medium))
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .foregroundStyle(.blue)
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+            .buttonStyle(.plain)
+            
+            // Temporary Approver Display
+            if let tempApprover = viewModel.tempApprover {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    HStack {
+                        Image(systemName: "person.badge.clock.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                        
+                        Text("Temporary Approver")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                    }
+                    
+                    TempApproverDisplayInlineCard(
+                        tempApprover: tempApprover,
+                        tempApproverName: viewModel.tempApproverName
                     )
                 }
-            } else {
-                VStack(spacing: DesignSystem.Spacing.medium) {
-                    // Manager Display (Single)
-                    if let managerName = viewModel.managerName {
-                        TeamMemberDisplayCard(
-                            title: "Project Manager",
-                            member: managerName,
-                            icon: "person.badge.key.fill",
-                            color: .blue
-                        )
-                    } else {
-                        TeamMemberDisplayCard(
-                            title: "Project Manager",
-                            member: "No manager assigned",
-                            icon: "person.badge.key.fill",
-                            color: .gray
-                        )
-                    }
-                    
-                    // Team Members Display
-                    if !viewModel.teamMembers.isEmpty {
-                        TeamMembersListCard(
-                            members: viewModel.teamMembers,
-                            icon: "person.2.fill"
-                        )
-                    }
-                    
-               // Temporary Approver Display
-               if let tempApprover = viewModel.tempApprover {
-                   VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                       HStack {
-                           Image(systemName: "person.badge.clock.fill")
-                               .font(.subheadline)
-                               .foregroundStyle(.orange)
-
-                           Text("Temporary Approver")
-                               .font(.subheadline.weight(.medium))
-                               .foregroundStyle(.secondary)
-
-                           Spacer()
-                       }
-
-                       TempApproverDisplayInlineCard(
-                           tempApprover: tempApprover,
-                           tempApproverName: viewModel.tempApproverName
-                       )
-                   }
-                   .padding()
-                   .background(Color(.quaternarySystemFill))
-                   .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-               }
-                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             }
         }
         .padding()
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
-        .sheet(isPresented: $viewModel.showingTempApproverSheet) {
-            TempApproverSheet(
-                allApprovers: viewModel.allApprovers,
-                isInitialAssignment: viewModel.project.tempApproverID == nil,
-                onSet: viewModel.setTempApprover
-            )
+        .sheet(isPresented: $showingTeamMembersDetail) {
+            TeamMembersDetailView(project: project, role: .ADMIN)
+                .presentationDetents([.large])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Refresh team members when project is updated
+            Task {
+                await viewModel.fetchTeamMembers()
+            }
         }
     }
     
@@ -1408,5 +1445,51 @@ struct DateSelectionCard: View {
         .background(Color(.systemBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - Team Member Preview Row
+struct TeamMemberPreviewRow: View {
+    let member: User
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(member.role.color.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                
+                Text(member.name.prefix(1).uppercased())
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(member.role.color)
+            }
+            
+            // Member Info
+            VStack(alignment: .leading, spacing: 2) {
+                Text(member.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "phone.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Text(member.phoneNumber.isEmpty ? (member.email ?? "") : member.phoneNumber)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
     }
 } 

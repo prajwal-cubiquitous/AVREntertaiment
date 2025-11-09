@@ -189,6 +189,8 @@ struct AddTeamMemberView: View {
                             onMemberAdded()
                             isAdding = false
                             HapticManager.notification(.success)
+                            // Notify that project was updated
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
                             dismiss()
                         }
                     } else {

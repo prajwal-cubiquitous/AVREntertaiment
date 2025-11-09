@@ -36,6 +36,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var selectedManager: User? = nil // Single manager only
     @Published var allApprovers: [User] = []
     @Published private var allUsers: [User] = []
+    @Published var loadedTeamMembers: [User] = [] // Actual User objects for team members
     
     // UI State
     @Published var showError = false
@@ -85,6 +86,7 @@ class AdminProjectDetailViewModel: ObservableObject {
         
         Task {
             await fetchUsers()
+            await fetchTeamMembers()
             await fetchTempApprover()
             await checkExpensesCount()
         }
@@ -168,6 +170,45 @@ class AdminProjectDetailViewModel: ObservableObject {
         } catch {
             errorMessage = "Failed to load users: \(error.localizedDescription)"
             showError = true
+        }
+    }
+    
+    func fetchTeamMembers() async {
+        var loadedMembers: [User] = []
+        
+        // Load team members in parallel
+        await withTaskGroup(of: User?.self) { group in
+            for memberId in teamMembers {
+                group.addTask {
+                    do {
+                        let document = try await self.db
+                            .collection("users")
+                            .document(memberId)
+                            .getDocument()
+                        
+                        if document.exists {
+                            return try document.data(as: User.self)
+                        }
+                        return nil
+                    } catch {
+                        print("Error fetching team member \(memberId): \(error)")
+                        return nil
+                    }
+                }
+            }
+            
+            for await member in group {
+                if let member = member {
+                    loadedMembers.append(member)
+                }
+            }
+        }
+        
+        // Sort by name
+        loadedMembers.sort { $0.name < $1.name }
+        
+        await MainActor.run {
+            self.loadedTeamMembers = loadedMembers
         }
     }
     
@@ -368,6 +409,61 @@ class AdminProjectDetailViewModel: ObservableObject {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project dates: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func updateProjectManager(_ manager: User) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                // Single manager only - store as array (backend expects list)
+                let managerId = manager.email ?? manager.phoneNumber
+                let managerIds = [managerId]
+                
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(["managerIds": managerIds])
+                
+                managerName = manager.name
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update project manager: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func removeProjectManager() {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(["managerIds": []])
+                
+                managerName = nil
+                selectedManager = nil
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to remove project manager: \(error.localizedDescription)"
                 showError = true
             }
         }
