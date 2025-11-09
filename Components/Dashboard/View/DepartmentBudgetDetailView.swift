@@ -1099,19 +1099,43 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 var phasesOnlyWithThisDepartment: [(id: String, name: String)] = []
                 
                 if department != "Other" {
-                    // Aggregate allocated budget from phases for this department
+                    // Fetch budget using phaseId + department format
                     let phasesSnapshot = try await FirebasePathHelper.shared
                         .phasesCollection(customerId: customerID, projectId: projectId)
                         .getDocuments()
+                    
                     for doc in phasesSnapshot.documents {
+                        let currentPhaseId = doc.documentID
+                        
+                        // If phaseId is provided, only fetch from that specific phase
+                        if let requiredPhaseId = phaseId, currentPhaseId != requiredPhaseId {
+                            continue
+                        }
+                        
                         if let phase = try? doc.data(as: Phase.self) {
-                            if phase.departments[department] != nil {
-                                allocated += phase.departments[department] ?? 0
-                                phaseIdsWithDepartment.append(doc.documentID)
+                            // Try new format: phaseId_department
+                            let compositeKey = "\(currentPhaseId)_\(department)"
+                            
+                            // Check both old format (for backward compatibility) and new format
+                            var budget: Double = 0
+                            if let newFormatBudget = phase.departments[compositeKey] {
+                                budget = newFormatBudget
+                            } else if let oldFormatBudget = phase.departments[department] {
+                                // Fallback to old format for backward compatibility
+                                budget = oldFormatBudget
+                            }
+                            
+                            if budget > 0 {
+                                allocated += budget
+                                phaseIdsWithDepartment.append(currentPhaseId)
                                 
                                 // Check if this is the only department in this phase
-                                if phase.departments.count == 1 {
-                                    phasesOnlyWithThisDepartment.append((id: doc.documentID, name: phase.phaseName))
+                                // Count only departments that match our pattern
+                                let matchingDepartments = phase.departments.keys.filter { key in
+                                    key == department || key == compositeKey || key.hasSuffix("_\(department)")
+                                }
+                                if matchingDepartments.count == 1 {
+                                    phasesOnlyWithThisDepartment.append((id: currentPhaseId, name: phase.phaseName))
                                 }
                             }
                         }
@@ -1210,21 +1234,38 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         do {
             let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
             
-            // Update budget in all phases that contain this department
-            // We need to distribute the new budget across all phases
-            // For simplicity, we'll set the same budget in each phase
-            // Or you could calculate proportional distribution
+            // Update budget using phaseId + department format
+            // If phaseId is provided, update only that phase
+            // Otherwise, update all phases that contain this department
             
-            // First, get all phases with this department
             let phasesSnapshot = try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerID, projectId: projectId)
                 .getDocuments()
             
             var phasesWithDepartment: [(id: String, currentBudget: Double)] = []
+            
             for doc in phasesSnapshot.documents {
+                let currentPhaseId = doc.documentID
+                
+                // If phaseId is provided, only process that specific phase
+                if let requiredPhaseId = phaseId, currentPhaseId != requiredPhaseId {
+                    continue
+                }
+                
                 if let phase = try? doc.data(as: Phase.self) {
-                    if let currentBudget = phase.departments[department] {
-                        phasesWithDepartment.append((id: doc.documentID, currentBudget: currentBudget))
+                    let compositeKey = "\(currentPhaseId)_\(department)"
+                    
+                    // Check both old and new format for current budget
+                    var currentBudget: Double = 0
+                    if let newFormatBudget = phase.departments[compositeKey] {
+                        currentBudget = newFormatBudget
+                    } else if let oldFormatBudget = phase.departments[department] {
+                        currentBudget = oldFormatBudget
+                    }
+                    
+                    if currentBudget > 0 || phaseId != nil {
+                        // Include phase even if budget is 0 when phaseId is specified
+                        phasesWithDepartment.append((id: currentPhaseId, currentBudget: currentBudget))
                     }
                 }
             }
@@ -1240,13 +1281,30 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     .phasesCollection(customerId: customerID, projectId: projectId)
                     .document(phaseData.id)
                 
+                let compositeKey = "\(phaseData.id)_\(department)"
+                
                 // Calculate proportional budget for this phase
-                let proportion = totalCurrentBudget > 0 ? (phaseData.currentBudget / totalCurrentBudget) : (1.0 / Double(phasesWithDepartment.count))
+                let proportion: Double
+                if totalCurrentBudget > 0 {
+                    proportion = phaseData.currentBudget / totalCurrentBudget
+                } else {
+                    // If no existing budget, distribute equally
+                    proportion = 1.0 / Double(phasesWithDepartment.count)
+                }
                 let newPhaseBudget = newBudget * proportion
                 
-                try await phaseRef.updateData([
-                    "departments.\(department)": newPhaseBudget
-                ])
+                // Store using phaseId_department format
+                var updateData: [String: Any] = [
+                    "departments.\(compositeKey)": newPhaseBudget
+                ]
+                
+                // Remove old format if it exists (migration)
+                if let phase = try? await phaseRef.getDocument().data(as: Phase.self),
+                   phase.departments[department] != nil {
+                    updateData["departments.\(department)"] = FieldValue.delete()
+                }
+                
+                try await phaseRef.updateData(updateData)
             }
             
             // Update project budget after changing department budget
@@ -1308,19 +1366,32 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
             
             // Delete department from all phases that contain it
             for doc in phasesSnapshot.documents {
+                let currentPhaseId = doc.documentID
+                let compositeKey = "\(currentPhaseId)_\(department)"
+                
                 if let phase = try? doc.data(as: Phase.self) {
-                    if phase.departments[department] != nil {
+                    // Check both old and new format
+                    let hasOldFormat = phase.departments[department] != nil
+                    let hasNewFormat = phase.departments[compositeKey] != nil
+                    
+                    if hasOldFormat || hasNewFormat {
                         let phaseRef = FirebasePathHelper.shared
                             .phasesCollection(customerId: customerID, projectId: projectId)
-                            .document(doc.documentID)
+                            .document(currentPhaseId)
                         
-                        // Remove the department from the departments dictionary
-                        try await phaseRef.updateData([
-                            "departments.\(department)": FieldValue.delete()
-                        ])
+                        // Remove both old and new format if they exist
+                        var updateData: [String: Any] = [:]
+                        if hasOldFormat {
+                            updateData["departments.\(department)"] = FieldValue.delete()
+                        }
+                        if hasNewFormat {
+                            updateData["departments.\(compositeKey)"] = FieldValue.delete()
+                        }
+                        
+                        try await phaseRef.updateData(updateData)
                         
                         // Track this phase ID for expense updates
-                        phaseIdsToUpdate.append(doc.documentID)
+                        phaseIdsToUpdate.append(currentPhaseId)
                     }
                 }
             }
@@ -1374,10 +1445,24 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 .phasesCollection(customerId: customerID, projectId: projectId)
                 .document(phaseId)
             
-            // Remove the department from the departments dictionary
-            try await phaseRef.updateData([
-                "departments.\(department)": FieldValue.delete()
-            ])
+            let compositeKey = "\(phaseId)_\(department)"
+            
+            // Remove both old and new format if they exist
+            var updateData: [String: Any] = [:]
+            
+            // Check if old format exists
+            if let phase = try? await phaseRef.getDocument().data(as: Phase.self) {
+                if phase.departments[department] != nil {
+                    updateData["departments.\(department)"] = FieldValue.delete()
+                }
+                if phase.departments[compositeKey] != nil {
+                    updateData["departments.\(compositeKey)"] = FieldValue.delete()
+                }
+            }
+            
+            if !updateData.isEmpty {
+                try await phaseRef.updateData(updateData)
+            }
             
             // Find all expenses with matching department and phaseId
             let expensesSnapshot = try await FirebasePathHelper.shared
