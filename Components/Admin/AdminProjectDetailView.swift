@@ -132,7 +132,7 @@ struct AdminProjectDetailView: View {
                 title: "Location",
                 value: viewModel.location,
                 isEditing: $viewModel.isEditingLocation,
-                icon: "location.fill",
+                icon: "location.circle.fill",
                 onSave: viewModel.updateProjectLocation
             )
             
