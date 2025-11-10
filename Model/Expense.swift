@@ -22,6 +22,8 @@ struct Expense: Identifiable, Codable {
     let status: ExpenseStatus
     let remark: String? // Optional remark for approval/rejection
     let isAdmin: Bool // Whether this expense requires admin approval (default: false)
+    let approvedBy: String? // User phone number who approved the expense
+    let rejectedBy: String? // User phone number who rejected the expense
     
     // Anonymous Department Tracking
     let isAnonymous: Bool? // Whether this expense is in anonymous department
@@ -37,6 +39,7 @@ struct Expense: Identifiable, Codable {
         case projectId, date, amount, department, phaseId, phaseName, categories
         case modeOfPayment, description, attachmentURL, attachmentName, paymentProofURL, paymentProofName, submittedBy
         case status, remark, isAdmin, isAnonymous, originalDepartment, departmentDeletedAt
+        case approvedBy, rejectedBy
         case createdAt, updatedAt
     }
     
@@ -63,6 +66,8 @@ struct Expense: Identifiable, Codable {
         isAnonymous: Bool? = nil,
         originalDepartment: String? = nil,
         departmentDeletedAt: Timestamp? = nil,
+        approvedBy: String? = nil,
+        rejectedBy: String? = nil,
         createdAt: Timestamp,
         updatedAt: Timestamp
     ) {
@@ -87,6 +92,8 @@ struct Expense: Identifiable, Codable {
         self.isAnonymous = isAnonymous
         self.originalDepartment = originalDepartment
         self.departmentDeletedAt = departmentDeletedAt
+        self.approvedBy = approvedBy
+        self.rejectedBy = rejectedBy
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -113,6 +120,8 @@ struct Expense: Identifiable, Codable {
         isAnonymous = try container.decodeIfPresent(Bool.self, forKey: .isAnonymous)
         originalDepartment = try container.decodeIfPresent(String.self, forKey: .originalDepartment)
         departmentDeletedAt = try container.decodeIfPresent(Timestamp.self, forKey: .departmentDeletedAt)
+        approvedBy = try container.decodeIfPresent(String.self, forKey: .approvedBy)
+        rejectedBy = try container.decodeIfPresent(String.self, forKey: .rejectedBy)
         createdAt = try container.decode(Timestamp.self, forKey: .createdAt)
         updatedAt = try container.decode(Timestamp.self, forKey: .updatedAt)
     }
@@ -139,6 +148,8 @@ struct Expense: Identifiable, Codable {
         try container.encodeIfPresent(isAnonymous, forKey: .isAnonymous)
         try container.encodeIfPresent(originalDepartment, forKey: .originalDepartment)
         try container.encodeIfPresent(departmentDeletedAt, forKey: .departmentDeletedAt)
+        try container.encodeIfPresent(approvedBy, forKey: .approvedBy)
+        try container.encodeIfPresent(rejectedBy, forKey: .rejectedBy)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
@@ -231,6 +242,8 @@ extension Expense {
             isAnonymous: false,
             originalDepartment: nil,
             departmentDeletedAt: nil,
+            approvedBy: nil,
+            rejectedBy: nil,
             createdAt: Timestamp(),
             updatedAt: Timestamp()
         )

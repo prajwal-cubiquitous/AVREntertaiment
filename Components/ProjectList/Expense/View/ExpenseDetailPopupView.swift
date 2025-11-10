@@ -1,5 +1,6 @@
 import SwiftUI
 import SafariServices
+import FirebaseFirestore
 
 struct ExpenseDetailPopupView: View {
     let expense: Expense
@@ -8,6 +9,8 @@ struct ExpenseDetailPopupView: View {
     @State private var showingPaymentProof = false
     @State private var reviewerNote: String = ""
     @State private var showingRemarkEditor = false
+    @State private var approverName: String?
+    @State private var rejectorName: String?
     let onApprove: ((String) -> Void)?
     let onReject: ((String) -> Void)?
     let isPendingApproval: Bool
@@ -83,7 +86,9 @@ struct ExpenseDetailPopupView: View {
                             detailRow(title: "Subcategory:", value: expense.categories.first ?? "")
                             detailRow(title: "Date:", value: expense.dateFormatted)
                             detailRow(title: "Amount:", value: expense.amountFormatted)
-                            detailRow(title: "Submitted By", value: expense.submittedBy)
+                            
+                            // Payment Mode
+                            detailRow(title: "Payment Mode:", value: expense.modeOfPayment.rawValue)
                             
                             // Receipt (Attachment)
                             if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
@@ -92,13 +97,16 @@ struct ExpenseDetailPopupView: View {
                                         .font(.body)
                                     Spacer()
                                     Button {
+                                        HapticManager.selection()
                                         showingAttachment = true
                                     } label: {
-                                        HStack {
+                                        HStack(spacing: 4) {
                                             Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
                                                 .foregroundColor(.blue)
+                                                .font(.system(size: 14))
                                             Text("View Full")
                                                 .foregroundColor(.blue)
+                                                .font(.body)
                                         }
                                     }
                                 }
@@ -111,16 +119,26 @@ struct ExpenseDetailPopupView: View {
                                         .font(.body)
                                     Spacer()
                                     Button {
+                                        HapticManager.selection()
                                         showingPaymentProof = true
                                     } label: {
-                                        HStack {
+                                        HStack(spacing: 4) {
                                             Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
                                                 .foregroundColor(.green)
+                                                .font(.system(size: 14))
                                             Text("View Full")
                                                 .foregroundColor(.green)
+                                                .font(.body)
                                         }
                                     }
                                 }
+                            }
+                            
+                            // Approved By / Rejected By
+                            if expense.status == .approved, let approvedBy = expense.approvedBy {
+                                detailRow(title: "Approved By:", value: approverName ?? approvedBy)
+                            } else if expense.status == .rejected, let rejectedBy = expense.rejectedBy {
+                                detailRow(title: "Rejected By:", value: rejectorName ?? rejectedBy)
                             }
                             
                             Divider()
@@ -215,6 +233,54 @@ struct ExpenseDetailPopupView: View {
             if let paymentProofURL = expense.paymentProofURL,
                let url = URL(string: paymentProofURL) {
                 FileViewerSheet(fileURL: url, fileName: expense.paymentProofName)
+            }
+        }
+        .task {
+            await loadApproverRejectorNames()
+        }
+    }
+    
+    // MARK: - Helper Methods
+    private func loadApproverRejectorNames() async {
+        let db = Firestore.firestore()
+        
+        // Load approver name if approved
+        if expense.status == .approved, let approvedBy = expense.approvedBy {
+            do {
+                let userDoc = try await db
+                    .collection(FirebaseCollections.users)
+                    .whereField("phoneNumber", isEqualTo: approvedBy)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let userData = userDoc.documents.first?.data(),
+                   let name = userData["name"] as? String {
+                    await MainActor.run {
+                        self.approverName = name
+                    }
+                }
+            } catch {
+                print("Error loading approver name: \(error)")
+            }
+        }
+        
+        // Load rejector name if rejected
+        if expense.status == .rejected, let rejectedBy = expense.rejectedBy {
+            do {
+                let userDoc = try await db
+                    .collection(FirebaseCollections.users)
+                    .whereField("phoneNumber", isEqualTo: rejectedBy)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let userData = userDoc.documents.first?.data(),
+                   let name = userData["name"] as? String {
+                    await MainActor.run {
+                        self.rejectorName = name
+                    }
+                }
+            } catch {
+                print("Error loading rejector name: \(error)")
             }
         }
     }
