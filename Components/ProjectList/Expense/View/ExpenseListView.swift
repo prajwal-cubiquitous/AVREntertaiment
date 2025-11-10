@@ -152,66 +152,61 @@ struct ExpenseRowView: View {
     let onEditTapped: () -> Void
     @State private var showingReceiptViewer = false
     @State private var showingPaymentProofViewer = false
-    
+
     var body: some View {
-        HStack(spacing: 12) {
-            // Status Indicator
+        HStack(alignment: .top, spacing: 12) {
+            
+            // Status Dot
             Circle()
                 .fill(expense.status.color)
                 .frame(width: 10, height: 10)
+                .padding(.top, 6)
             
-            // Content area - tappable
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            if let phaseName = expense.phaseName {
-                                Text(phaseName)
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                                    .fontWeight(.medium)
-                            }
-
-                        }
-                        
-                        Text(expense.department)
-                            .font(.subheadline)
+            // Left content (phase, dept, payment, etc.)
+            VStack(alignment: .leading, spacing: 6) {
+                // Phase and Department
+                VStack(alignment: .leading, spacing: 2) {
+                    if let phaseName = expense.phaseName {
+                        Text(phaseName)
+                            .font(.caption)
+                            .foregroundColor(.blue)
                             .fontWeight(.medium)
-                            .foregroundColor(.primary)
                     }
-                    
-                    Spacer()
-                    
-                    Text(expense.amountFormatted)
+                    Text(expense.department)
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
                 }
-                
-                Text(expense.modeOfPayment.rawValue)
+
+                // Payment Mode
+                Text("\(expense.modeOfPayment.rawValue)")
                     .font(.caption)
                     .foregroundColor(.primary)
-                    .lineLimit(2)
-                
-                HStack {
+
+                // Category + Date
+                HStack(spacing: 6) {
                     Text(expense.categoriesString)
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                     
-                    Spacer()
+                    //                    Spacer(minLength: 0)
                     
-                    Text(expense.dateFormatted)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
             }
-            
-            // Action buttons - horizontal layout with compact spacing
-            VStack(spacing: 6) {
-                // First row: Receipt and Payment Proof icons
-                HStack(spacing: 8) {
-                    // Receipt icon (if exists) - clickable
+
+            Spacer()
+
+            // Right Side: Amount & Action Icons
+            VStack(alignment: .trailing, spacing: 8) {
+                // Amount (Top Right)
+                Text(expense.amountFormatted)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+
+                // File Buttons (Receipt & Proof)
+                HStack(spacing: 6) {
                     if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
                         Button {
                             HapticManager.selection()
@@ -220,12 +215,10 @@ struct ExpenseRowView: View {
                             Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.blue)
-                                .frame(width: 20, height: 20)
                         }
                         .buttonStyle(.plain)
                     }
-                    
-                    // Payment proof icon (if exists) - clickable
+
                     if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
                         Button {
                             HapticManager.selection()
@@ -234,44 +227,41 @@ struct ExpenseRowView: View {
                             Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.green)
-                                .frame(width: 20, height: 20)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                
-                // Second row: Edit and Message buttons (only for pending)
+
+                // Edit + Chat (for pending)
                 if expense.status == .pending {
-                    HStack(spacing: 8) {
-                        // Edit Button
-                        Button {
-                            onEditTapped()
-                        } label: {
+                    HStack(spacing: 6) {
+                        Button(action: onEditTapped) {
                             Image(systemName: "pencil")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.orange)
-                                .frame(width: 20, height: 20)
                         }
                         .buttonStyle(.plain)
-                        
-                        // Message Button
-                        Button {
-                            onChatTapped()
-                        } label: {
+
+                        Button(action: onChatTapped) {
                             Image(systemName: "message")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.blue)
-                                .frame(width: 20, height: 20)
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                Spacer()
+                
+                Text(expense.dateFormatted)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .padding(.horizontal, 12)
         .background(Color(UIColor.tertiarySystemGroupedBackground))
-        .cornerRadius(8)
+        .cornerRadius(10)
         .sheet(isPresented: $showingReceiptViewer) {
             if let urlString = expense.attachmentURL,
                let url = URL(string: urlString) {
@@ -285,21 +275,20 @@ struct ExpenseRowView: View {
             }
         }
     }
-    
-    // MARK: - Helper Functions
+
+    // MARK: - Helper
     private func fileIcon(for fileName: String) -> String {
         let lowercased = fileName.lowercased()
         if lowercased.hasSuffix(".pdf") {
-            return "doc.fill"
-        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") {
-            return "photo.fill"
-        } else if lowercased.hasSuffix(".png") {
+            return "doc.text.fill"
+        } else if lowercased.hasSuffix(".jpg") || lowercased.hasSuffix(".jpeg") || lowercased.hasSuffix(".png") {
             return "photo.fill"
         } else {
             return "doc.fill"
         }
     }
 }
+
 
 // MARK: - Supporting Views
 private struct SectionHeader: View {

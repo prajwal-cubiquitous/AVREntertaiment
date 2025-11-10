@@ -63,7 +63,36 @@ class ExpenseListViewModel: ObservableObject {
     }
     
     func fetchAllExpenses() {
-        fetchExpenses() // For now, using the same method
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            isLoading = false
+            return
+        }
+        
+        isLoading = true
+        
+        Task {
+            do {
+                // Fetch all expenses without filtering by submittedBy
+                let snapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .order(by: "createdAt", descending: true)
+                    .getDocuments()
+                
+                var loadedExpenses: [Expense] = []
+                for document in snapshot.documents {
+                    var expense = try document.data(as: Expense.self)
+                    expense.id = document.documentID
+                    loadedExpenses.append(expense)
+                }
+                
+                expenses = loadedExpenses
+                isLoading = false
+            } catch {
+                print("Error fetching all expenses: \(error)")
+                isLoading = false
+            }
+        }
     }
     
     @MainActor
