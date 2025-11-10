@@ -15,6 +15,7 @@ struct TruncatedTextWithTooltip: View {
     let foregroundColor: Color
     let lineLimit: Int
     let alignment: TextAlignment
+    let truncationLength: Int
     
     @State private var isTooltipVisible = false
     
@@ -24,7 +25,8 @@ struct TruncatedTextWithTooltip: View {
         fontWeight: Font.Weight? = nil,
         foregroundColor: Color = .primary,
         lineLimit: Int = 1,
-        alignment: TextAlignment = .leading
+        alignment: TextAlignment = .leading,
+        truncationLength: Int = 10
     ) {
         self.text = text
         self.font = font
@@ -32,19 +34,20 @@ struct TruncatedTextWithTooltip: View {
         self.foregroundColor = foregroundColor
         self.lineLimit = lineLimit
         self.alignment = alignment
+        self.truncationLength = truncationLength
     }
     
-    // Truncate to 10 characters
+    // Truncate to specified length
     private var truncatedText: String {
-        if text.count > 10 {
-            return String(text.prefix(10)) + "..."
+        if text.count > truncationLength {
+            return String(text.prefix(truncationLength)) + "..."
         }
         return text
     }
     
     // Check if text needs truncation
     private var needsTruncation: Bool {
-        text.count > 10
+        text.count > truncationLength
     }
     
     var body: some View {

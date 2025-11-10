@@ -12,6 +12,12 @@ struct ExpenseDetailReadOnlyView: View {
     let expense: Expense
     @Environment(\.dismiss) private var dismiss
     @State private var approverName: String?
+    @State private var rejectorName: String?
+    @State private var submitterName: String?
+    @State private var phaseName: String?
+    @State private var allocatedBudget: Double = 0
+    @State private var spentAmount: Double = 0
+    @State private var isLoadingBudget = false
     
     var body: some View {
         NavigationStack {
@@ -26,6 +32,11 @@ struct ExpenseDetailReadOnlyView: View {
                         
                         // Expense Details Card
                         expenseDetailsCard
+                        
+                        // Budget Context Card (if phase and department info available)
+                        if expense.phaseId != nil {
+                            budgetContextCard
+                        }
                         
                         // Payment Information Card
                         paymentInfoCard
@@ -64,7 +75,10 @@ struct ExpenseDetailReadOnlyView: View {
             }
         }
         .task {
-            await loadApproverName()
+            await loadAllNames()
+            if expense.phaseId != nil {
+                await loadBudgetContext()
+            }
         }
     }
     
@@ -154,7 +168,7 @@ struct ExpenseDetailReadOnlyView: View {
             
             VStack(spacing: DesignSystem.Spacing.small) {
                 DetailRow(title: "Date", value: expense.dateFormatted)
-                DetailRow(title: "Submitted By", value: expense.submittedBy.formatPhoneNumber)
+                DetailRow(title: "Submitted By", value: submitterName ?? expense.submittedBy.formatPhoneNumber)
                 DetailRow(title: "Description", value: expense.description)
                 
                 if let existingRemark = expense.remark, !existingRemark.isEmpty {
@@ -354,8 +368,12 @@ struct ExpenseDetailReadOnlyView: View {
                 // Show updated timestamp if available
                 DetailRow(title: "Last Updated", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
                 
-                // For approved/rejected expenses, we can show who submitted it
-                DetailRow(title: "Submitted By", value: approverName ?? expense.submittedBy.formatPhoneNumber)
+                // Approved By / Rejected By
+                if expense.status == .approved, let approvedBy = expense.approvedBy {
+                    DetailRow(title: "Approved By", value: approverName ?? approvedBy.formatPhoneNumber)
+                } else if expense.status == .rejected, let rejectedBy = expense.rejectedBy {
+                    DetailRow(title: "Rejected By", value: rejectorName ?? rejectedBy.formatPhoneNumber)
+                }
                 
                 // Show status-specific information
                 if expense.status == .approved {
@@ -399,27 +417,284 @@ struct ExpenseDetailReadOnlyView: View {
         )
     }
     
+    // MARK: - Budget Context Card
+    private var budgetContextCard: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Title with icon
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .font(.title3)
+                    .foregroundColor(.blue)
+                
+                Text("Budget Context")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            
+            // Phase and Department Pills
+            HStack(spacing: DesignSystem.Spacing.small) {
+                if let phaseName = phaseName ?? expense.phaseName {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.fill")
+                            .font(.caption2)
+                        TruncatedTextWithTooltip(
+                            phaseName,
+                            font: .caption,
+                            fontWeight: .medium,
+                            foregroundColor: .primary,
+                            lineLimit: 1,
+                            truncationLength: 15
+                        )
+                    }
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(8)
+                }
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "building.2.fill")
+                        .font(.caption2)
+                    TruncatedTextWithTooltip(
+                        expense.department,
+                        font: .caption,
+                        fontWeight: .medium,
+                        foregroundColor: .primary,
+                        lineLimit: 1,
+                        truncationLength: 15
+                    )
+                }
+                .foregroundColor(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color(.systemGray5))
+                .cornerRadius(8)
+            }
+            
+            // Budget Breakdown
+            if !isLoadingBudget {
+                let remainingBudget = allocatedBudget - spentAmount
+                let spentPercentage = allocatedBudget > 0 ? (spentAmount / allocatedBudget) * 100 : 0
+                
+                VStack(spacing: DesignSystem.Spacing.small) {
+                    // Allocated
+                    HStack {
+                        Text("Allocated")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(Double(allocatedBudget).formattedCurrency)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    // Spent
+                    HStack {
+                        Text("Spent")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(Double(spentAmount).formattedCurrency)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                    }
+                    
+                    // Remaining
+                    HStack {
+                        Text("Remaining")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        HStack(spacing: 6) {
+                            Text(Double(remainingBudget).formattedCurrency)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(remainingBudget >= 0 ? .green : .red)
+                            
+                            // Percentage pill
+                            if allocatedBudget > 0 {
+                                Text("\(Int(spentPercentage))%")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(.systemGray5))
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                    
+                    // Progress Bar
+                    if allocatedBudget > 0 {
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                // Background
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color(.systemGray5))
+                                    .frame(height: 8)
+                                
+                                // Spent portion (orange) - from left
+                                if spentPercentage > 0 {
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.orange)
+                                        .frame(
+                                            width: max(0, min(CGFloat(spentPercentage / 100) * geometry.size.width, geometry.size.width)),
+                                            height: 8
+                                        )
+                                }
+                            }
+                        }
+                        .frame(height: 8)
+                    }
+                }
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        )
+    }
+    
     // MARK: - Helper Methods
-    private func loadApproverName() async {
-        // For approved/rejected expenses, we'll show the submitter's name
-        // In a real implementation, you might want to track who approved/rejected
+    private func loadAllNames() async {
+        let db = Firestore.firestore()
         
+        // Load submitter name
+        await loadUserName(phoneNumber: expense.submittedBy) { name in
+            self.submitterName = name
+        }
+        
+        // Load approver name if approved
+        if expense.status == .approved, let approvedBy = expense.approvedBy {
+            await loadUserName(phoneNumber: approvedBy) { name in
+                self.approverName = name
+            }
+        }
+        
+        // Load rejector name if rejected
+        if expense.status == .rejected, let rejectedBy = expense.rejectedBy {
+            await loadUserName(phoneNumber: rejectedBy) { name in
+                self.rejectorName = name
+            }
+        }
+    }
+    
+    private func loadUserName(phoneNumber: String, completion: @escaping (String?) -> Void) async {
         do {
             let db = Firestore.firestore()
+            // Try to get user by document ID (phone number)
             let userDoc = try await db
                 .collection(FirebaseCollections.users)
-                .whereField("phoneNumber", isEqualTo: expense.submittedBy)
+                .document(phoneNumber)
+                .getDocument()
+            
+            if let userData = userDoc.data(),
+               let name = userData["name"] as? String {
+                await MainActor.run {
+                    completion(name)
+                }
+                return
+            }
+            
+            // Fallback: try query by phoneNumber field
+            let userQuery = try await db
+                .collection(FirebaseCollections.users)
+                .whereField("phoneNumber", isEqualTo: phoneNumber)
                 .limit(to: 1)
                 .getDocuments()
             
-            if let userData = userDoc.documents.first?.data(),
+            if let userData = userQuery.documents.first?.data(),
                let name = userData["name"] as? String {
                 await MainActor.run {
-                    self.approverName = name
+                    completion(name)
                 }
             }
         } catch {
-            print("Error loading submitter name: \(error)")
+            print("Error loading user name for \(phoneNumber): \(error)")
+        }
+    }
+    
+    private func loadBudgetContext() async {
+        guard let phaseId = expense.phaseId else { return }
+        
+        isLoadingBudget = true
+        
+        do {
+            let db = Firestore.firestore()
+            
+            // Find the project
+            let projectsSnapshot = try await db
+                .collection("customers")
+                .getDocuments()
+            
+            for customerDoc in projectsSnapshot.documents {
+                let projectsRef = customerDoc.reference.collection("projects")
+                let projectsQuery = try await projectsRef
+                    .whereField("__name__", isEqualTo: expense.projectId)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let projectDoc = projectsQuery.documents.first {
+                    // Get phase name
+                    let phaseDoc = try await projectDoc.reference
+                        .collection("phases")
+                        .document(phaseId)
+                        .getDocument()
+                    
+                    if let phaseData = phaseDoc.data(),
+                       let name = phaseData["name"] as? String {
+                        await MainActor.run {
+                            self.phaseName = name
+                        }
+                    }
+                    
+                    // Get budget information
+                    let budgetDoc = try await projectDoc.reference
+                        .collection("budgets")
+                        .whereField("phaseId", isEqualTo: phaseId)
+                        .whereField("department", isEqualTo: expense.department)
+                        .limit(to: 1)
+                        .getDocuments()
+                    
+                    if let budgetData = budgetDoc.documents.first?.data() {
+                        let allocated = budgetData["allocated"] as? Double ?? 0
+                        let spent = budgetData["spent"] as? Double ?? 0
+                        
+                        await MainActor.run {
+                            self.allocatedBudget = allocated
+                            self.spentAmount = spent
+                            self.isLoadingBudget = false
+                        }
+                        return
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                self.isLoadingBudget = false
+            }
+        } catch {
+            print("Error loading budget context: \(error)")
+            await MainActor.run {
+                self.isLoadingBudget = false
+            }
         }
     }
 }

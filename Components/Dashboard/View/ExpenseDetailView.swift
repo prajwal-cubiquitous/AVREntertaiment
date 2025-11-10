@@ -256,9 +256,14 @@ struct ExpenseDetailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "folder.fill")
                             .font(.caption2)
-                        Text(phaseName)
-                            .font(.caption)
-                            .fontWeight(.medium)
+                        TruncatedTextWithTooltip(
+                            phaseName,
+                            font: .caption,
+                            fontWeight: .medium,
+                            foregroundColor: .primary,
+                            lineLimit: 1,
+                            truncationLength: 15
+                        )
                     }
                     .foregroundColor(.primary)
                     .padding(.horizontal, 8)
@@ -270,9 +275,14 @@ struct ExpenseDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "building.2.fill")
                         .font(.caption2)
-                    Text(expense.department)
-                        .font(.caption)
-                        .fontWeight(.medium)
+                    TruncatedTextWithTooltip(
+                        expense.department,
+                        font: .caption,
+                        fontWeight: .medium,
+                        foregroundColor: .primary,
+                        lineLimit: 1,
+                        truncationLength: 15
+                    )
                 }
                 .foregroundColor(.primary)
                 .padding(.horizontal, 8)
