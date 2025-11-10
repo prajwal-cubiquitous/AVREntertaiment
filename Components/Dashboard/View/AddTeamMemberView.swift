@@ -312,6 +312,7 @@ class AddTeamMemberViewModel: ObservableObject {
                 let snapshot = try await db
                     .collection("users")
                     .whereField("ownerID", isEqualTo: customerId)
+                    .whereField("role", isEqualTo: "USER")
                     .getDocuments()
                 
                 var loadedUsers: [User] = []
