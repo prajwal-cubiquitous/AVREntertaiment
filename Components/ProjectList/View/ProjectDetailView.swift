@@ -19,7 +19,7 @@ struct ProjectDetailView: View {
     @State private var showingChats = false
     @State private var showingNotifications = false
     @State private var isTeamMembersDropdownVisible = false
-    @State private var visiblePhaseCount = 0
+    @State private var hasVisiblePhase = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -58,7 +58,7 @@ struct ProjectDetailView: View {
                     PhaseBreakdownView(
                         project: project,
                         viewModel: viewModel,
-                        visiblePhaseCount: $visiblePhaseCount
+                        hasVisiblePhase: $hasVisiblePhase
                     )
     //                    .cardStyle()
     //                    .padding(.horizontal, DesignSystem.Spacing.medium)
@@ -74,9 +74,12 @@ struct ProjectDetailView: View {
                 .padding(.top, DesignSystem.Spacing.small)
             }
             .background(Color(UIColor.systemGroupedBackground))
+            .onPreferenceChange(PhaseVisibilityPreferenceKey.self) { frames in
+                checkPhaseVisibility(frames: frames)
+            }
             .overlay(alignment: .topTrailing) {
-                // Sticky "View All Phases" button on the right - only when phases are visible
-                if visiblePhaseCount > 0 && viewModel.phases.count > 1 {
+                // Sticky "View All Phases" button on the right - only when phases are 50%+ visible
+                if hasVisiblePhase && viewModel.phases.count > 1 {
                     ViewAllPhasesButton(
                         viewModel: viewModel,
                         projectId: project.id ?? ""
@@ -86,6 +89,7 @@ struct ProjectDetailView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
+            .coordinateSpace(name: "scroll")
             
             // Full-screen dropdown overlay - appears above everything
             if isTeamMembersDropdownVisible {
@@ -151,6 +155,9 @@ struct ProjectDetailView: View {
                     )
                 }
             }
+            
+            // Reset visibility when view appears
+            hasVisiblePhase = false
         }
         .overlay {
             if showingNotifications {
@@ -169,6 +176,51 @@ struct ProjectDetailView: View {
             Task {
                 await viewModel.loadPhaseExtensions()
             }
+        }
+    }
+    
+    private func checkPhaseVisibility(frames: [CGRect]) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            return
+        }
+        
+        let screenHeight = window.bounds.height
+        let safeAreaTop = window.safeAreaInsets.top
+        let safeAreaBottom = window.safeAreaInsets.bottom
+        
+        // Visible area accounts for navigation bar (~100pt) and bottom button (~100pt)
+        let visibleAreaTop: CGFloat = safeAreaTop + 100
+        let visibleAreaBottom: CGFloat = screenHeight - safeAreaBottom - 100
+        
+        var hasVisible = false
+        
+        for frame in frames {
+            let cardTop = frame.minY
+            let cardBottom = frame.maxY
+            let cardHeight = frame.height
+            
+            // Skip if card is completely outside visible area
+            if cardBottom < visibleAreaTop || cardTop > visibleAreaBottom {
+                continue
+            }
+            
+            // Calculate visible portion of the card
+            let visibleTop = max(cardTop, visibleAreaTop)
+            let visibleBottom = min(cardBottom, visibleAreaBottom)
+            let visibleHeight = max(0, visibleBottom - visibleTop)
+            
+            // Check if at least 50% of the card is visible
+            let visibilityPercentage = cardHeight > 0 ? visibleHeight / cardHeight : 0
+            
+            if visibilityPercentage >= 0.5 {
+                hasVisible = true
+                break
+            }
+        }
+        
+        withAnimation(.easeInOut(duration: 0.2)) {
+            hasVisiblePhase = hasVisible
         }
     }
     
@@ -290,7 +342,7 @@ private struct KeyInformationView: View {
 private struct PhaseBreakdownView: View {
     let project: Project
     @ObservedObject var viewModel: ProjectDetailViewModel
-    @Binding var visiblePhaseCount: Int
+    @Binding var hasVisiblePhase: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
@@ -312,10 +364,11 @@ private struct PhaseBreakdownView: View {
                             phase: phase,
                             projectId: project.id ?? "",
                             phaseExtensionMap: viewModel.phaseExtensionMap,
-                            visiblePhaseCount: $visiblePhaseCount
+                            hasVisiblePhase: $hasVisiblePhase
                         )
                         .padding(DesignSystem.Spacing.medium)
                         .cardStyle()
+                        .background(PhaseVisibilityPreferenceView())
                     }
                 }
             } else {
@@ -363,11 +416,40 @@ private struct ViewAllPhasesButton: View {
     }
 }
 
+// MARK: - Phase Visibility Preference Key
+private struct PhaseVisibilityPreferenceKey: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+// MARK: - ScrollView Frame Preference Key
+private struct ScrollViewFramePreferenceKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Phase Visibility Preference View
+private struct PhaseVisibilityPreferenceView: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Color.clear
+                .preference(
+                    key: PhaseVisibilityPreferenceKey.self,
+                    value: [geometry.frame(in: .global)]
+                )
+        }
+    }
+}
+
 private struct CurrentPhaseView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
     let projectId: String
     let phaseExtensionMap: [String: Bool]
-    @Binding var visiblePhaseCount: Int
+    @Binding var hasVisiblePhase: Bool
     
     @State private var isExpanded = false // Default to expanded
     @State private var showingRequestForm = false
@@ -715,16 +797,6 @@ private struct CurrentPhaseView: View {
                     }
                     .padding(.top, DesignSystem.Spacing.small)
                 }
-            }
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                visiblePhaseCount += 1
-            }
-        }
-        .onDisappear {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                visiblePhaseCount = max(0, visiblePhaseCount - 1)
             }
         }
     }
