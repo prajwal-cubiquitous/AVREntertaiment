@@ -8,7 +8,6 @@ struct ExpenseListView: View {
     @State private var selectedExpenseForChat: Expense?
     @State private var selectedExpenseForEdit: Expense?
     @State private var selectedExpenseForDetail: Expense?
-    @State private var showingExpenseDetail = false
     @EnvironmentObject var authService: FirebaseAuthService
     
     init(project: Project, currentUserPhone: String) {
@@ -62,18 +61,15 @@ struct ExpenseListView: View {
         .sheet(item: $selectedExpenseForEdit) { expense in
             EditExpenseView(expense: expense, project: project, customerId: customerId)
         }
-        .sheet(isPresented: $showingExpenseDetail) {
-            if let expense = selectedExpenseForDetail {
-                ExpenseDetailPopupView(
-                    expense: expense,
-                    isPresented: Binding(
-                        get: { selectedExpenseForDetail != nil },
-                        set: { if !$0 { selectedExpenseForDetail = nil } }
-                    ),
-                    isPendingApproval: false
-                )
-            }
-
+        .sheet(item: $selectedExpenseForDetail) { expense in
+            ExpenseDetailPopupView(
+                expense: expense,
+                isPresented: Binding(
+                    get: { selectedExpenseForDetail != nil },
+                    set: { if !$0 { selectedExpenseForDetail = nil } }
+                ),
+                isPendingApproval: false
+            )
         }
 
     }
@@ -131,7 +127,6 @@ struct ExpenseListView: View {
                 .onTapGesture {
                     HapticManager.selection()
                     selectedExpenseForDetail = expense
-                    showingExpenseDetail = true
                 }
             }
             
