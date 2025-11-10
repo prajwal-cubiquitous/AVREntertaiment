@@ -250,8 +250,7 @@ struct ExpenseRowView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                Spacer()
-                
+//                Spacer()
                 Text(expense.dateFormatted)
                     .font(.caption2)
                     .foregroundColor(.secondary)

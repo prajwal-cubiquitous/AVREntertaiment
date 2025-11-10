@@ -113,7 +113,22 @@ struct FullExpenseListView: View {
     }
     
     private var availableDepartments: [String] {
-        Array(Set(viewModel.expenses.map { $0.department })).sorted()
+        let expenses = viewModel.expenses
+        
+        // If a specific phase is selected, filter departments by that phase
+        if let selectedPhase = selectedPhase {
+            let departments = expenses
+                .filter { expense in
+                    // Match expenses that have the selected phase name
+                    expense.phaseName == selectedPhase
+                }
+                .map { $0.department }
+            
+            return Array(Set(departments)).sorted()
+        } else {
+            // If "All" is selected for phase, show all departments
+            return Array(Set(expenses.map { $0.department })).sorted()
+        }
     }
     
     var body: some View {
@@ -159,12 +174,40 @@ struct FullExpenseListView: View {
                             }
                         }
                     }
+                    .popover(isPresented: $showingFilterSheet, arrowEdge: .top) {
+                        CompactFilterPopover(
+                            selectedPaymentMode: $selectedPaymentMode,
+                            selectedPhase: $selectedPhase,
+                            selectedDepartment: $selectedDepartment,
+                            selectedStatus: $selectedStatus,
+                            sortOption: $sortOption,
+                            startDate: $startDate,
+                            endDate: $endDate,
+                            isDateRangeActive: $isDateRangeActive,
+                            availablePhases: availablePhases,
+                            availableDepartments: availableDepartments,
+                            onClear: {
+                                clearAllFilters()
+                            }
+                        )
+                        .presentationCompactAdaptation(.popover)
+                    }
                 }
             }
         }
         .presentationDetents([.large, .fraction(0.90)])
         .onAppear {
             viewModel.fetchAllExpenses()
+        }
+        .onChange(of: selectedPhase) { _ in
+            // When phase changes, check if selected department is still valid
+            if let selectedDept = selectedDepartment {
+                let validDepartments = availableDepartments
+                if !validDepartments.contains(selectedDept) {
+                    // Clear department if it's not in the filtered list
+                    selectedDepartment = nil
+                }
+            }
         }
         .overlay {
             if let expense = selectedExpense {
@@ -193,20 +236,6 @@ struct FullExpenseListView: View {
                 EditExpenseView(expense: expense, project: project, customerId: CustomerId)
             }
         }
-        .sheet(isPresented: $showingFilterSheet) {
-            FilterAndSortSheet(
-                selectedPaymentMode: $selectedPaymentMode,
-                selectedPhase: $selectedPhase,
-                selectedDepartment: $selectedDepartment,
-                selectedStatus: $selectedStatus,
-                sortOption: $sortOption,
-                startDate: $startDate,
-                endDate: $endDate,
-                isDateRangeActive: $isDateRangeActive,
-                availablePhases: availablePhases,
-                availableDepartments: availableDepartments
-            )
-        }
     }
     
     // Check if any filters are active
@@ -217,6 +246,19 @@ struct FullExpenseListView: View {
         selectedStatus != nil ||
         isDateRangeActive ||
         sortOption != .dateDescending
+    }
+    
+    // Clear all filters
+    private func clearAllFilters() {
+        selectedPaymentMode = nil
+        selectedPhase = nil
+        selectedDepartment = nil
+        selectedStatus = nil
+        sortOption = .dateDescending
+        isDateRangeActive = false
+        startDate = Date()
+        endDate = Date()
+        HapticManager.selection()
     }
     
     // MARK: - Search Bar
@@ -384,8 +426,8 @@ enum ExpenseSortOption: String, CaseIterable {
     }
 }
 
-// MARK: - Filter and Sort Sheet
-struct FilterAndSortSheet: View {
+// MARK: - Compact Filter Popover
+struct CompactFilterPopover: View {
     @Binding var selectedPaymentMode: PaymentMode?
     @Binding var selectedPhase: String?
     @Binding var selectedDepartment: String?
@@ -396,122 +438,347 @@ struct FilterAndSortSheet: View {
     @Binding var isDateRangeActive: Bool
     let availablePhases: [String]
     let availableDepartments: [String]
-    
-    @Environment(\.dismiss) private var dismiss
+    let onClear: () -> Void
     
     var body: some View {
-        NavigationView {
-            Form {
-                // Sort Section
-                Section {
-                    Picker("Sort By", selection: $sortOption) {
-                        ForEach(ExpenseSortOption.allCases, id: \.self) { option in
-                            Text(option.displayName).tag(option)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack {
+                Text("Filter & Sort")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            
+            Divider()
+            
+            // Scrollable Content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Sort Option
+                    filterRow(
+                        title: "Sort By",
+                        value: sortOption.displayName,
+                        menu: {
+                            ForEach(ExpenseSortOption.allCases, id: \.self) { option in
+                                Button(action: {
+                                    HapticManager.selection()
+                                    sortOption = option
+                                }) {
+                                    HStack {
+                                        Text(option.displayName)
+                                        Spacer()
+                                        if sortOption == option {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
-                } header: {
-                    Text("Sort Options")
-                }
-                
-                // Filter Section
-                Section {
+                    )
+                    
+                    divider
+                    
                     // Payment Mode Filter
-                    Picker("Payment Mode", selection: $selectedPaymentMode) {
-                        Text("All").tag(nil as PaymentMode?)
-                        ForEach(PaymentMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode as PaymentMode?)
+                    filterRow(
+                        title: "Payment Mode",
+                        value: selectedPaymentMode?.rawValue ?? "All",
+                        menu: {
+                            Button(action: {
+                                HapticManager.selection()
+                                selectedPaymentMode = nil
+                            }) {
+                                HStack {
+                                    Text("All")
+                                    Spacer()
+                                    if selectedPaymentMode == nil {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 14, weight: .semibold))
+                                    }
+                                }
+                            }
+                            
+                            ForEach(PaymentMode.allCases, id: \.self) { mode in
+                                Button(action: {
+                                    HapticManager.selection()
+                                    selectedPaymentMode = mode
+                                }) {
+                                    HStack {
+                                        Text(mode.rawValue)
+                                        Spacer()
+                                        if selectedPaymentMode == mode {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
+                    )
                     
                     // Phase Filter
                     if !availablePhases.isEmpty {
-                        Picker("Phase", selection: $selectedPhase) {
-                            Text("All").tag(nil as String?)
-                            ForEach(availablePhases, id: \.self) { phase in
-                                Text(phase).tag(phase as String?)
+                        divider
+                        
+                        filterRow(
+                            title: "Phase",
+                            value: selectedPhase ?? "All",
+                            menu: {
+                                Button(action: {
+                                    HapticManager.selection()
+                                    selectedPhase = nil
+                                }) {
+                                    HStack {
+                                        Text("All")
+                                        Spacer()
+                                        if selectedPhase == nil {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
+                                }
+                                
+                                ForEach(availablePhases, id: \.self) { phase in
+                                    Button(action: {
+                                        HapticManager.selection()
+                                        selectedPhase = phase
+                                    }) {
+                                        HStack {
+                                            Text(phase)
+                                            Spacer()
+                                            if selectedPhase == phase {
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.blue)
+                                                    .font(.system(size: 14, weight: .semibold))
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                        }
+                        )
                     }
                     
                     // Department Filter
                     if !availableDepartments.isEmpty {
-                        Picker("Department", selection: $selectedDepartment) {
-                            Text("All").tag(nil as String?)
-                            ForEach(availableDepartments, id: \.self) { dept in
-                                Text(dept).tag(dept as String?)
+                        divider
+                        
+                        filterRow(
+                            title: "Department",
+                            value: selectedDepartment ?? "All",
+                            menu: {
+                                Button(action: {
+                                    HapticManager.selection()
+                                    selectedDepartment = nil
+                                }) {
+                                    HStack {
+                                        Text("All")
+                                        Spacer()
+                                        if selectedDepartment == nil {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
+                                }
+                                
+                                ForEach(availableDepartments, id: \.self) { dept in
+                                    Button(action: {
+                                        HapticManager.selection()
+                                        selectedDepartment = dept
+                                    }) {
+                                        HStack {
+                                            Text(dept)
+                                            Spacer()
+                                            if selectedDepartment == dept {
+                                                Image(systemName: "checkmark")
+                                                    .foregroundColor(.blue)
+                                                    .font(.system(size: 14, weight: .semibold))
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                        }
+                        )
                     }
                     
                     // Status Filter
-                    Picker("Status", selection: $selectedStatus) {
-                        Text("All").tag(nil as ExpenseStatus?)
-                        ForEach(ExpenseStatus.allCases, id: \.self) { status in
-                            HStack {
-                                Circle()
-                                    .fill(status.color)
-                                    .frame(width: 8, height: 8)
-                                Text(status.rawValue.capitalized)
-                            }
-                            .tag(status as ExpenseStatus?)
-                        }
-                    }
-                } header: {
-                    Text("Filters")
-                }
-                
-                // Date Range Filter
-                Section {
-                    Toggle("Filter by Date Range", isOn: $isDateRangeActive)
+                    divider
                     
-                    if isDateRangeActive {
-                        DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
-                        DatePicker("End Date", selection: $endDate, displayedComponents: .date)
-                    }
-                } header: {
-                    Text("Date Range")
-                } footer: {
-                    if isDateRangeActive {
-                        Text("Only expenses within the selected date range will be shown.")
-                    }
-                }
-                
-                // Clear Filters Section
-                Section {
-                    Button(role: .destructive) {
-                        HapticManager.selection()
-                        clearAllFilters()
-                    } label: {
+                    filterRow(
+                        title: "Status",
+                        value: {
+                            if let status = selectedStatus {
+                                return status.rawValue.capitalized
+                            } else {
+                                return "All"
+                            }
+                        }(),
+                        statusIndicator: selectedStatus?.color,
+                        menu: {
+                            Button(action: {
+                                HapticManager.selection()
+                                selectedStatus = nil
+                            }) {
+                                HStack {
+                                    Text("All")
+                                    Spacer()
+                                    if selectedStatus == nil {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 14, weight: .semibold))
+                                    }
+                                }
+                            }
+                            
+                            ForEach(ExpenseStatus.allCases, id: \.self) { status in
+                                Button(action: {
+                                    HapticManager.selection()
+                                    selectedStatus = status
+                                }) {
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(status.color)
+                                            .frame(width: 10, height: 10)
+                                        Text(status.rawValue.capitalized)
+                                        Spacer()
+                                        if selectedStatus == status {
+                                            Image(systemName: "checkmark")
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    
+                    // Date Range Toggle
+                    divider
+                    
+                    VStack(alignment: .leading, spacing: 12) {
                         HStack {
+                            Text("Date Range")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.secondary)
                             Spacer()
-                            Text("Clear All Filters")
-                            Spacer()
+                            Toggle("", isOn: $isDateRangeActive)
+                                .tint(.blue)
+                                .labelsHidden()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        
+                        if isDateRangeActive {
+                            VStack(spacing: 12) {
+                                HStack {
+                                    Text("Start")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 60, alignment: .leading)
+                                    DatePicker("", selection: $startDate, displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                    Spacer()
+                                }
+                                
+                                HStack {
+                                    Text("End")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 60, alignment: .leading)
+                                    DatePicker("", selection: $endDate, displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                    Spacer()
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
                         }
                     }
+                    .background(Color(UIColor.systemBackground))
                 }
             }
-            .navigationTitle("Filter & Sort")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        HapticManager.selection()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
+            .frame(maxHeight: 400)
+            
+            // Fixed Floating Clear Button
+            Divider()
+            
+            Button(action: {
+                HapticManager.selection()
+                onClear()
+            }) {
+                HStack {
+                    Spacer()
+                    Text("Clear All Filters")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.red)
+                    Spacer()
                 }
+                .padding(.vertical, 14)
             }
+            .padding(.horizontal, 16)
+            .background(Color(UIColor.systemBackground))
         }
+        .frame(width: 280)
+        .background(Color(UIColor.systemBackground))
+        .cornerRadius(14)
+        .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: 8)
     }
     
-    private func clearAllFilters() {
-        selectedPaymentMode = nil
-        selectedPhase = nil
-        selectedDepartment = nil
-        selectedStatus = nil
-        sortOption = .dateDescending
-        isDateRangeActive = false
-        startDate = Date()
-        endDate = Date()
+    // MARK: - Helper Views
+    
+    private var divider: some View {
+        Divider()
+            .padding(.leading, 16)
+    }
+    
+    private func filterRow(
+        title: String,
+        value: String,
+        statusIndicator: Color? = nil,
+        @ViewBuilder menu: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            Menu {
+                menu()
+            } label: {
+                HStack(spacing: 8) {
+                    if let color = statusIndicator {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 10, height: 10)
+                    }
+                    Text(value)
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(10)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color(UIColor.systemBackground))
     }
 } 
