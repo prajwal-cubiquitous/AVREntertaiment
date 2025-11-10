@@ -18,6 +18,7 @@ struct ProjectDetailView: View {
     @State private var showingAddExpense = false
     @State private var showingChats = false
     @State private var showingNotifications = false
+    @State private var isTeamMembersDropdownVisible = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -35,39 +36,49 @@ struct ProjectDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
-                // MARK: - Main Header Card
-                ProjectHeaderView(project: project)
+        ZStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
+                    // MARK: - Main Header Card
+                    ProjectHeaderView(project: project)
+                        .cardStyle()
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+
+                    // MARK: - Key Info Card
+                    KeyInformationView(
+                        project: project,
+                        viewModel: viewModel,
+                        isTeamMembersDropdownVisible: $isTeamMembersDropdownVisible
+                    )
                     .cardStyle()
                     .padding(.horizontal, DesignSystem.Spacing.medium)
 
-                // MARK: - Key Info Card
-                KeyInformationView(project: project, viewModel: viewModel)
-                    .cardStyle()
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-
-                // MARK: - Team Members Card
-                TeamMembersView(teamMembers: project.teamMembers)
-                    .cardStyle()
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                
-                // MARK: - Phase Budget Breakdown
-                PhaseBreakdownView(project: project, viewModel: viewModel)
-//                    .cardStyle()
-//                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                
-                // MARK: - Expense Section
-                ExpenseListView(project: project, currentUserPhone : phoneNumber)
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                
-                // Bottom padding for floating button
-                Color.clear
-                    .frame(height: 80)
+                    // MARK: - Phase Budget Breakdown
+                    PhaseBreakdownView(project: project, viewModel: viewModel)
+    //                    .cardStyle()
+    //                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // MARK: - Expense Section
+                    ExpenseListView(project: project, currentUserPhone : phoneNumber)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Bottom padding for floating button
+                    Color.clear
+                        .frame(height: 80)
+                }
+                .padding(.top, DesignSystem.Spacing.small)
             }
-            .padding(.top, DesignSystem.Spacing.small)
+            .background(Color(UIColor.systemGroupedBackground))
+            
+            // Full-screen dropdown overlay - appears above everything
+            if isTeamMembersDropdownVisible {
+                TeamMembersDropdownOverlay(
+                    teamMembers: project.teamMembers,
+                    isVisible: $isTeamMembersDropdownVisible
+                )
+                .zIndex(10000)
+            }
         }
-        .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -197,6 +208,7 @@ private struct SectionHeader: View {
 private struct KeyInformationView: View {
     let project: Project
     var viewModel: ProjectDetailViewModel
+    @Binding var isTeamMembersDropdownVisible: Bool
     
     var totalApprovedAmount: Double {
         viewModel.approvedExpensesByDepartment.values.reduce(0, +)
@@ -207,48 +219,47 @@ private struct KeyInformationView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            SectionHeader(title: "Key Information")
-            
-            VStack(spacing: DesignSystem.Spacing.medium) {
-                InfoRowDetial(
-                    icon: "indianrupeesign.circle.fill",
-                    label: "Total Budget",
-                    value: project.budgetFormatted,
-                    iconColor: .green
-                )
+        ZStack {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                SectionHeader(title: "Key Information")
                 
-                Divider()
-                
-                InfoRowDetial(
-                    icon: "checkmark.circle.fill",
-                    label: "Approved Expenses",
-                    value: formatCurrency(totalApprovedAmount),
-                    iconColor: .blue
-                )
-                
-                Divider()
-                
-                InfoRowDetial(
-                    icon: "minus.circle.fill",
-                    label: "Remaining Budget",
-                    value: formatCurrency(totalRemainingBudget),
-                    iconColor: totalRemainingBudget >= 0 ? .orange : .red
-                )
-                
-                Divider()
-                
-                
-                InfoRowDetial(
-                    icon: "person.2.circle.fill",
-                    label: "Team Size",
-                    value: "\(project.teamMembers.count) members",
-                    iconColor: .mint
-                )
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    InfoRowDetial(
+                        icon: "indianrupeesign.circle.fill",
+                        label: "Total Budget",
+                        value: project.budgetFormatted,
+                        iconColor: .green
+                    )
+                    
+                    Divider()
+                    
+                    InfoRowDetial(
+                        icon: "checkmark.circle.fill",
+                        label: "Approved Expenses",
+                        value: formatCurrency(totalApprovedAmount),
+                        iconColor: .blue
+                    )
+                    
+                    Divider()
+                    
+                    InfoRowDetial(
+                        icon: "minus.circle.fill",
+                        label: "Remaining Budget",
+                        value: formatCurrency(totalRemainingBudget),
+                        iconColor: totalRemainingBudget >= 0 ? .orange : .red
+                    )
+                    
+                    Divider()
+                    
+                    // Team Members - Tappable with dropdown
+                    TeamMembersRow(
+                        teamMembers: project.teamMembers,
+                        isDropdownVisible: $isTeamMembersDropdownVisible
+                    )
+                }
             }
-            
+            .padding(DesignSystem.Spacing.medium)
         }
-        .padding(DesignSystem.Spacing.medium)
     }
     
     private func formatCurrency(_ amount: Double) -> String {
@@ -1669,57 +1680,272 @@ private struct InfoRowDetial: View {
     }
 }
 
-private struct TeamMembersView: View {
+// MARK: - Team Members Row with Floating Dropdown
+private struct TeamMembersRow: View {
     let teamMembers: [String]
+    @Binding var isDropdownVisible: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            SectionHeader(title: "Team Members")
-            
-            if teamMembers.isEmpty {
-                EmptyStateRow(
-                    icon: "person.2.badge.plus",
-                    text: "No team members assigned"
-                )
-            } else {
-                LazyVStack(spacing: DesignSystem.Spacing.small) {
-                    ForEach(teamMembers, id: \.self) { memberId in
-                        TeamMemberRow(memberId: memberId)
-                    }
-                }
+        Button(action: {
+            HapticManager.selection()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                isDropdownVisible.toggle()
             }
+        }) {
+            HStack(spacing: DesignSystem.Spacing.medium) {
+                Image(systemName: "person.2.circle.fill")
+                    .font(DesignSystem.Typography.title3)
+                    .foregroundColor(.mint)
+                    .frame(width: 28, height: 28)
+                    .symbolRenderingMode(.hierarchical)
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                    Text("Team Members")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                    
+                    Text("\(teamMembers.count) \(teamMembers.count == 1 ? "member" : "members")")
+                        .font(DesignSystem.Typography.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                }
+                
+                Spacer(minLength: 0)
+                
+                Image(systemName: isDropdownVisible ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, DesignSystem.Spacing.extraSmall)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(DesignSystem.Spacing.medium)
+        .buttonStyle(.plain)
     }
 }
 
-private struct TeamMemberRow: View {
-    let memberId: String
+// MARK: - Team Member Detail Model
+private struct TeamMemberDetail: Identifiable {
+    let id = UUID()
+    let phoneNumber: String
+    let name: String?
+}
+
+// MARK: - Team Members Dropdown Overlay
+private struct TeamMembersDropdownOverlay: View {
+    let teamMembers: [String]
+    @Binding var isVisible: Bool
+    @State private var teamMemberDetails: [TeamMemberDetail] = []
+    @State private var isLoading = false
     
     var body: some View {
-        HStack(spacing: DesignSystem.Spacing.small) {
-            Image(systemName: "person.circle.fill")
-                .foregroundColor(.blue)
-                .font(DesignSystem.Typography.title3)
-                .symbolRenderingMode(.hierarchical)
+        ZStack {
+            // Background overlay to dismiss on tap outside
+            Color.black.opacity(0.2)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    HapticManager.selection()
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isVisible = false
+                    }
+                }
             
-            VStack(alignment: .leading, spacing: 2) {
-                Text(memberId)
-                    .font(DesignSystem.Typography.callout)
-                    .foregroundColor(.primary)
+            // Dropdown card - positioned in center
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack {
+                    Text("Team Members")
+                        .font(DesignSystem.Typography.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        HapticManager.selection()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isVisible = false
+                        }
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(DesignSystem.Spacing.medium)
+                .background(Color(UIColor.systemBackground))
                 
-                Text("Team Member")
-                    .font(DesignSystem.Typography.caption2)
+                Divider()
+                
+                // Content
+                if isLoading {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .padding(DesignSystem.Spacing.large)
+                        Spacer()
+                    }
+                } else if teamMemberDetails.isEmpty {
+                    VStack(spacing: DesignSystem.Spacing.small) {
+                        Image(systemName: "person.2.badge.plus")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                        Text("No team members")
+                            .font(DesignSystem.Typography.callout)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(DesignSystem.Spacing.large)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(teamMemberDetails) { detail in
+                                TeamMemberDropdownRow(detail: detail)
+                                
+                                if detail.id != teamMemberDetails.last?.id {
+                                    Divider()
+                                        .padding(.leading, DesignSystem.Spacing.medium + 28 + DesignSystem.Spacing.medium)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: min(400, CGFloat(teamMemberDetails.count) * 70))
+                }
+            }
+            .background(Color(UIColor.systemBackground))
+            .cornerRadius(DesignSystem.CornerRadius.large)
+            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .frame(width: UIScreen.main.bounds.width - (DesignSystem.Spacing.medium * 4))
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .onAppear {
+            if teamMemberDetails.isEmpty {
+                Task {
+                    await loadTeamMemberDetails()
+                }
+            }
+        }
+    }
+    
+    private func loadTeamMemberDetails() async {
+        await MainActor.run {
+            isLoading = true
+        }
+        
+        var details: [TeamMemberDetail] = []
+        let db = Firestore.firestore()
+        
+        for memberId in teamMembers {
+            var cleanMemberId = memberId.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Remove +91 prefix if present
+            if cleanMemberId.hasPrefix("+91") {
+                cleanMemberId = String(cleanMemberId.dropFirst(3))
+            }
+            
+            do {
+                // Try to fetch user document using phone number as document ID
+                let userDoc = try await db.collection("users").document(cleanMemberId).getDocument()
+                
+                if userDoc.exists {
+                    if let userData = try? userDoc.data(as: User.self) {
+                        details.append(TeamMemberDetail(
+                            phoneNumber: userData.phoneNumber,
+                            name: userData.name
+                        ))
+                        continue
+                    }
+                    
+                    // Fallback: try to get name from document data directly
+                    let data = userDoc.data()
+                    if let name = data?["name"] as? String {
+                        let phone = data?["phoneNumber"] as? String ?? cleanMemberId
+                        details.append(TeamMemberDetail(
+                            phoneNumber: phone,
+                            name: name
+                        ))
+                        continue
+                    }
+                }
+                
+                // If not found, try querying by phoneNumber field
+                let querySnapshot = try await db.collection("users")
+                    .whereField("phoneNumber", isEqualTo: cleanMemberId)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let firstDoc = querySnapshot.documents.first {
+                    if let userData = try? firstDoc.data(as: User.self) {
+                        details.append(TeamMemberDetail(
+                            phoneNumber: userData.phoneNumber,
+                            name: userData.name
+                        ))
+                        continue
+                    }
+                    
+                    let data = firstDoc.data()
+                    if let name = data["name"] as? String {
+                        let phone = data["phoneNumber"] as? String ?? cleanMemberId
+                        details.append(TeamMemberDetail(
+                            phoneNumber: phone,
+                            name: name
+                        ))
+                        continue
+                    }
+                }
+                
+                // If still not found, use memberId as fallback
+                details.append(TeamMemberDetail(
+                    phoneNumber: cleanMemberId,
+                    name: nil
+                ))
+            } catch {
+                print("Error fetching team member details: \(error)")
+                details.append(TeamMemberDetail(
+                    phoneNumber: cleanMemberId,
+                    name: nil
+                ))
+            }
+        }
+        
+        await MainActor.run {
+            self.teamMemberDetails = details
+            self.isLoading = false
+        }
+    }
+}
+
+// MARK: - Team Member Dropdown Row
+private struct TeamMemberDropdownRow: View {
+    let detail: TeamMemberDetail
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.medium) {
+            Image(systemName: "person.circle.fill")
+                .font(.title3)
+                .foregroundColor(.blue)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 28, height: 28)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                if let name = detail.name, !name.isEmpty {
+                    Text(name)
+                        .font(DesignSystem.Typography.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                }
+                
+                Text(detail.phoneNumber)
+                    .font(DesignSystem.Typography.caption1)
                     .foregroundColor(.secondary)
             }
             
             Spacer()
-            
-            Image(systemName: "chevron.right")
-                .foregroundColor(Color.secondary.opacity(0.6))
-                .font(DesignSystem.Typography.caption1)
         }
-        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .padding(DesignSystem.Spacing.medium)
+        .contentShape(Rectangle())
     }
 }
 
