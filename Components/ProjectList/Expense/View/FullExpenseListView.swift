@@ -530,6 +530,7 @@ struct CompactFilterPopover: View {
                         filterRow(
                             title: "Phase",
                             value: selectedPhase ?? "All",
+                            isTruncatable: selectedPhase != nil,
                             menu: {
                                 Button(action: {
                                     HapticManager.selection()
@@ -552,7 +553,12 @@ struct CompactFilterPopover: View {
                                         selectedPhase = phase
                                     }) {
                                         HStack {
-                                            Text(phase)
+                                            TruncatedTextWithTooltip(
+                                                phase,
+                                                font: .body,
+                                                foregroundColor: .primary,
+                                                lineLimit: 1
+                                            )
                                             Spacer()
                                             if selectedPhase == phase {
                                                 Image(systemName: "checkmark")
@@ -573,6 +579,7 @@ struct CompactFilterPopover: View {
                         filterRow(
                             title: "Department",
                             value: selectedDepartment ?? "All",
+                            isTruncatable: selectedDepartment != nil,
                             menu: {
                                 Button(action: {
                                     HapticManager.selection()
@@ -595,7 +602,12 @@ struct CompactFilterPopover: View {
                                         selectedDepartment = dept
                                     }) {
                                         HStack {
-                                            Text(dept)
+                                            TruncatedTextWithTooltip(
+                                                dept,
+                                                font: .body,
+                                                foregroundColor: .primary,
+                                                lineLimit: 1
+                                            )
                                             Spacer()
                                             if selectedDepartment == dept {
                                                 Image(systemName: "checkmark")
@@ -745,6 +757,7 @@ struct CompactFilterPopover: View {
         title: String,
         value: String,
         statusIndicator: Color? = nil,
+        isTruncatable: Bool = false,
         @ViewBuilder menu: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -763,9 +776,18 @@ struct CompactFilterPopover: View {
                             .fill(color)
                             .frame(width: 10, height: 10)
                     }
-                    Text(value)
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundColor(.primary)
+                    if isTruncatable {
+                        TruncatedTextWithTooltip(
+                            value,
+                            font: .system(size: 15, weight: .regular),
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
+                    } else {
+                        Text(value)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(.primary)
+                    }
                     Spacer()
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 11, weight: .medium))
