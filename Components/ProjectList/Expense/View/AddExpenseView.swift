@@ -394,7 +394,12 @@ struct AddExpenseView: View {
                             viewModel.updateDepartmentForPhase()
                         } label: {
                             HStack {
-                                Text(phase.name)
+                                TruncatedTextWithTooltip(
+                                    phase.name,
+                                    font: .body,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 Spacer()
                                 Text(formatCurrency(phase.remainingAmount))
                                     .font(.caption)
@@ -418,7 +423,12 @@ struct AddExpenseView: View {
                             // Do nothing - disabled
                         } label: {
                             HStack {
-                                Text(phase.name)
+                                TruncatedTextWithTooltip(
+                                    phase.name,
+                                    font: .body,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 Spacer()
                                 if !phase.isEnabled {
                                     Image(systemName: "lock.fill")
@@ -438,9 +448,13 @@ struct AddExpenseView: View {
                 HStack {
                     if let selectedPhase = viewModel.selectedPhase {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(selectedPhase.name)
-                                .foregroundColor(.primary)
-                                .fontWeight(.medium)
+                            TruncatedTextWithTooltip(
+                                selectedPhase.name,
+                                font: .body,
+                                fontWeight: .medium,
+                                foregroundColor: .primary,
+                                lineLimit: 1
+                            )
                             Text("Remaining: \(formatCurrency(selectedPhase.remainingAmount))")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
@@ -498,7 +512,12 @@ struct AddExpenseView: View {
                             viewModel.checkAdminApprovalConditions()
                         } label: {
                             HStack {
-                                Text(department)
+                                TruncatedTextWithTooltip(
+                                    department,
+                                    font: .body,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 Spacer()
                                 if let remaining = selectedPhase.departmentRemainingAmounts[department] {
                                     Text(formatCurrency(remaining))
@@ -516,9 +535,13 @@ struct AddExpenseView: View {
                                 .fontWeight(.medium)
                         } else {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(viewModel.selectedDepartment)
-                                    .foregroundColor(.primary)
-                                    .fontWeight(.medium)
+                                TruncatedTextWithTooltip(
+                                    viewModel.selectedDepartment,
+                                    font: .body,
+                                    fontWeight: .medium,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 if let remaining = selectedPhase.departmentRemainingAmounts[viewModel.selectedDepartment] {
                                     Text("Remaining: \(formatCurrency(remaining))")
                                         .font(.caption2)

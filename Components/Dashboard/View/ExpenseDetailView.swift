@@ -193,11 +193,13 @@ struct ExpenseDetailView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text(expense.categoriesString)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .lineLimit(2)
+                    TruncatedTextWithTooltip(
+                        expense.categoriesString,
+                        font: .subheadline,
+                        fontWeight: .medium,
+                        foregroundColor: .primary,
+                        lineLimit: 2
+                    )
                     
                     Spacer()
                 }

@@ -359,7 +359,14 @@ struct CreateProjectView: View {
                         title: "Search name or phone number...",
                         searchText: $viewModel.projectTeamMemberSearchText,
                         items: viewModel.filteredProjectTeamMembers(),
-                        itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                        itemContent: { user in
+                            TruncatedTextWithTooltip(
+                                "\(user.name) - \(user.phoneNumber)",
+                                font: .body,
+                                foregroundColor: .primary,
+                                lineLimit: 1
+                            )
+                        },
                         onSelect: { member in
                             viewModel.selectedProjectTeamMembers.insert(member)
                             viewModel.projectTeamMemberSearchText = ""
@@ -604,7 +611,14 @@ struct CreateProjectView: View {
                         title: "Search name or phone number...",
                         searchText: $viewModel.projectTeamMemberSearchText,
                         items: viewModel.filteredProjectTeamMembers(),
-                        itemContent: { user in Text("\(user.name) - \(user.phoneNumber)") },
+                        itemContent: { user in
+                            TruncatedTextWithTooltip(
+                                "\(user.name) - \(user.phoneNumber)",
+                                font: .body,
+                                foregroundColor: .primary,
+                                lineLimit: 1
+                            )
+                        },
                         onSelect: { member in
                             viewModel.selectedProjectTeamMembers.insert(member)
                             viewModel.projectTeamMemberSearchText = ""
@@ -666,11 +680,13 @@ struct CreateProjectView: View {
                                 .foregroundColor(.blue)
                             
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(attachmentName)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(.primary)
-                                    .lineLimit(1)
+                                TruncatedTextWithTooltip(
+                                    attachmentName,
+                                    font: .subheadline,
+                                    fontWeight: .medium,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 
                                 Text("Tap preview to view")
                                     .font(.caption)
@@ -1031,7 +1047,12 @@ struct SingleSelectionPicker: View {
                     selectedUser = user
                 }) {
                     HStack {
-                        Text("\(user.name) - \(user.email ?? user.phoneNumber)")
+                        TruncatedTextWithTooltip(
+                            "\(user.name) - \(user.email ?? user.phoneNumber)",
+                            font: .body,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                         if selectedUser?.phoneNumber == user.phoneNumber {
                             Image(systemName: "checkmark")
                         }
@@ -1040,8 +1061,12 @@ struct SingleSelectionPicker: View {
             }
         } label: {
             HStack {
-                Text(selectedUser?.name ?? placeholder)
-                    .foregroundColor(selectedUser == nil ? .secondary : .primary)
+                TruncatedTextWithTooltip(
+                    selectedUser?.name ?? placeholder,
+                    font: .body,
+                    foregroundColor: selectedUser == nil ? .secondary : .primary,
+                    lineLimit: 1
+                )
                 Spacer()
                 Image(systemName: "chevron.down")
                     .font(.caption)
@@ -1054,11 +1079,11 @@ struct SingleSelectionPicker: View {
     }
 }
 
-struct SearchableDropdownView: View {
+struct SearchableDropdownView<Content: View>: View {
     let title: String
     @Binding var searchText: String
     let items: [User]
-    let itemContent: (User) -> Text
+    let itemContent: (User) -> Content
     let onSelect: (User) -> Void
     
     var body: some View {
@@ -1102,7 +1127,12 @@ struct TagView: View {
     
     var body: some View {
         HStack(spacing: 4) {
-            Text(user.name).font(.caption).lineLimit(1)
+            TruncatedTextWithTooltip(
+                user.name,
+                font: .caption,
+                foregroundColor: .primary,
+                lineLimit: 1
+            )
             Button(action: onRemove) {
                 Image(systemName: "xmark")
                     .font(.caption).foregroundColor(.primary)

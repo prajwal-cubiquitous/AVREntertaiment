@@ -167,15 +167,21 @@ struct ExpenseRowView: View {
                 // Phase and Department
                 VStack(alignment: .leading, spacing: 2) {
                     if let phaseName = expense.phaseName {
-                        Text(phaseName)
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                            .fontWeight(.medium)
+                        TruncatedTextWithTooltip(
+                            phaseName,
+                            font: .caption,
+                            fontWeight: .medium,
+                            foregroundColor: .blue,
+                            lineLimit: 1
+                        )
                     }
-                    Text(expense.department)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                    TruncatedTextWithTooltip(
+                        expense.department,
+                        font: .subheadline,
+                        fontWeight: .semibold,
+                        foregroundColor: .primary,
+                        lineLimit: 1
+                    )
                 }
 
                 // Payment Mode
@@ -185,10 +191,12 @@ struct ExpenseRowView: View {
 
                 // Category + Date
                 HStack(spacing: 6) {
-                    Text(expense.categoriesString)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    TruncatedTextWithTooltip(
+                        expense.categoriesString,
+                        font: .caption2,
+                        foregroundColor: .secondary,
+                        lineLimit: 1
+                    )
                     
                     //                    Spacer(minLength: 0)
                     

@@ -292,11 +292,18 @@ struct EditExpenseView: View {
             Menu {
                 // Show only phases that can accept expenses, plus the currently selected phase (for editing)
                 ForEach(viewModel.availablePhases.filter { $0.canAddExpense || $0.id == viewModel.selectedPhaseId }) { phase in
-                    Button(phase.name) {
+                    Button {
                         if phase.canAddExpense {
                             viewModel.selectedPhaseId = phase.id
                             viewModel.updateDepartmentForPhase()
                         }
+                    } label: {
+                        TruncatedTextWithTooltip(
+                            phase.name,
+                            font: .body,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                     }
                 }
                 
@@ -310,7 +317,12 @@ struct EditExpenseView: View {
                             // Do nothing - disabled
                         } label: {
                             HStack {
-                                Text(phase.name)
+                                TruncatedTextWithTooltip(
+                                    phase.name,
+                                    font: .body,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
                                 Spacer()
                                 if !phase.isEnabled {
                                     Image(systemName: "lock.fill")
@@ -329,9 +341,13 @@ struct EditExpenseView: View {
             } label: {
                 HStack {
                     if let selectedPhase = viewModel.selectedPhase {
-                        Text(selectedPhase.name)
-                            .foregroundColor(.primary)
-                            .fontWeight(.medium)
+                        TruncatedTextWithTooltip(
+                            selectedPhase.name,
+                            font: .body,
+                            fontWeight: .medium,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                     } else {
                         Text("Select Phase")
                             .foregroundColor(.secondary)
@@ -373,15 +389,26 @@ struct EditExpenseView: View {
             if let selectedPhase = viewModel.selectedPhase {
                 Menu {
                     ForEach(selectedPhase.departments.keys.sorted(), id: \.self) { department in
-                        Button(department) {
+                        Button {
                             viewModel.selectedDepartment = department
+                        } label: {
+                            TruncatedTextWithTooltip(
+                                department,
+                                font: .body,
+                                foregroundColor: .primary,
+                                lineLimit: 1
+                            )
                         }
                     }
                 } label: {
                     HStack {
-                        Text(viewModel.selectedDepartment.isEmpty ? "Select Department" : viewModel.selectedDepartment)
-                            .foregroundColor(viewModel.selectedDepartment.isEmpty ? .secondary : .primary)
-                            .fontWeight(.medium)
+                        TruncatedTextWithTooltip(
+                            viewModel.selectedDepartment.isEmpty ? "Select Department" : viewModel.selectedDepartment,
+                            font: .body,
+                            fontWeight: .medium,
+                            foregroundColor: viewModel.selectedDepartment.isEmpty ? .secondary : .primary,
+                            lineLimit: 1
+                        )
                         Spacer()
                         Image(systemName: "chevron.down")
                             .font(.caption)

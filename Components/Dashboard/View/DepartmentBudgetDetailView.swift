@@ -136,9 +136,13 @@ struct DepartmentBudgetDetailView: View {
                 
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 2) {
-                        Text(department)
-                            .font(.headline)
-                            .fontWeight(.semibold)
+                        TruncatedTextWithTooltip(
+                            department,
+                            font: .headline,
+                            fontWeight: .semibold,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                         
                         Text(department == "Other" ? "Anonymous Expenses" : "Department Expenses")
                             .font(.caption)
@@ -855,11 +859,13 @@ struct DepartmentExpenseRowView: View {
                 }
                 
                 // Description
-                Text(expense.description)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                TruncatedTextWithTooltip(
+                    expense.description,
+                    font: .subheadline,
+                    foregroundColor: .primary,
+                    lineLimit: 2,
+                    alignment: .leading
+                )
                 
                 // Categories and payment mode
                 HStack {

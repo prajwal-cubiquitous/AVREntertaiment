@@ -302,9 +302,12 @@ struct DashboardView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 2) {
-                    Text(project?.name ?? "Project Dashboard")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    TruncatedTextWithTooltip(
+                        project?.name ?? "Project Dashboard",
+                        font: .headline,
+                        foregroundColor: .primary,
+                        lineLimit: 1
+                    )
                     
                     Text(project?.statusType.rawValue ?? "")
                         .font(.caption)
@@ -721,11 +724,12 @@ struct DashboardView: View {
                             // Header (only phase name + timeline inline)
                             HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(phase.name)
-                                        .font(DesignSystem.Typography.headline)
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
+                                    TruncatedTextWithTooltip(
+                                        phase.name,
+                                        font: DesignSystem.Typography.headline,
+                                        foregroundColor: .primary,
+                                        lineLimit: 1
+                                    )
 
                                     if let daysInfo = daysRemaining(for: phase) {
                                         HStack(spacing: 6) {
@@ -1440,11 +1444,13 @@ struct DashboardView: View {
             
             // Department info
             VStack(alignment: .leading, spacing: 2) {
-                Text(budget.department)
-                    .font(DesignSystem.Typography.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                TruncatedTextWithTooltip(
+                    budget.department,
+                    font: DesignSystem.Typography.subheadline,
+                    fontWeight: .semibold,
+                    foregroundColor: .primary,
+                    lineLimit: 1
+                )
                 
                 HStack(spacing: 4) {
                     Text("\(budgetValue.formattedCurrency)")
@@ -2134,10 +2140,12 @@ private struct DepartmentMiniCard: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             // Title row
             HStack {
-                Text(title)
-                    .font(DesignSystem.Typography.headline)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                TruncatedTextWithTooltip(
+                    title,
+                    font: DesignSystem.Typography.headline,
+                    foregroundColor: .primary,
+                    lineLimit: 1
+                )
                 Spacer()
                 Image(systemName: "info.circle")
                     .font(.caption)
@@ -2489,11 +2497,12 @@ private struct AllPhasesView: View {
                                 VStack{
                                     HStack{
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text(phase.name)
-                                                .font(DesignSystem.Typography.headline)
-                                                .foregroundColor(.primary)
-                                                .lineLimit(1)
-                                                .minimumScaleFactor(0.85)
+                                            TruncatedTextWithTooltip(
+                                                phase.name,
+                                                font: DesignSystem.Typography.headline,
+                                                foregroundColor: .primary,
+                                                lineLimit: 1
+                                            )
 
                                             if phaseTimelineText(phase) != "" {
                                                 HStack(spacing: 6) {

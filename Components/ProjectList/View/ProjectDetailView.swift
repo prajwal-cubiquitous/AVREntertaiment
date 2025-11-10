@@ -562,10 +562,13 @@ private struct CurrentPhaseView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Text(phase.phaseName)
-                            .font(DesignSystem.Typography.title3)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                        TruncatedTextWithTooltip(
+                            phase.phaseName,
+                            font: DesignSystem.Typography.title3,
+                            fontWeight: .semibold,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                         
                         // Extension Badge - Show if phase has accepted extension
                         if phaseExtensionMap[phase.id] == true {
@@ -825,10 +828,13 @@ private struct DepartmentRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
             HStack {
-                Text(department.name)
-                    .font(DesignSystem.Typography.callout)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
+                TruncatedTextWithTooltip(
+                    department.name,
+                    font: DesignSystem.Typography.callout,
+                    fontWeight: .medium,
+                    foregroundColor: .primary,
+                    lineLimit: 1
+                )
                 
                 Spacer()
                 
@@ -1088,10 +1094,13 @@ private struct ProjectDetailPhaseCardView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Text(phase.phaseName)
-                            .font(DesignSystem.Typography.title3)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                        TruncatedTextWithTooltip(
+                            phase.phaseName,
+                            font: DesignSystem.Typography.title3,
+                            fontWeight: .semibold,
+                            foregroundColor: .primary,
+                            lineLimit: 1
+                        )
                         
                         // Extension Badge - Show if phase has accepted extension
                         if phaseExtensionMap[phase.id] == true {
@@ -1343,11 +1352,13 @@ private struct HorizontalDepartmentCard: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             // Department Name and Status Indicator
             HStack {
-                Text(department.name)
-                    .font(DesignSystem.Typography.callout)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
+                TruncatedTextWithTooltip(
+                    department.name,
+                    font: DesignSystem.Typography.callout,
+                    fontWeight: .semibold,
+                    foregroundColor: .primary,
+                    lineLimit: 1
+                )
                 
                 Spacer()
                 
@@ -1463,10 +1474,13 @@ private struct EnhancedDepartmentRow: View {
         VStack(spacing: DesignSystem.Spacing.small) {
             // Department Name and Status
             HStack {
-                Text(name)
-                    .font(DesignSystem.Typography.callout)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                TruncatedTextWithTooltip(
+                    name,
+                    font: DesignSystem.Typography.callout,
+                    fontWeight: .semibold,
+                    foregroundColor: .primary,
+                    lineLimit: 1
+                )
                 
                 Spacer()
                 
@@ -1577,9 +1591,12 @@ private struct ProjectHeaderView: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                    Text(project.name)
-                        .font(DesignSystem.Typography.largeTitle)
-                        .foregroundColor(.primary)
+                    TruncatedTextWithTooltip(
+                        project.name,
+                        font: DesignSystem.Typography.largeTitle,
+                        foregroundColor: .primary,
+                        lineLimit: 2
+                    )
                     
 //                    // Description
 //                    if !project.description.isEmpty {
