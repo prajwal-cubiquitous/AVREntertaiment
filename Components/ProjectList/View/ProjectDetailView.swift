@@ -238,23 +238,6 @@ private struct KeyInformationView: View {
                 
                 Divider()
                 
-                InfoRowDetial(
-                    icon: "calendar.circle.fill",
-                    label: "Project Timeline",
-                    value: project.dateRangeFormatted,
-                    iconColor: .purple
-                )
-                
-                Divider()
-                
-                InfoRowDetial(
-                    icon: "person.crop.circle.badge.checkmark",
-                    label: "Project Manager",
-                    value: project.managerIds.first ?? "",
-                    iconColor: .indigo
-                )
-                
-                Divider()
                 
                 InfoRowDetial(
                     icon: "person.2.circle.fill",
@@ -1468,6 +1451,9 @@ private struct EmptyStateRow: View {
 
 private struct ProjectHeaderView: View {
     let project: Project
+    @State private var managerName: String?
+    @State private var managerPhone: String?
+    @State private var isLoadingManager = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
@@ -1477,24 +1463,176 @@ private struct ProjectHeaderView: View {
                         .font(DesignSystem.Typography.largeTitle)
                         .foregroundColor(.primary)
                     
-                    Text("Tracura")
-                        .font(DesignSystem.Typography.callout)
-                        .foregroundColor(.secondary)
+//                    // Description
+//                    if !project.description.isEmpty {
+//                        Text(project.description)
+//                            .font(DesignSystem.Typography.body)
+//                            .foregroundColor(.secondary)
+//                            .fixedSize(horizontal: false, vertical: true)
+//                            .padding(.top, DesignSystem.Spacing.extraSmall)
+//                    }
+                    
+                    // Location and Client
+                    Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !project.location.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "location.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(project.location)
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        if !project.client.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(project.client)
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.top, DesignSystem.Spacing.extraSmall)
                 }
                 
                 Spacer()
                 
-                StatusViewDetial(status: project.statusType)
-            }
-            
-            if !project.description.isEmpty {
-                Text(project.description)
-                    .font(DesignSystem.Typography.body)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .trailing, spacing: DesignSystem.Spacing.small) {
+                    StatusViewDetial(status: project.statusType)
+                    
+                    Spacer()
+                    // Project Manager Section
+                    if let managerId = project.managerIds.first {
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("Project Manager")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                                .tracking(0.5)
+                            
+                            if isLoadingManager {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else if let name = managerName {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(name)
+                                        .font(DesignSystem.Typography.callout)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+                                    
+                                    if let phone = managerPhone {
+                                        Text(phone)
+                                            .font(DesignSystem.Typography.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            } else {
+                                Text("Not found")
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.top, DesignSystem.Spacing.extraSmall)
+                    }
+                }
             }
         }
         .padding(DesignSystem.Spacing.medium)
+        .onAppear {
+            if let managerId = project.managerIds.first {
+                Task {
+                    await fetchManagerDetails(managerId: managerId)
+                }
+            }
+        }
+    }
+    
+    private func fetchManagerDetails(managerId: String) async {
+        await MainActor.run {
+            isLoadingManager = true
+        }
+        
+        do {
+            let db = Firestore.firestore()
+            var cleanManagerId = managerId.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Remove +91 prefix if present
+            if cleanManagerId.hasPrefix("+91") {
+                cleanManagerId = String(cleanManagerId.dropFirst(3))
+            }
+            
+            // Try to fetch user document using phone number as document ID
+            let userDoc = try await db.collection("users").document(cleanManagerId).getDocument()
+            
+            if userDoc.exists {
+                if let userData = try? userDoc.data(as: User.self) {
+                    await MainActor.run {
+                        self.managerName = userData.name
+                        self.managerPhone = userData.phoneNumber
+                        self.isLoadingManager = false
+                    }
+                    return
+                }
+                
+                // Fallback: try to get name and phoneNumber from document data directly
+                let data = userDoc.data()
+                if let name = data?["name"] as? String {
+                    let phone = data?["phoneNumber"] as? String ?? cleanManagerId
+                    await MainActor.run {
+                        self.managerName = name
+                        self.managerPhone = phone
+                        self.isLoadingManager = false
+                    }
+                    return
+                }
+            }
+            
+            // If not found, try querying by phoneNumber field
+            let querySnapshot = try await db.collection("users")
+                .whereField("phoneNumber", isEqualTo: cleanManagerId)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let firstDoc = querySnapshot.documents.first {
+                if let userData = try? firstDoc.data(as: User.self) {
+                    await MainActor.run {
+                        self.managerName = userData.name
+                        self.managerPhone = userData.phoneNumber
+                        self.isLoadingManager = false
+                    }
+                    return
+                }
+                
+                // Fallback: access raw data
+                let data = firstDoc.data()
+                if let name = data["name"] as? String {
+                    let phone = data["phoneNumber"] as? String ?? cleanManagerId
+                    await MainActor.run {
+                        self.managerName = name
+                        self.managerPhone = phone
+                        self.isLoadingManager = false
+                    }
+                    return
+                }
+            }
+            
+            // If still not found, use managerId as fallback
+            await MainActor.run {
+                self.managerName = nil
+                self.managerPhone = cleanManagerId
+                self.isLoadingManager = false
+            }
+        } catch {
+            print("Error fetching manager details: \(error)")
+            await MainActor.run {
+                self.isLoadingManager = false
+            }
+        }
     }
 }
 
