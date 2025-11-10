@@ -714,7 +714,7 @@ struct ExpenseDetailView: View {
                         
                         // Add remark if provided or if admin
                         if currentUserRole == .ADMIN {
-                            let adminNote = "Admin approved"
+                            let adminNote = status == .approved ? "Admin approved" : "Admin Rejected"
                             updateData["remark"] = adminNote
                         } else if !remark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             updateData["remark"] = remark.trimmingCharacters(in: .whitespacesAndNewlines)
