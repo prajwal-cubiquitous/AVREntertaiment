@@ -252,6 +252,16 @@ struct ExpenseRowView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }else{
+                    HStack(spacing: 6) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 14, weight: .medium))
+                                .opacity(0)
+                            Image(systemName: "message")
+                                .font(.system(size: 14, weight: .medium))
+                                .opacity(0)
+                        }
+                        .allowsHitTesting(false) 
                 }
 //                Spacer()
                 Text(expense.dateFormatted)
