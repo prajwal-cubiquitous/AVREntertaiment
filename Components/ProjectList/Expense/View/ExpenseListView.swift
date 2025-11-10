@@ -171,20 +171,7 @@ struct ExpenseRowView: View {
                                     .foregroundColor(.blue)
                                     .fontWeight(.medium)
                             }
-//                            
-//                            // Receipt icon indicator
-//                            if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
-//                                Image(systemName: fileIcon(for: expense.attachmentName ?? ""))
-//                                    .font(.system(size: 12, weight: .medium))
-//                                    .foregroundColor(.blue)
-//                            }
-//                            
-//                            // Payment proof icon indicator
-//                            if let paymentProofURL = expense.paymentProofURL, !paymentProofURL.isEmpty {
-//                                Image(systemName: fileIcon(for: expense.paymentProofName ?? ""))
-//                                    .font(.system(size: 12, weight: .medium))
-//                                    .foregroundColor(.green)
-//                            }
+
                         }
                         
                         Text(expense.department)
@@ -201,7 +188,7 @@ struct ExpenseRowView: View {
                         .foregroundColor(.primary)
                 }
                 
-                Text(expense.description)
+                Text(expense.modeOfPayment.rawValue)
                     .font(.caption)
                     .foregroundColor(.primary)
                     .lineLimit(2)

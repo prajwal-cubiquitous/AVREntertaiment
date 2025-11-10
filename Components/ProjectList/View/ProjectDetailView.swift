@@ -19,6 +19,7 @@ struct ProjectDetailView: View {
     @State private var showingChats = false
     @State private var showingNotifications = false
     @State private var isTeamMembersDropdownVisible = false
+    @State private var visiblePhaseCount = 0
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -54,7 +55,11 @@ struct ProjectDetailView: View {
                     .padding(.horizontal, DesignSystem.Spacing.medium)
 
                     // MARK: - Phase Budget Breakdown
-                    PhaseBreakdownView(project: project, viewModel: viewModel)
+                    PhaseBreakdownView(
+                        project: project,
+                        viewModel: viewModel,
+                        visiblePhaseCount: $visiblePhaseCount
+                    )
     //                    .cardStyle()
     //                    .padding(.horizontal, DesignSystem.Spacing.medium)
                     
@@ -69,6 +74,18 @@ struct ProjectDetailView: View {
                 .padding(.top, DesignSystem.Spacing.small)
             }
             .background(Color(UIColor.systemGroupedBackground))
+            .overlay(alignment: .topTrailing) {
+                // Sticky "View All Phases" button on the right - only when phases are visible
+                if visiblePhaseCount > 0 && viewModel.phases.count > 1 {
+                    ViewAllPhasesButton(
+                        viewModel: viewModel,
+                        projectId: project.id ?? ""
+                    )
+                    .padding(.trailing, DesignSystem.Spacing.medium)
+                    .padding(.top, DesignSystem.Spacing.medium)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+            }
             
             // Full-screen dropdown overlay - appears above everything
             if isTeamMembersDropdownVisible {
@@ -273,28 +290,10 @@ private struct KeyInformationView: View {
 private struct PhaseBreakdownView: View {
     let project: Project
     @ObservedObject var viewModel: ProjectDetailViewModel
-    @State private var showingAllPhases = false
+    @Binding var visiblePhaseCount: Int
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            HStack {
-                SectionHeader(title: "Phase Budget Breakdown")
-                Spacer()
-                if viewModel.phases.count > 1 {
-                    Button(action: {
-                        showingAllPhases = true
-                    }) {
-                        Text("View All Phases")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.blue)
-                    }
-                }
-            }
-            .padding(DesignSystem.Spacing.medium)
-            .cardStyle()
-            
-            
             if viewModel.isLoading {
                 HStack {
                     Spacer()
@@ -312,7 +311,8 @@ private struct PhaseBreakdownView: View {
                         CurrentPhaseView(
                             phase: phase,
                             projectId: project.id ?? "",
-                            phaseExtensionMap: viewModel.phaseExtensionMap
+                            phaseExtensionMap: viewModel.phaseExtensionMap,
+                            visiblePhaseCount: $visiblePhaseCount
                         )
                         .padding(DesignSystem.Spacing.medium)
                         .cardStyle()
@@ -328,11 +328,35 @@ private struct PhaseBreakdownView: View {
             }
         }
         .padding(DesignSystem.Spacing.medium)
+    }
+}
+
+// MARK: - Sticky View All Phases Button
+private struct ViewAllPhasesButton: View {
+    @ObservedObject var viewModel: ProjectDetailViewModel
+    let projectId: String
+    @State private var showingAllPhases = false
+    
+    var body: some View {
+        Button(action: {
+            HapticManager.selection()
+            showingAllPhases = true
+        }) {
+            Text("View All Phases")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                .background(Color.blue)
+                .cornerRadius(DesignSystem.CornerRadius.medium)
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        }
         .sheet(isPresented: $showingAllPhases) {
             AllPhasesSheetView(
                 currentPhases: viewModel.currentPhases,
                 expiredPhases: viewModel.expiredPhases,
-                projectId: project.id ?? "",
+                projectId: projectId,
                 phaseExtensionMap: viewModel.phaseExtensionMap
             )
         }
@@ -343,6 +367,7 @@ private struct CurrentPhaseView: View {
     let phase: ProjectDetailViewModel.PhaseInfo
     let projectId: String
     let phaseExtensionMap: [String: Bool]
+    @Binding var visiblePhaseCount: Int
     
     @State private var isExpanded = false // Default to expanded
     @State private var showingRequestForm = false
@@ -690,6 +715,16 @@ private struct CurrentPhaseView: View {
                     }
                     .padding(.top, DesignSystem.Spacing.small)
                 }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                visiblePhaseCount += 1
+            }
+        }
+        .onDisappear {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                visiblePhaseCount = max(0, visiblePhaseCount - 1)
             }
         }
     }
