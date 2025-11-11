@@ -1082,6 +1082,34 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 // Special handling for "Other" department (anonymous expenses)
+                // First, determine which phaseId to use for filtering expenses
+                // This prevents merging expenses across phases with the same department name
+                var effectivePhaseId: String? = phaseId
+                
+                // If phaseId is not provided, we need to find the first phase that contains this department
+                // to match the budget calculation logic (which only uses the first phase)
+                if effectivePhaseId == nil && department != "Other" {
+                    let phasesSnapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerID, projectId: projectId)
+                        .order(by: "phaseNumber")
+                        .getDocuments()
+                    
+                    // Find the first phase that contains this department
+                    for doc in phasesSnapshot.documents {
+                        let currentPhaseId = doc.documentID
+                        if let phase = try? doc.data(as: Phase.self) {
+                            let compositeKey = "\(currentPhaseId)_\(department)"
+                            let hasDepartment = phase.departments[compositeKey] != nil || phase.departments[department] != nil
+                            
+                            if hasDepartment {
+                                effectivePhaseId = currentPhaseId
+                                print("🔍 [No phaseId provided] Using first matching phase: \(currentPhaseId) for department: \(department)")
+                                break
+                            }
+                        }
+                    }
+                }
+                
                 let loadedExpenses: [Expense]
                 if department == "Other" {
                     // Load anonymous expenses for this project
@@ -1089,11 +1117,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                         .expensesCollection(customerId: customerID, projectId: projectId)
                         .whereField("isAnonymous", isEqualTo: true)
                     
-                    // Build query conditionally based on whether phaseId is provided
+                    // Build query conditionally based on effective phaseId
                     let query: Query
-                    if let phaseId = phaseId {
-                        query = baseQuery.whereField("phaseId", isEqualTo: phaseId)
-                        print("🔍 [Other Department] Loading anonymous expenses with phaseId: \(phaseId)")
+                    if let effectivePhaseId = effectivePhaseId {
+                        query = baseQuery.whereField("phaseId", isEqualTo: effectivePhaseId)
+                        print("🔍 [Other Department] Loading anonymous expenses with phaseId: \(effectivePhaseId)")
                     } else {
                         query = baseQuery
                         print("🔍 [Other Department] Loading all anonymous expenses (no phaseId filter)")
@@ -1123,11 +1151,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                         .expensesCollection(customerId: customerID, projectId: projectId)
                         .whereField("department", isEqualTo: department)
                     
-                    // Build query conditionally based on whether phaseId is provided
+                    // Build query conditionally based on effective phaseId
                     let query: Query
-                    if let phaseId = phaseId {
-                        query = baseQuery.whereField("phaseId", isEqualTo: phaseId)
-                        print("🔍 Loading expenses for department: \(department), phaseId: \(phaseId)")
+                    if let effectivePhaseId = effectivePhaseId {
+                        query = baseQuery.whereField("phaseId", isEqualTo: effectivePhaseId)
+                        print("🔍 Loading expenses for department: \(department), phaseId: \(effectivePhaseId)")
                     } else {
                         query = baseQuery
                         print("🔍 Loading expenses for department: \(department), all phases (no phaseId filter)")
@@ -1164,22 +1192,18 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 var phasesOnlyWithThisDepartment: [(id: String, name: String)] = []
                 
                 if department != "Other" {
-                    // Fetch budget using phaseId + department format
-                    let phasesSnapshot = try await FirebasePathHelper.shared
-                        .phasesCollection(customerId: customerID, projectId: projectId)
-                        .getDocuments()
-                    
-                    for doc in phasesSnapshot.documents {
-                        let currentPhaseId = doc.documentID
+                    // If phaseId is provided, only fetch from that specific phase
+                    // This prevents merging budgets across phases with the same department name
+                    if let requiredPhaseId = phaseId {
+                        // Only fetch the specific phase
+                        let phaseDoc = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerID, projectId: projectId)
+                            .document(requiredPhaseId)
+                            .getDocument()
                         
-                        // If phaseId is provided, only fetch from that specific phase
-                        if let requiredPhaseId = phaseId, currentPhaseId != requiredPhaseId {
-                            continue
-                        }
-                        
-                        if let phase = try? doc.data(as: Phase.self) {
+                        if let phase = try? phaseDoc.data(as: Phase.self) {
                             // Try new format: phaseId_department
-                            let compositeKey = "\(currentPhaseId)_\(department)"
+                            let compositeKey = "\(requiredPhaseId)_\(department)"
                             
                             // Check both old format (for backward compatibility) and new format
                             var budget: Double = 0
@@ -1191,8 +1215,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             }
                             
                             if budget > 0 {
-                                allocated += budget
-                                phaseIdsWithDepartment.append(currentPhaseId)
+                                allocated = budget  // Only this phase's budget, not aggregated
+                                phaseIdsWithDepartment.append(requiredPhaseId)
                                 
                                 // Check if this is the only department in this phase
                                 // Count only departments that match our pattern
@@ -1200,7 +1224,51 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                                     key == department || key == compositeKey || key.hasSuffix("_\(department)")
                                 }
                                 if matchingDepartments.count == 1 {
-                                    phasesOnlyWithThisDepartment.append((id: currentPhaseId, name: phase.phaseName))
+                                    phasesOnlyWithThisDepartment.append((id: requiredPhaseId, name: phase.phaseName))
+                                }
+                            }
+                        }
+                    } else {
+                        // No phaseId provided - fetch from all phases but don't aggregate
+                        // Instead, show data for the first phase that contains this department
+                        // This matches DashboardView behavior where each phase shows its own department data
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerID, projectId: projectId)
+                            .order(by: "phaseNumber")
+                            .getDocuments()
+                        
+                        // Find the first phase that contains this department
+                        for doc in phasesSnapshot.documents {
+                            let currentPhaseId = doc.documentID
+                            
+                            if let phase = try? doc.data(as: Phase.self) {
+                                // Try new format: phaseId_department
+                                let compositeKey = "\(currentPhaseId)_\(department)"
+                                
+                                // Check both old format (for backward compatibility) and new format
+                                var budget: Double = 0
+                                if let newFormatBudget = phase.departments[compositeKey] {
+                                    budget = newFormatBudget
+                                } else if let oldFormatBudget = phase.departments[department] {
+                                    // Fallback to old format for backward compatibility
+                                    budget = oldFormatBudget
+                                }
+                                
+                                if budget > 0 {
+                                    // Only use the first phase's budget, don't aggregate
+                                    allocated = budget
+                                    phaseIdsWithDepartment.append(currentPhaseId)
+                                    
+                                    // Check if this is the only department in this phase
+                                    let matchingDepartments = phase.departments.keys.filter { key in
+                                        key == department || key == compositeKey || key.hasSuffix("_\(department)")
+                                    }
+                                    if matchingDepartments.count == 1 {
+                                        phasesOnlyWithThisDepartment.append((id: currentPhaseId, name: phase.phaseName))
+                                    }
+                                    
+                                    // Break after first match to prevent aggregation
+                                    break
                                 }
                             }
                         }
@@ -1220,12 +1288,14 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     
                     // Sync with state manager if available
                     if let stateManager = stateManager {
-                        // Update department spent in state manager for all phases containing this department
+                        // Update department spent in state manager only for the specific phase(s) we're showing
+                        // When phaseId is provided, only update that phase
+                        // When phaseId is not provided, only update the first matching phase
                         for phaseIdWithDept in phaseIdsWithDepartment {
                             if stateManager.phaseDepartmentSpentMap[phaseIdWithDept] == nil {
                                 stateManager.phaseDepartmentSpentMap[phaseIdWithDept] = [:]
                             }
-                            // Calculate spent for this specific phase
+                            // Calculate spent for this specific phase only (not aggregated)
                             let phaseSpent = loadedExpenses
                                 .filter { $0.status == .approved && $0.phaseId == phaseIdWithDept }
                                 .reduce(0) { $0 + $1.amount }
