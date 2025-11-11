@@ -3339,6 +3339,8 @@ private struct AddPhaseSheet: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var nextPhaseNumber: Int = 1
+    @State private var existingPhaseNames: [String] = []
+    @State private var phaseNameError: String?
     @FocusState private var focusedField: Field?
     
     private enum Field { case phaseName, departmentName, departmentBudget }
@@ -3446,10 +3448,32 @@ private struct AddPhaseSheet: View {
     }
     
     private var isFormValid: Bool {
-        !phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        let trimmedName = phaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedName.isEmpty &&
+        phaseNameError == nil &&
         endDate > startDate &&
         !departments.isEmpty &&
         departments.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    
+    private func validatePhaseName() {
+        let trimmedName = phaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedName.isEmpty {
+            phaseNameError = "Phase name is required"
+            return
+        }
+        
+        // Check for duplicate phase names (case-insensitive)
+        let isDuplicate = existingPhaseNames.contains { existingName in
+            existingName.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+        }
+        
+        if isDuplicate {
+            phaseNameError = "Phase name must be unique"
+        } else {
+            phaseNameError = nil
+        }
     }
     
     var body: some View {
@@ -3460,6 +3484,25 @@ private struct AddPhaseSheet: View {
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .phaseName)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(phaseNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                        .onChange(of: phaseName) { _, _ in
+                            validatePhaseName()
+                        }
+                    
+                    if let error = phaseNameError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .padding(.top, 4)
+                    }
                 } header: {
                     Text("Phase Name")
                         .textCase(.none)
@@ -3610,6 +3653,7 @@ private struct AddPhaseSheet: View {
             .onAppear {
                 focusedField = .phaseName
                 loadNextPhaseNumber()
+                loadExistingPhaseNames()
             }
         }
     }
@@ -3652,8 +3696,45 @@ private struct AddPhaseSheet: View {
         }
     }
     
+    private func loadExistingPhaseNames() {
+        Task {
+            do {
+                // Get customerId from Firebase Auth
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    print("❌ Customer ID not found in loadExistingPhaseNames")
+                    return
+                }
+                
+                let snapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var phaseNames: [String] = []
+                for doc in snapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        phaseNames.append(phase.phaseName)
+                    }
+                }
+                
+                await MainActor.run {
+                    existingPhaseNames = phaseNames
+                }
+            } catch {
+                print("Error loading existing phase names: \(error.localizedDescription)")
+            }
+        }
+    }
+    
     private func savePhase() {
-        guard isFormValid else { return }
+        // Validate phase name before saving
+        validatePhaseName()
+        
+        guard isFormValid else {
+            if phaseNameError != nil {
+                errorMessage = phaseNameError
+            }
+            return
+        }
         
         isSaving = true
         errorMessage = nil
@@ -3769,6 +3850,8 @@ private struct EditPhaseSheet: View {
     @State private var endDate: Date = Date().addingTimeInterval(86400 * 30)
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var existingPhaseNames: [String] = []
+    @State private var phaseNameError: String?
     @FocusState private var focusedField: Field?
     
     private enum Field { case phaseName }
@@ -3780,8 +3863,32 @@ private struct EditPhaseSheet: View {
     }
     
     private var isFormValid: Bool {
-        !phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        let trimmedName = phaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmedName.isEmpty &&
+        phaseNameError == nil &&
         endDate > startDate
+    }
+    
+    private func validatePhaseName() {
+        let trimmedName = phaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedName.isEmpty {
+            phaseNameError = "Phase name is required"
+            return
+        }
+        
+        // Check for duplicate phase names (case-insensitive), excluding current phase
+        let isDuplicate = existingPhaseNames.contains { existingName in
+            // Exclude the current phase name from duplicate check
+            existingName != currentPhaseName &&
+            existingName.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+        }
+        
+        if isDuplicate {
+            phaseNameError = "Phase name must be unique"
+        } else {
+            phaseNameError = nil
+        }
     }
     
     var body: some View {
@@ -3792,6 +3899,25 @@ private struct EditPhaseSheet: View {
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .phaseName)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(phaseNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                        .onChange(of: phaseName) { _, _ in
+                            validatePhaseName()
+                        }
+                    
+                    if let error = phaseNameError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .padding(.top, 4)
+                    }
                 } header: {
                     Text("Phase Name")
                         .textCase(.none)
@@ -3869,12 +3995,50 @@ private struct EditPhaseSheet: View {
                     endDate = Calendar.current.date(byAdding: .day, value: 30, to: start) ?? Date().addingTimeInterval(86400 * 30)
                 }
                 focusedField = .phaseName
+                loadExistingPhaseNames()
+            }
+        }
+    }
+    
+    private func loadExistingPhaseNames() {
+        Task {
+            do {
+                // Get customerId from authService
+                guard let customerId = authService.currentCustomerId else {
+                    print("❌ Customer ID not found in loadExistingPhaseNames")
+                    return
+                }
+                
+                let snapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var phaseNames: [String] = []
+                for doc in snapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        phaseNames.append(phase.phaseName)
+                    }
+                }
+                
+                await MainActor.run {
+                    existingPhaseNames = phaseNames
+                }
+            } catch {
+                print("Error loading existing phase names: \(error.localizedDescription)")
             }
         }
     }
     
     private func savePhase() {
-        guard isFormValid else { return }
+        // Validate phase name before saving
+        validatePhaseName()
+        
+        guard isFormValid else {
+            if phaseNameError != nil {
+                errorMessage = phaseNameError
+            }
+            return
+        }
         
         isSaving = true
         errorMessage = nil

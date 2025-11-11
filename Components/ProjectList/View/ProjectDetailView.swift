@@ -398,12 +398,13 @@ private struct ViewAllPhasesButton: View {
             Text("View All Phases")
                 .font(.subheadline)
                 .fontWeight(.semibold)
-                .foregroundColor(.white)
+                .foregroundColor(.black) // darker text for contrast on white background
                 .padding(.horizontal, DesignSystem.Spacing.medium)
                 .padding(.vertical, DesignSystem.Spacing.small)
-                .background(Color.blue)
+                .background(Color.white.opacity(0.5)) // 👈 semi-transparent white
                 .cornerRadius(DesignSystem.CornerRadius.medium)
                 .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+
         }
         .sheet(isPresented: $showingAllPhases) {
             AllPhasesSheetView(

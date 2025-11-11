@@ -277,8 +277,20 @@ class CreateProjectViewModel: ObservableObject {
 
         // Validate each phase
         for phase in phases {
+            let trimmedName = phase.phaseName.trimmingCharacters(in: .whitespaces)
+            
             // Phase name required
-            if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+            if trimmedName.isEmpty {
+                return false
+            }
+            
+            // Check for duplicate phase names (case-insensitive)
+            let duplicateCount = phases.filter { phaseItem in
+                phaseItem.id != phase.id && // Exclude current phase
+                phaseItem.phaseName.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+            }.count
+            
+            if duplicateCount > 0 {
                 return false
             }
             
@@ -359,9 +371,24 @@ class CreateProjectViewModel: ObservableObject {
     func phaseNameError(for phaseId: UUID) -> String? {
         guard shouldShowValidationErrors else { return nil }
         guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
-        if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+        
+        let trimmedName = phase.phaseName.trimmingCharacters(in: .whitespaces)
+        
+        // Check if phase name is empty
+        if trimmedName.isEmpty {
             return "Phase name is required"
         }
+        
+        // Check for duplicate phase names (case-insensitive)
+        let duplicateCount = phases.filter { phaseItem in
+            phaseItem.id != phaseId && // Exclude current phase
+            phaseItem.phaseName.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+        }.count
+        
+        if duplicateCount > 0 {
+            return "Phase name must be unique"
+        }
+        
         return nil
     }
     
@@ -440,7 +467,19 @@ class CreateProjectViewModel: ObservableObject {
         
         // Check phases
         for phase in phases {
-            if phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty {
+            let trimmedName = phase.phaseName.trimmingCharacters(in: .whitespaces)
+            
+            if trimmedName.isEmpty {
+                return "phase_\(phase.id)_name"
+            }
+            
+            // Check for duplicate phase names (case-insensitive)
+            let duplicateCount = phases.filter { phaseItem in
+                phaseItem.id != phase.id && // Exclude current phase
+                phaseItem.phaseName.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+            }.count
+            
+            if duplicateCount > 0 {
                 return "phase_\(phase.id)_name"
             }
             
