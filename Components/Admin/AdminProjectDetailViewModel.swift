@@ -12,6 +12,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var location: String
     @Published var startDate: Date
     @Published var endDate: Date
+    @Published var plannedDate: Date
     @Published var teamMembers: [String]
     @Published var managerName: String? = nil // Single manager only
     @Published var tempApproverID: String?
@@ -27,6 +28,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var isEditingClient = false
     @Published var isEditingLocation = false
     @Published var isEditingDates = false
+    @Published var isEditingPlannedDate = false
     @Published var isEditingTeam = false
     
     // Team Selection
@@ -79,6 +81,13 @@ class AdminProjectDetailViewModel: ObservableObject {
             self.endDate = endDate
         } else {
             self.endDate = Date().addingTimeInterval(86400 * 30)
+        }
+        
+        if let plannedDateStr = project.plannedDate,
+           let plannedDate = dateFormatter.date(from: plannedDateStr) {
+            self.plannedDate = plannedDate
+        } else {
+            self.plannedDate = Date()
         }
         
         self.teamMembers = project.teamMembers
@@ -409,6 +418,55 @@ class AdminProjectDetailViewModel: ObservableObject {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update project dates: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func updateProjectPlannedDate(_ newPlannedDate: Date) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                let plannedDateStr = dateFormatter.string(from: newPlannedDate)
+                
+                // Determine the new status based on planned date
+                let calendar = Calendar.current
+                let today = calendar.startOfDay(for: Date())
+                let planned = calendar.startOfDay(for: newPlannedDate)
+                
+                let newStatus: String
+                if planned <= today {
+                    // If planned date is today or in the past, set to ACTIVE
+                    newStatus = ProjectStatus.ACTIVE.rawValue
+                } else {
+                    // If planned date is in the future, set to DRAFT
+                    newStatus = ProjectStatus.DRAFT.rawValue
+                }
+                
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "plannedDate": plannedDateStr,
+                        "status": newStatus
+                    ])
+                
+                plannedDate = newPlannedDate
+                projectStatus = newStatus
+                isEditingPlannedDate = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update planned date: \(error.localizedDescription)"
                 showError = true
             }
         }

@@ -136,6 +136,15 @@ struct AdminProjectDetailView: View {
                 onSave: viewModel.updateProjectLocation
             )
             
+            // Planned Date
+            ModernEditableDateCard(
+                title: "Planned Start Date",
+                date: viewModel.plannedDate,
+                isEditing: $viewModel.isEditingPlannedDate,
+                icon: "calendar.badge.clock",
+                onSave: viewModel.updateProjectPlannedDate
+            )
+            
             // Status
             ModernStatusCard(
                 title: "Project Status",
@@ -468,6 +477,108 @@ struct ModernEditableCard: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+}
+
+struct ModernEditableDateCard: View {
+    let title: String
+    let date: Date
+    @Binding var isEditing: Bool
+    let icon: String
+    let onSave: (Date) -> Void
+    
+    @State private var editedDate: Date = Date()
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.blue.gradient)
+                
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Button {
+                    HapticManager.selection()
+                    if isEditing {
+                        onSave(editedDate)
+                    }
+                    isEditing.toggle()
+                    if isEditing {
+                        editedDate = date
+                    }
+                } label: {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(isEditing ? .green : .blue)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+            
+            if isEditing {
+                DatePicker("", selection: $editedDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .padding()
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            } else {
+                HStack {
+                    Text(dateFormatted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    if let statusInfo = statusInfo {
+                        HStack(spacing: 4) {
+                            Image(systemName: statusInfo.icon)
+                                .font(.caption)
+                            Text(statusInfo.text)
+                                .font(.caption)
+                        }
+                        .foregroundStyle(statusInfo.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(statusInfo.color.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+    
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+    
+    private var statusInfo: (text: String, icon: String, color: Color)? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let planned = calendar.startOfDay(for: date)
+        
+        if planned < today {
+            return ("Past Date", "calendar.badge.exclamationmark", .orange)
+        } else if planned == today {
+            return ("Today", "calendar.badge.checkmark", .green)
+        } else {
+            let daysUntil = calendar.dateComponents([.day], from: today, to: planned).day ?? 0
+            return ("In \(daysUntil) days", "calendar.badge.clock", .blue)
+        }
     }
 }
 
