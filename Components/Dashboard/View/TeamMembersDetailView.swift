@@ -1034,10 +1034,13 @@ struct MemberExpenseRowView: View {
                 }
                 
                 // Description
-                Text(expense.description)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
+                TruncatedTextWithTooltip(
+                    expense.description,
+                    font: .body,
+                    foregroundColor: .primary,
+                    lineLimit: 1,
+                    truncationLength: 30
+                )
                 
                 // Details
                 VStack(alignment: .leading, spacing: 6) {
