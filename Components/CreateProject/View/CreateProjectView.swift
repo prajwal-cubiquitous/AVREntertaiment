@@ -46,7 +46,7 @@ struct CreateProjectView: View {
                         templateOverridesSectionScrollView
                         
                         // MARK: - Attachment Section
-                        attachmentSectionScrollView
+//                        attachmentSectionScrollView
                         
                         // MARK: - Submit Action
                         submitSectionScrollView
@@ -776,106 +776,106 @@ struct CreateProjectView: View {
         }
     }
     
-    private var attachmentSectionScrollView: some View {
-        FormSectionView(header: SectionHeaderLabel(title: "Project Attachment", icon: "paperclip")) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-                if let attachmentName = viewModel.attachmentName {
-                    // Show attached file
-                    HStack(spacing: 12) {
-                        // File info - not clickable
-                        HStack {
-                            Image(systemName: fileIcon(for: attachmentName))
-                                .font(.title3)
-                                .foregroundColor(.blue)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                TruncatedTextWithTooltip(
-                                    attachmentName,
-                                    font: .subheadline,
-                                    fontWeight: .medium,
-                                    foregroundColor: .primary,
-                                    lineLimit: 1
-                                )
-                                
-                                Text("Tap preview to view")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(8)
-                        
-                        // Preview button - separate icon button
-                        Button(action: {
-                            HapticManager.selection()
-                            showingFileViewer = true
-                        }) {
-                            Image(systemName: "eye.fill")
-                                .font(.title3)
-                                .foregroundColor(.blue)
-                                .frame(width: 44, height: 44)
-                                .background(Color.blue.opacity(0.1))
-                                .clipShape(Circle())
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        
-                        // Remove button - separate action
-                        Button(action: {
-                            HapticManager.selection()
-                            withAnimation(.easeInOut) {
-                                viewModel.removeAttachment()
-                            }
-                        }) {
-                            Image(systemName: "trash.fill")
-                                .font(.title3)
-                                .foregroundColor(.red)
-                                .frame(width: 44, height: 44)
-                                .background(Color.red.opacity(0.1))
-                                .clipShape(Circle())
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                } else {
-                    // Add attachment button
-                    Button(action: {
-                        viewModel.showingAttachmentOptions = true
-                    }) {
-                        HStack {
-                            Image(systemName: "paperclip")
-                                .font(.title3)
-                            Text("Add Attachment")
-                                .fontWeight(.medium)
-                            Spacer()
-                        }
-                        .foregroundColor(.blue)
-                        .padding()
-                        .background(Color(UIColor.tertiarySystemFill))
-                        .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                }
-                
-                // Upload progress
-                if viewModel.isUploading {
-                    VStack(spacing: 8) {
-                        ProgressView(value: viewModel.uploadProgress)
-                            .progressViewStyle(LinearProgressViewStyle())
-                        Text("Uploading... \(Int(viewModel.uploadProgress * 100))%")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.vertical, DesignSystem.Spacing.small)
-        }
-    }
+//    private var attachmentSectionScrollView: some View {
+//        FormSectionView(header: SectionHeaderLabel(title: "Project Attachment", icon: "paperclip")) {
+//            VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+//                if let attachmentName = viewModel.attachmentName {
+//                    // Show attached file
+//                    HStack(spacing: 12) {
+//                        // File info - not clickable
+//                        HStack {
+//                            Image(systemName: fileIcon(for: attachmentName))
+//                                .font(.title3)
+//                                .foregroundColor(.blue)
+//                            
+//                            VStack(alignment: .leading, spacing: 4) {
+//                                TruncatedTextWithTooltip(
+//                                    attachmentName,
+//                                    font: .subheadline,
+//                                    fontWeight: .medium,
+//                                    foregroundColor: .primary,
+//                                    lineLimit: 1
+//                                )
+//                                
+//                                Text("Tap preview to view")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                            }
+//                            
+//                            Spacer()
+//                        }
+//                        .padding()
+//                        .frame(maxWidth: .infinity)
+//                        .background(Color.blue.opacity(0.1))
+//                        .cornerRadius(8)
+//                        
+//                        // Preview button - separate icon button
+//                        Button(action: {
+//                            HapticManager.selection()
+//                            showingFileViewer = true
+//                        }) {
+//                            Image(systemName: "eye.fill")
+//                                .font(.title3)
+//                                .foregroundColor(.blue)
+//                                .frame(width: 44, height: 44)
+//                                .background(Color.blue.opacity(0.1))
+//                                .clipShape(Circle())
+//                                .contentShape(Circle())
+//                        }
+//                        .buttonStyle(.plain)
+//                        
+//                        // Remove button - separate action
+//                        Button(action: {
+//                            HapticManager.selection()
+//                            withAnimation(.easeInOut) {
+//                                viewModel.removeAttachment()
+//                            }
+//                        }) {
+//                            Image(systemName: "trash.fill")
+//                                .font(.title3)
+//                                .foregroundColor(.red)
+//                                .frame(width: 44, height: 44)
+//                                .background(Color.red.opacity(0.1))
+//                                .clipShape(Circle())
+//                                .contentShape(Circle())
+//                        }
+//                        .buttonStyle(.plain)
+//                    }
+//                } else {
+//                    // Add attachment button
+//                    Button(action: {
+//                        viewModel.showingAttachmentOptions = true
+//                    }) {
+//                        HStack {
+//                            Image(systemName: "paperclip")
+//                                .font(.title3)
+//                            Text("Add Attachment")
+//                                .fontWeight(.medium)
+//                            Spacer()
+//                        }
+//                        .foregroundColor(.blue)
+//                        .padding()
+//                        .background(Color(UIColor.tertiarySystemFill))
+//                        .cornerRadius(8)
+//                    }
+//                    .buttonStyle(.plain)
+//                }
+//                
+//                // Upload progress
+//                if viewModel.isUploading {
+//                    VStack(spacing: 8) {
+//                        ProgressView(value: viewModel.uploadProgress)
+//                            .progressViewStyle(LinearProgressViewStyle())
+//                        Text("Uploading... \(Int(viewModel.uploadProgress * 100))%")
+//                            .font(.caption)
+//                            .foregroundColor(.secondary)
+//                    }
+//                }
+//            }
+//            .padding(.horizontal, DesignSystem.Spacing.medium)
+//            .padding(.vertical, DesignSystem.Spacing.small)
+//        }
+//    }
     
     private var submitSectionScrollView: some View {
         VStack {
