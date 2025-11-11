@@ -1374,6 +1374,11 @@ class CreateProjectViewModel: ObservableObject {
         _restoreTeamMemberIds = []
     }
     
+    // Check if there's saved data in local storage
+    var hasSavedLocalData: Bool {
+        UserDefaults.standard.data(forKey: formStateKey) != nil
+    }
+    
     // MARK: - Reset Form
     private func resetForm() {
         projectName = ""

@@ -69,7 +69,21 @@ struct CreateProjectView: View {
                         .foregroundColor(.secondary)
                     }
                     
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        // Clear saved data button (only when saved data exists)
+                        if viewModel.hasSavedLocalData {
+                            Button(action: {
+                                HapticManager.selection()
+                                showingClearFormConfirmation = true
+                            }) {
+                                Image(systemName: "arrow.counterclockwise.circle.fill")
+                                    .foregroundColor(.orange)
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                            .help("Clear saved form data")
+                        }
+                        
+                        // Save Draft button (only when there's any data)
                         if viewModel.hasAnyData {
                             Button(action: {
                                 HapticManager.selection()
@@ -289,27 +303,6 @@ struct CreateProjectView: View {
                     }
                 }
                 
-                // Clear Form Button (show when there's any data)
-                if viewModel.hasAnyData {
-                    Button(action: {
-                        HapticManager.selection()
-                        showingClearFormConfirmation = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 16, weight: .medium))
-                            Text("Clear Form & Local Storage")
-                                .font(DesignSystem.Typography.subheadline)
-                                .fontWeight(.medium)
-                            Spacer()
-                        }
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
-                        .padding(.vertical, DesignSystem.Spacing.small)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(DesignSystem.CornerRadius.medium)
-                    }
-                }
             }
             .padding(.horizontal, DesignSystem.Spacing.medium)
             .padding(.top, DesignSystem.Spacing.small)
