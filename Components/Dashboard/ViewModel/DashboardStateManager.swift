@@ -22,6 +22,11 @@ class DashboardStateManager: ObservableObject {
     @Published var isLoading = false
     @Published var lastRefreshTime: Date?
     
+    // Project-level aggregated data for fast access
+    @Published var totalProjectBudget: Double = 0
+    @Published var totalProjectSpent: Double = 0
+    @Published var departmentBudgets: [String: (total: Double, spent: Double)] = [:]
+    
     // MARK: - Private Properties
     private var refreshTask: Task<Void, Never>?
     private let dateFormatter: DateFormatter = {
@@ -104,7 +109,14 @@ class DashboardStateManager: ObservableObject {
         if let index = allPhases.firstIndex(where: { $0.id == phaseId }) {
             var updatedPhase = allPhases[index]
             var updatedDepartments = updatedPhase.departments
+            
+            // Handle both old format (department) and new format (phaseId_department)
+            let compositeKey = "\(phaseId)_\(department)"
+            
+            // Remove both formats if they exist
             updatedDepartments.removeValue(forKey: department)
+            updatedDepartments.removeValue(forKey: compositeKey)
+            
             updatedPhase = DashboardView.PhaseSummary(
                 id: updatedPhase.id,
                 name: updatedPhase.name,
@@ -114,8 +126,9 @@ class DashboardStateManager: ObservableObject {
             )
             allPhases[index] = updatedPhase
             
-            // Remove from department spent map
+            // Remove from department spent map (try both formats)
             phaseDepartmentSpentMap[phaseId]?.removeValue(forKey: department)
+            phaseDepartmentSpentMap[phaseId]?.removeValue(forKey: compositeKey)
             
             // Recalculate phase budget
             recalculatePhaseBudget(phaseId: phaseId)
@@ -133,6 +146,122 @@ class DashboardStateManager: ObservableObject {
             totalBudget: totalBudget,
             spent: spent
         )
+        
+        // Recalculate project-level totals
+        recalculateProjectTotals()
+    }
+    
+    /// Update expense amount immediately when approved/rejected
+    func updateExpenseStatus(expenseId: String, phaseId: String?, department: String, oldStatus: ExpenseStatus, newStatus: ExpenseStatus, amount: Double) {
+        guard let phaseId = phaseId else { return }
+        
+        // Update phase spent amount
+        if let currentBudget = phaseBudgetMap[phaseId] {
+            var newSpent = currentBudget.spent
+            
+            // Remove from old status
+            if oldStatus == .approved {
+                newSpent -= amount
+            }
+            
+            // Add to new status
+            if newStatus == .approved {
+                newSpent += amount
+            }
+            
+            phaseBudgetMap[phaseId] = DashboardView.PhaseBudget(
+                id: phaseId,
+                totalBudget: currentBudget.totalBudget,
+                spent: max(0, newSpent)
+            )
+        }
+        
+        // Update department spent map
+        if phaseDepartmentSpentMap[phaseId] == nil {
+            phaseDepartmentSpentMap[phaseId] = [:]
+        }
+        
+        var deptSpent = phaseDepartmentSpentMap[phaseId]?[department] ?? 0
+        
+        // Remove from old status
+        if oldStatus == .approved {
+            deptSpent -= amount
+        }
+        
+        // Add to new status
+        if newStatus == .approved {
+            deptSpent += amount
+        }
+        
+        phaseDepartmentSpentMap[phaseId]?[department] = max(0, deptSpent)
+        
+        // Recalculate project-level totals
+        recalculateProjectTotals()
+    }
+    
+    /// Update department budget immediately
+    func updateDepartmentBudget(phaseId: String, department: String, newBudget: Double) {
+        if let index = allPhases.firstIndex(where: { $0.id == phaseId }) {
+            var updatedPhase = allPhases[index]
+            var updatedDepartments = updatedPhase.departments
+            
+            // Handle both old format (department) and new format (phaseId_department)
+            let compositeKey = "\(phaseId)_\(department)"
+            
+            // Remove old format if exists
+            updatedDepartments.removeValue(forKey: department)
+            // Set new format
+            updatedDepartments[compositeKey] = newBudget
+            
+            updatedPhase = DashboardView.PhaseSummary(
+                id: updatedPhase.id,
+                name: updatedPhase.name,
+                start: updatedPhase.start,
+                end: updatedPhase.end,
+                departments: updatedDepartments
+            )
+            allPhases[index] = updatedPhase
+            
+            // Recalculate phase budget
+            recalculatePhaseBudget(phaseId: phaseId)
+        }
+    }
+    
+    /// Recalculate all project-level totals from phase data
+    func recalculateProjectTotals() {
+        // Calculate total project budget from all phases
+        totalProjectBudget = allPhases.reduce(0) { total, phase in
+            total + phase.departments.values.reduce(0, +)
+        }
+        
+        // Calculate total project spent from all phases
+        totalProjectSpent = phaseBudgetMap.values.reduce(0) { $0 + $1.spent }
+        
+        // Calculate department-level totals across all phases
+        // Handle both old format (department) and new format (phaseId_department)
+        var deptTotals: [String: (total: Double, spent: Double)] = [:]
+        
+        for phase in allPhases {
+            for (deptKey, budget) in phase.departments {
+                // Extract department name from key (handle both formats)
+                let departmentName: String
+                if deptKey.contains("_") {
+                    // New format: phaseId_department
+                    departmentName = String(deptKey.split(separator: "_").dropFirst().joined(separator: "_"))
+                } else {
+                    // Old format: department
+                    departmentName = deptKey
+                }
+                
+                let current = deptTotals[departmentName] ?? (0, 0)
+                // Get spent from department spent map (try both formats)
+                let spent = phaseDepartmentSpentMap[phase.id]?[departmentName] ?? 
+                           phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0
+                deptTotals[departmentName] = (current.total + budget, current.spent + spent)
+            }
+        }
+        
+        departmentBudgets = deptTotals
     }
     
     // MARK: - Private Loading Methods
@@ -198,6 +327,9 @@ class DashboardStateManager: ObservableObject {
             }
             
             phaseBudgetMap = budgetMap
+            
+            // Recalculate project totals after loading
+            recalculateProjectTotals()
         } catch {
             print("Error loading phase budgets: \(error.localizedDescription)")
         }
@@ -226,6 +358,9 @@ class DashboardStateManager: ObservableObject {
             }
             
             phaseDepartmentSpentMap = departmentSpentMap
+            
+            // Recalculate project totals after loading
+            recalculateProjectTotals()
         } catch {
             print("Error loading phase department spent: \(error.localizedDescription)")
         }

@@ -42,6 +42,7 @@ struct DashboardView: View {
     @State private var selectedRequest: PhaseRequestItem? = nil
     @State private var showingRequestActionSheet = false
     @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
+    @StateObject private var stateManager = DashboardStateManager()
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -446,7 +447,8 @@ struct DashboardView: View {
                     projectId: projectId,
                     role: role,
                     phoneNumber: phoneNumber,
-                    phaseId: selectedPhaseIdForDetail
+                    phaseId: selectedPhaseIdForDetail,
+                    stateManager: stateManager
                 )
                 .presentationDetents([.large])
             }
@@ -532,6 +534,12 @@ struct DashboardView: View {
         .onAppear {
             if let projectId = project?.id{
                 viewModel.loadDashboardData()
+                // Load state manager data
+                if let customerId = customerId {
+                    Task {
+                        await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    }
+                }
             }
             Task {
                 await loadPhases()
@@ -555,6 +563,26 @@ struct DashboardView: View {
         .onChange(of: navigationManager.activeExpenseId) { newValue in
             if let expenseItem = newValue {
                 handleExpenseChange(expenseItem.id)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
+            // Immediately update state when expense status changes
+            if let userInfo = notification.userInfo,
+               let phaseId = userInfo["phaseId"] as? String,
+               let department = userInfo["department"] as? String,
+               let oldStatusStr = userInfo["oldStatus"] as? String,
+               let newStatusStr = userInfo["newStatus"] as? String,
+               let amount = userInfo["amount"] as? Double,
+               let oldStatus = ExpenseStatus(rawValue: oldStatusStr),
+               let newStatus = ExpenseStatus(rawValue: newStatusStr) {
+                stateManager.updateExpenseStatus(
+                    expenseId: userInfo["expenseId"] as? String ?? "",
+                    phaseId: phaseId,
+                    department: department,
+                    oldStatus: oldStatus,
+                    newStatus: newStatus,
+                    amount: amount
+                )
             }
         }
 
@@ -623,7 +651,7 @@ struct DashboardView: View {
                     )
                 }
                 
-                TotalBudgetCard(viewModel: viewModel)
+                TotalBudgetCard(viewModel: viewModel, stateManager: stateManager)
                 
                 Button(action: {
                     showingTeamMembersDetail = true
@@ -703,7 +731,8 @@ struct DashboardView: View {
                                 Task {
                                     await loadPhases()
                                 }
-                            }
+                            },
+                            stateManager: stateManager
                         )
                     } label: {
                         Text("View All Phases")
@@ -955,7 +984,8 @@ struct DashboardView: View {
                                 Task {
                                     await loadPhases()
                                 }
-                            }
+                            },
+                            stateManager: stateManager
                         )
                     } label: {
                         Text("View All Phases")
@@ -1194,7 +1224,11 @@ struct DashboardView: View {
                     phaseEnabledMap[doc.documentID] = p.isEnabledValue
                 }
             }
-            await MainActor.run { allPhases = collected }
+            await MainActor.run { 
+                allPhases = collected
+                // Sync with state manager
+                stateManager.allPhases = collected
+            }
             // Load phase budgets after phases are loaded
             await loadPhaseBudgets()
             // Load department spent amounts per phase
@@ -1354,6 +1388,9 @@ struct DashboardView: View {
             
             await MainActor.run {
                 phaseBudgetMap = budgetMap
+                // Sync with state manager
+                stateManager.phaseBudgetMap = budgetMap
+                stateManager.recalculateProjectTotals()
             }
         } catch {
             print("Error loading phase budgets: \(error.localizedDescription)")
@@ -1390,6 +1427,9 @@ struct DashboardView: View {
             
             await MainActor.run {
                 phaseDepartmentSpentMap = departmentSpentMap
+                // Sync with state manager
+                stateManager.phaseDepartmentSpentMap = departmentSpentMap
+                stateManager.recalculateProjectTotals()
             }
         } catch {
             print("Error loading phase department spent: \(error.localizedDescription)")
@@ -2227,6 +2267,7 @@ private struct AllPhasesView: View {
     let role: UserRole?
     let phoneNumber: String
     let onPhaseAdded: (() -> Void)?
+    @ObservedObject var stateManager: DashboardStateManager
     
     @State private var showingDepartmentDetail = false
     @State private var selectedDepartment: DepartmentSelection? = nil
@@ -2486,260 +2527,270 @@ private struct AllPhasesView: View {
         }
     }
     
+    // MARK: - Phase Row View
+    private func phaseRowView(phase: DashboardView.PhaseSummary) -> some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Phase Header with date, In Progress badge, and + icon
+            phaseHeaderView(phase: phase)
+            
+            // Phase Budget Summary
+            if let phaseBudget = phaseBudgetMap[phase.id] {
+                phaseBudgetSummaryView(phaseBudget: phaseBudget)
+            }
+            
+            // Departments scroller
+            phaseDepartmentsScroller(phase: phase)
+        }
+    }
+    
+    // MARK: - Phase Header View
+    private func phaseHeaderView(phase: DashboardView.PhaseSummary) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
+            HStack(spacing: 8) {
+                VStack {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            TruncatedTextWithTooltip(
+                                phase.name,
+                                font: DesignSystem.Typography.headline,
+                                foregroundColor: .primary,
+                                lineLimit: 1
+                            )
+
+                            if phaseTimelineText(phase) != "" {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "calendar")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                        .accessibilityHidden(true)
+                                    Text(phaseTimelineText(phase))
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        
+                        if role == .ADMIN {
+                            Button {
+                                HapticManager.selection()
+                                phaseToEdit = phase
+                            } label: {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.accentColor)
+                                    .accessibilityLabel("Edit phase")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    
+                    if let phaseBudget = phaseBudgetMap[phase.id] {
+                        phaseTotalBudgetView(phaseBudget: phaseBudget)
+                    }
+                }
+            }
+            Spacer()
+            
+            phaseBadgesAndControls(phase: phase)
+        }
+    }
+    
+    // MARK: - Phase Total Budget View
+    private func phaseTotalBudgetView(phaseBudget: DashboardView.PhaseBudget) -> some View {
+        HStack {
+            Text("Total")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.purple.opacity(0.15))
+                .foregroundColor(.purple)
+                .cornerRadius(8)
+
+            Spacer(minLength: 8)
+
+            Text(Int(phaseBudget.totalBudget).formattedCurrency)
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.purple)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.purple.opacity(0.08))
+        .cornerRadius(12)
+    }
+    
+    // MARK: - Phase Badges and Controls
+    private func phaseBadgesAndControls(phase: DashboardView.PhaseSummary) -> some View {
+        HStack {
+            VStack {
+                // Only show "In Progress" badge if phase is in progress AND enabled
+                if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                    Text("Active")
+                        .font(DesignSystem.Typography.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Phase status: In Progress")
+                }
+                
+                // Extension Badge - Show if phase has accepted extension
+                if phaseExtensionMap[phase.id] == true {
+                    HStack(spacing: 4) {
+                        Text("Extended")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .scaleEffect(0.8)
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(Capsule())
+                    .accessibilityLabel("Phase extended via accepted request")
+                }
+            }
+
+            if role == .ADMIN {
+                // Enable toggle (always visible in All Phases for admins)
+                Toggle("", isOn: Binding(
+                    get: { phaseEnabledMap[phase.id] ?? false },
+                    set: { newValue in
+                        phaseEnabledMap[phase.id] = newValue
+                        if let projectId = project?.id,
+                           let customerId = Auth.auth().currentUser?.uid {
+                            FirebasePathHelper.shared
+                                .phasesCollection(customerId: customerId, projectId: projectId)
+                                .document(phase.id)
+                                .updateData([
+                                    "isEnabled": newValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                        }
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                .scaleEffect(0.85)
+
+                Button {
+                    HapticManager.selection()
+                    phaseForDepartmentAdd = phase
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.accentColor)
+                        .accessibilityLabel("Add department to this phase")
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, 6)
+                .padding(.vertical, 2)
+            }
+        }
+    }
+    
+    // MARK: - Phase Budget Summary View
+    private func phaseBudgetSummaryView(phaseBudget: DashboardView.PhaseBudget) -> some View {
+        HStack(spacing: DesignSystem.Spacing.medium) {
+            // Approved Amount
+            VStack(alignment: .center, spacing: 4) {
+                Text("Approved")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                Text(Int(phaseBudget.spent).formattedCurrency)
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.blue)
+            }
+            
+            Spacer()
+            
+            // Remaining Amount
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Remaining")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                Text(Int(phaseBudget.remaining).formattedCurrency)
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(phaseBudget.remaining >= 0 ? .green : .red)
+            }
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.small)
+        .background(Color(.tertiarySystemFill).opacity(0.5))
+        .cornerRadius(DesignSystem.CornerRadius.small)
+    }
+    
+    // MARK: - Phase Departments Scroller
+    private func phaseDepartmentsScroller(phase: DashboardView.PhaseSummary) -> some View {
+        ZStack(alignment: .leading) {
+            // Card background for the horizontal scroller
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.secondarySystemGroupedBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(.systemGray5), lineWidth: 0.5)
+                )
+            // Horizontal scroller
+            ScrollView(.horizontal, showsIndicators: true) {
+                HStack(spacing: 12) {
+                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                        DepartmentMiniCard(
+                            title: dept,
+                            amount: amount,
+                            spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
+                            onTap: {
+                                selectedDepartment = DepartmentSelection(name: dept, phaseId: phase.id)
+                                // Small delay to ensure state is set before showing sheet
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    showingDepartmentDetail = true
+                                }
+                            }
+                        )
+                    }
+                    
+                    // Add "Other" department card for anonymous expenses
+                    if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
+                        OtherDepartmentCard(
+                            spent: anonymousSpent,
+                            onTap: {
+                                selectedDepartment = DepartmentSelection(name: "Other", phaseId: phase.id)
+                                showingDepartmentDetail = true
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .scrollIndicators(.visible)
+            .scrollIndicatorsFlash(onAppear: false)
+            // Scroll hint (left chevron) to indicate horizontal scroll
+            HStack { 
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(6)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .padding(.leading, 6)
+                Spacer()
+            }
+            .allowsHitTesting(false)
+        }
+    }
+    
     var body: some View {
         List {
             ForEach(phases) { phase in
                 Section {
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                        // Phase Header with date, In Progress badge, and + icon
-                        HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
-                            HStack(spacing: 8) {
-                                VStack{
-                                    HStack{
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            TruncatedTextWithTooltip(
-                                                phase.name,
-                                                font: DesignSystem.Typography.headline,
-                                                foregroundColor: .primary,
-                                                lineLimit: 1
-                                            )
-
-                                            if phaseTimelineText(phase) != "" {
-                                                HStack(spacing: 6) {
-                                                    Image(systemName: "calendar")
-                                                        .font(.caption2)
-                                                        .foregroundColor(.secondary)
-                                                        .accessibilityHidden(true)
-                                                    Text(phaseTimelineText(phase))
-                                                        .font(DesignSystem.Typography.caption1)
-                                                        .foregroundColor(.secondary)
-                                                }
-                                            }
-                                        }
-                                        
-                                        if role == .ADMIN {
-                                            Button {
-                                                HapticManager.selection()
-                                                phaseToEdit = phase
-                                            } label: {
-                                                Image(systemName: "pencil.circle.fill")
-                                                    .font(.system(size: 18, weight: .medium))
-                                                    .foregroundColor(.accentColor)
-                                                    .accessibilityLabel("Edit phase")
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    
-                                    if let phaseBudget = phaseBudgetMap[phase.id] {
-                                        HStack {
-                                            Text("Total")
-                                                .font(.caption)
-                                                .fontWeight(.semibold)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(Color.purple.opacity(0.15))
-                                                .foregroundColor(.purple)
-                                                .cornerRadius(8)
-
-                                            Spacer(minLength: 8)
-
-                                            Text(Int(phaseBudget.totalBudget).formattedCurrency)
-                                                .font(.headline)
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.purple)
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
-                                        .background(Color.purple.opacity(0.08))
-                                        .cornerRadius(12)
-
-                                    }
-                                }
-                                Spacer()
-                                
-                                VStack() {
-                                    
-                                    // Only show "In Progress" badge if phase is in progress AND enabled
-                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                        Text("Active")
-                                            .font(DesignSystem.Typography.caption2)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.green)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
-                                            .background(Color.green.opacity(0.12))
-                                            .clipShape(Capsule())
-                                            .accessibilityLabel("Phase status: In Progress")
-                                    }
-                                    
-                                    // Extension Badge - Show if phase has accepted extension
-                                    if phaseExtensionMap[phase.id] == true {
-                                        HStack(spacing: 4) {
-//                                            Image(systemName: "arrow.clockwise.circle.fill")
-//                                                .font(.caption2)
-                                            Text("Extended")
-                                                .font(.caption2)
-                                                .fontWeight(.semibold)
-                                                .scaleEffect(0.8)
-
-                                        }
-                                        .foregroundColor(.orange)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 2)
-                                        .background(Color.orange.opacity(0.12))
-                                        .clipShape(Capsule())
-                                        .accessibilityLabel("Phase extended via accepted request")
-                                    }
-                                }
-
-                                    if role == .ADMIN {
-                                        // Enable toggle (always visible in All Phases for admins)
-                                        Toggle("", isOn: Binding(
-                                            get: { phaseEnabledMap[phase.id] ?? false },
-                                            set: { newValue in
-                                                phaseEnabledMap[phase.id] = newValue
-                                                if let projectId = project?.id,
-                                                   let customerId = Auth.auth().currentUser?.uid {
-                                                    FirebasePathHelper.shared
-                                                        .phasesCollection(customerId: customerId, projectId: projectId)
-                                                        .document(phase.id)
-                                                        .updateData([
-                                                            "isEnabled": newValue,
-                                                            "updatedAt": Timestamp()
-                                                        ])
-                                                }
-                                            }
-                                        ))
-                                        .labelsHidden()
-                                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                        .scaleEffect(0.85)
-        //                                .padding(.leading, 6)
-
-                                        Button {
-                                            HapticManager.selection()
-                                            phaseForDepartmentAdd = phase
-                                        } label: {
-                                            Image(systemName: "plus.circle.fill")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.accentColor)
-                                                .accessibilityLabel("Add department to this phase")
-                                        }
-                                        .buttonStyle(.plain)
-                                        .padding(.leading, 6)
-                                        .padding(.vertical, 2)
-                                    }
-                            }
-                        }
-                        
-                        // Phase Budget Summary
-                        if let phaseBudget = phaseBudgetMap[phase.id] {
-                            HStack(spacing: DesignSystem.Spacing.medium) {
-                                // Total Budget
-//                                VStack(alignment: .leading, spacing: 4) {
-//                                    Text("Total Budget")
-//                                        .font(DesignSystem.Typography.caption1)
-//                                        .foregroundColor(.secondary)
-//                                    Text(Int(phaseBudget.totalBudget).formattedCurrency)
-//                                        .font(DesignSystem.Typography.subheadline)
-//                                        .fontWeight(.semibold)
-//                                        .foregroundColor(.primary)
-//                                }
-//                                
-//                                Spacer()
-                                
-                                // Approved Amount
-                                VStack(alignment: .center, spacing: 4) {
-                                    Text("Approved")
-                                        .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
-                                    Text(Int(phaseBudget.spent).formattedCurrency)
-                                        .font(DesignSystem.Typography.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.blue)
-                                }
-                                
-                                Spacer()
-                                
-                                // Remaining Amount
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text("Remaining")
-                                        .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
-                                    Text(Int(phaseBudget.remaining).formattedCurrency)
-                                        .font(DesignSystem.Typography.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(phaseBudget.remaining >= 0 ? .green : .red)
-                                }
-                            }
-                            .padding(.horizontal, DesignSystem.Spacing.small)
-                            .padding(.vertical, DesignSystem.Spacing.small)
-                            .background(Color(.tertiarySystemFill).opacity(0.5))
-                            .cornerRadius(DesignSystem.CornerRadius.small)
-                        }
-                        
-                        // Departments scroller
-                        ZStack(alignment: .leading) {
-                            // Card background for the horizontal scroller
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.secondarySystemGroupedBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color(.systemGray5), lineWidth: 0.5)
-                                )
-                            // Horizontal scroller
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                HStack(spacing: 12) {
-                                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
-                                        DepartmentMiniCard(
-                                            title: dept,
-                                            amount: amount,
-                                            spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
-                                            onTap: {
-                                                selectedDepartment = DepartmentSelection(name: dept, phaseId: phase.id)
-                                                // Small delay to ensure state is set before showing sheet
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                    showingDepartmentDetail = true
-                                                }
-                                            }
-                                        )
-                                    }
-                                    
-                                    // Add "Other" department card for anonymous expenses
-                                    if let anonymousSpent = phaseAnonymousExpensesMap[phase.id], anonymousSpent > 0 {
-                                        OtherDepartmentCard(
-                                            spent: anonymousSpent,
-                                            onTap: {
-                                                selectedDepartment = DepartmentSelection(name: "Other", phaseId: phase.id)
-                                                // Small delay to ensure state is set before showing sheet
-//                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                    showingDepartmentDetail = true
-//                                                }
-                                            }
-                                        )
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                            }
-                            .scrollIndicators(.visible)
-                            .scrollIndicatorsFlash(onAppear: false)
-                            // Scroll hint (left chevron) to indicate horizontal scroll
-                            HStack { 
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(6)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                                    .padding(.leading, 6)
-                                Spacer()
-                            }
-                            .allowsHitTesting(false)
-                        }
-                    }
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowBackground(Color.clear)
+                    phaseRowView(phase: phase)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
                 }
             }
         }
@@ -2804,7 +2855,8 @@ private struct AllPhasesView: View {
                     projectId: projectId,
                     role: role,
                     phoneNumber: phoneNumber,
-                    phaseId: selection.phaseId
+                    phaseId: selection.phaseId,
+                    stateManager: stateManager
                 )
                 .presentationDetents([.large])
             }
@@ -3073,20 +3125,22 @@ struct ActionMenuButton: View {
 // MARK: - Total Budget Card
 struct TotalBudgetCard: View {
     @ObservedObject var viewModel: DashboardViewModel
+    @ObservedObject var stateManager: DashboardStateManager
+    
+    // Use state manager values for immediate updates, fallback to viewModel
+    private var totalBudget: Double {
+        stateManager.totalProjectBudget > 0 ? stateManager.totalProjectBudget : viewModel.departmentBudgets.reduce(0) { $0 + $1.totalBudget }
+    }
+    
+    private var remainingBudget: Double {
+        let totalSpent = stateManager.totalProjectSpent > 0 ? stateManager.totalProjectSpent : viewModel.totalApprovedExpenses
+        return totalBudget - totalSpent
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            //            HStack {
-            //                Image(systemName: "indianrupeesign.circle.fill")
-            //                    .font(DesignSystem.Typography.title3)
-            //                    .foregroundColor(.orange)
-            //                    .symbolRenderingMode(.hierarchical)
-            //
-            //                Spacer()
-            //            }
-            
             VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.totalProjectBudgetFormatted)
+                Text(totalBudget.formattedCurrency)
                     .font(DesignSystem.Typography.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
@@ -3100,9 +3154,9 @@ struct TotalBudgetCard: View {
                     .foregroundColor(.secondary)
                 
                 // Remaining amount
-                Text("Remaining: \(Double(viewModel.remainingBudget).formattedCurrency)")
+                Text("Remaining: \(remainingBudget.formattedCurrency)")
                     .font(DesignSystem.Typography.caption1)
-                    .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
+                    .foregroundColor(remainingBudget >= 0 ? .green : .red)
                     .fontWeight(.medium)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)

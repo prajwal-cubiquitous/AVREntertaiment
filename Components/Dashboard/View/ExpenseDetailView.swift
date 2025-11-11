@@ -10,6 +10,7 @@ import FirebaseFirestore
 
 struct ExpenseDetailView: View {
     let expense: Expense
+    let stateManager: DashboardStateManager?
     @Environment(\.dismiss) private var dismiss
     @State private var remark: String = ""
     @State private var showingActionSheet = false
@@ -28,8 +29,9 @@ struct ExpenseDetailView: View {
     private let currentUserPhone: String
     private let currentUserRole: UserRole
     
-    init(expense: Expense, role: UserRole? = nil) {
+    init(expense: Expense, role: UserRole? = nil, stateManager: DashboardStateManager? = nil) {
         self.expense = expense
+        self.stateManager = stateManager
         self.currentUserPhone = UserDefaults.standard.string(forKey: "currentUserPhone") ?? ""
         self.currentUserRole = role ?? .USER
     }
@@ -722,7 +724,36 @@ struct ExpenseDetailView: View {
                         
                         try await expenseRef.updateData(updateData)
                         
+                        // Update state manager immediately for instant UI updates
                         await MainActor.run {
+                            // Update state manager directly if available
+                            if let stateManager = stateManager,
+                               let phaseId = expense.phaseId,
+                               let oldStatus = ExpenseStatus(rawValue: expense.status.rawValue) {
+                                stateManager.updateExpenseStatus(
+                                    expenseId: expenseId,
+                                    phaseId: phaseId,
+                                    department: expense.department,
+                                    oldStatus: oldStatus,
+                                    newStatus: status,
+                                    amount: expense.amount
+                                )
+                            }
+                            
+                            // Also post notification for other listeners
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("ExpenseStatusUpdated"),
+                                object: nil,
+                                userInfo: [
+                                    "expenseId": expenseId,
+                                    "phaseId": expense.phaseId as Any,
+                                    "department": expense.department,
+                                    "oldStatus": expense.status.rawValue,
+                                    "newStatus": status.rawValue,
+                                    "amount": expense.amount
+                                ]
+                            )
+                            
                             isProcessing = false
                             successMessage = "Expense \(status.rawValue.lowercased()) successfully"
                             showingSuccessAlert = true

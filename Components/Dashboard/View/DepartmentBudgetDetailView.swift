@@ -32,16 +32,18 @@ struct DepartmentBudgetDetailView: View {
     let role: UserRole?
     let phoneNumber: String
     let phaseId: String?
+    @ObservedObject var stateManager: DashboardStateManager
     @StateObject private var viewModel: DepartmentBudgetDetailViewModel
     @Environment(\.dismiss) private var dismiss
     
-    init(department: String, projectId: String, role: UserRole?, phoneNumber: String, phaseId: String? = nil) {
+    init(department: String, projectId: String, role: UserRole?, phoneNumber: String, phaseId: String? = nil, stateManager: DashboardStateManager) {
         self.department = department
         self.projectId = projectId
         self.role = role
         self.phoneNumber = phoneNumber
         self.phaseId = phaseId
-        self._viewModel = StateObject(wrappedValue: DepartmentBudgetDetailViewModel(phaseId: phaseId))
+        self.stateManager = stateManager
+        self._viewModel = StateObject(wrappedValue: DepartmentBudgetDetailViewModel(phaseId: phaseId, stateManager: stateManager))
     }
     @State private var selectedFilter: ExpenseStatus? = nil
     @State private var searchText = ""
@@ -190,6 +192,16 @@ struct DepartmentBudgetDetailView: View {
             selectedFilter = nil
             viewModel.loadExpenses(for: department, projectId: projectId)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
+            // Reload expenses when status changes to reflect updated data
+            if let userInfo = notification.userInfo,
+               let departmentName = userInfo["department"] as? String,
+               departmentName == department {
+                Task {
+                    await viewModel.loadExpenses(for: department, projectId: projectId)
+                }
+            }
+        }
         .sheet(isPresented: $showingExpenseChat) {
             if let expense = selectedExpenseForChat {
                 ExpenseChatView(
@@ -203,7 +215,7 @@ struct DepartmentBudgetDetailView: View {
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpenseForDetail {
                 if expense.status == .pending {
-                    ExpenseDetailView(expense: expense, role: role)
+                    ExpenseDetailView(expense: expense, role: role, stateManager: stateManager)
                 } else {
                     ExpenseDetailReadOnlyView(expense: expense)
                 }
@@ -232,6 +244,21 @@ struct DepartmentBudgetDetailView: View {
                 currentBudget: viewModel.totalBudget,
                 onSave: { newBudget in
                     Task {
+                        // Update state immediately
+                        if let phaseId = phaseId {
+                            stateManager.updateDepartmentBudget(phaseId: phaseId, department: department, newBudget: newBudget)
+                        } else {
+                            // Update all phases that contain this department
+                            for phase in stateManager.allPhases {
+                                if phase.departments.keys.contains(where: { $0 == department || $0.hasSuffix("_\(department)") }) {
+                                    // Calculate proportional budget
+                                    let currentTotal = stateManager.departmentBudgets[department]?.total ?? 0
+                                    let proportion = currentTotal > 0 ? (phase.departments[department] ?? 0) / currentTotal : 1.0 / Double(stateManager.allPhases.filter { $0.departments.keys.contains(where: { $0 == department || $0.hasSuffix("_\(department)") }) }.count)
+                                    stateManager.updateDepartmentBudget(phaseId: phase.id, department: department, newBudget: newBudget * proportion)
+                                }
+                            }
+                        }
+                        
                         await viewModel.updateDepartmentBudget(
                             department: department,
                             projectId: projectId,
@@ -259,6 +286,18 @@ struct DepartmentBudgetDetailView: View {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
                 Task {
+                    // Update state immediately before Firebase deletion
+                    if let phaseId = phaseId {
+                        stateManager.removeDepartmentFromPhase(phaseId: phaseId, department: department)
+                    } else {
+                        // Remove from all phases
+                        for phase in stateManager.allPhases {
+                            if phase.departments.keys.contains(where: { $0 == department || $0.hasSuffix("_\(department)") }) {
+                                stateManager.removeDepartmentFromPhase(phaseId: phase.id, department: department)
+                            }
+                        }
+                    }
+                    
                     await viewModel.deleteDepartment(
                         department: department,
                         projectId: projectId
@@ -317,7 +356,9 @@ struct DepartmentBudgetDetailView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        Text(department != "Other" ? viewModel.totalBudgetFormatted : "N/A")
+                        // Use state manager value if available for immediate updates
+                        let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
+                        Text(department != "Other" ? budgetValue.formattedCurrency : "N/A")
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
@@ -334,7 +375,9 @@ struct DepartmentBudgetDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            Text(viewModel.totalSpentFormatted)
+                            // Use state manager value if available for immediate updates
+                            let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                            Text(spentValue.formattedCurrency)
                                 .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.blue)
@@ -349,10 +392,14 @@ struct DepartmentBudgetDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            Text(department != "Other" ? viewModel.remainingBudgetFormatted : "N/A")
+                            // Use state manager value if available for immediate updates
+                            let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
+                            let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                            let remainingValue = budgetValue - spentValue
+                            Text(department != "Other" ? remainingValue.formattedCurrency : "N/A")
                                 .font(.title3)
                                 .fontWeight(.bold)
-                                .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
+                                .foregroundColor(remainingValue >= 0 ? .green : .red)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                                 .multilineTextAlignment(.trailing)
@@ -385,7 +432,11 @@ struct DepartmentBudgetDetailView: View {
                     
                     Spacer()
                     
-                    Text("\(Int(viewModel.budgetUtilizationPercentage))%")
+                    // Use state manager value if available for immediate updates
+                    let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
+                    let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                    let utilizationPercentage = budgetValue > 0 ? (spentValue / budgetValue) * 100 : 0
+                    Text("\(Int(utilizationPercentage))%")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
@@ -397,16 +448,22 @@ struct DepartmentBudgetDetailView: View {
                             .fill(Color(.systemGray5))
                             .frame(height: 8)
                         
+                        // Use state manager value if available for immediate updates
+                        let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
+                        let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                        let remainingValue = budgetValue - spentValue
+                        let utilizationPercentage = budgetValue > 0 ? (spentValue / budgetValue) * 100 : 0
+                        
                         RoundedRectangle(cornerRadius: 4)
                             .fill(
                                 LinearGradient(
-                                    colors: viewModel.remainingBudget >= 0 ? [.green, .blue] : [.red, .orange],
+                                    colors: remainingValue >= 0 ? [.green, .blue] : [.red, .orange],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
                             )
-                            .frame(width: geometry.size.width * CGFloat(min(viewModel.budgetUtilizationPercentage / 100, 1.0)), height: 8)
-                            .animation(.easeInOut(duration: 1.0), value: viewModel.budgetUtilizationPercentage)
+                            .frame(width: geometry.size.width * CGFloat(min(utilizationPercentage / 100, 1.0)), height: 8)
+                            .animation(.easeInOut(duration: 1.0), value: utilizationPercentage)
                     }
                 }
                 .frame(height: 8)
@@ -972,9 +1029,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
     @Published var phasesWithOnlyThisDepartment: [(id: String, name: String)] = [] // Phases with only this department
     
     let phaseId: String? // Store the phaseId passed from the view
+    weak var stateManager: DashboardStateManager? // Weak reference to avoid retain cycles
     
-    init(phaseId: String? = nil) {
+    init(phaseId: String? = nil, stateManager: DashboardStateManager? = nil) {
         self.phaseId = phaseId
+        self.stateManager = stateManager
     }
     
     var remainingBudget: Double {
@@ -1158,6 +1217,23 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     self.phaseIds = phaseIdsWithDepartment
                     self.phasesWithOnlyThisDepartment = phasesOnlyWithThisDepartment
                     self.isLoading = false
+                    
+                    // Sync with state manager if available
+                    if let stateManager = stateManager {
+                        // Update department spent in state manager for all phases containing this department
+                        for phaseIdWithDept in phaseIdsWithDepartment {
+                            if stateManager.phaseDepartmentSpentMap[phaseIdWithDept] == nil {
+                                stateManager.phaseDepartmentSpentMap[phaseIdWithDept] = [:]
+                            }
+                            // Calculate spent for this specific phase
+                            let phaseSpent = loadedExpenses
+                                .filter { $0.status == .approved && $0.phaseId == phaseIdWithDept }
+                                .reduce(0) { $0 + $1.amount }
+                            stateManager.phaseDepartmentSpentMap[phaseIdWithDept]?[department] = phaseSpent
+                        }
+                        // Recalculate project totals
+                        stateManager.recalculateProjectTotals()
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -1514,7 +1590,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
         projectId: "128YgC7uVnge9RLxVrgG",
         role: .APPROVER,
         phoneNumber: "9876543218",
-        phaseId: nil
+        phaseId: nil,
+        stateManager: DashboardStateManager()
     )
 }
 
