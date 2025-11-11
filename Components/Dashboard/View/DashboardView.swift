@@ -3091,6 +3091,9 @@ struct TotalBudgetCard: View {
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                     .contentTransition(.numericText())
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: false)
                 
                 Text("Total Budget")
                     .font(DesignSystem.Typography.subheadline)
@@ -3101,11 +3104,14 @@ struct TotalBudgetCard: View {
                     .font(DesignSystem.Typography.caption1)
                     .foregroundColor(viewModel.remainingBudget >= 0 ? .green : .red)
                     .fontWeight(.medium)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .fixedSize(horizontal: false, vertical: false)
             }
         }
         .padding(DesignSystem.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 100)
+        .frame(minHeight: 100)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
