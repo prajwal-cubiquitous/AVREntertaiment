@@ -22,6 +22,7 @@ struct ProjectListView: View {
     @StateObject var viewModel: ProjectListViewModel
     @EnvironmentObject var navigationManager: NavigationManager
     @EnvironmentObject var authService: FirebaseAuthService
+    @Environment(\.scenePhase) private var scenePhase
     let role: UserRole
     
     init(phoneNumber: String = "", role: UserRole = .APPROVER, customerId: String? = nil) {
@@ -231,6 +232,14 @@ struct ProjectListView: View {
                 loadTempApproverStatuses()
             }
             loadBusinessName()
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            // Check project statuses when app becomes active
+            if newPhase == .active && oldPhase != .active {
+                Task {
+                    await viewModel.checkAndUpdateProjectStatuses()
+                }
+            }
         }
         .sheet(isPresented: $viewModel.showingFullNotifications) {
             NotificationView(viewModel: viewModel)

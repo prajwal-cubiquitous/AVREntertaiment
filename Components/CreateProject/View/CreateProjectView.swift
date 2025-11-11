@@ -264,6 +264,23 @@ struct CreateProjectView: View {
                 }
                 .id("location")
                 
+                // Planned Date
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Planned Start Date")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    
+                    Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+                }
+                .id("plannedDate")
+                
                 // Currency Picker (currently only INR)
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                     Text("Currency")
@@ -549,6 +566,26 @@ struct CreateProjectView: View {
                 Divider()
                 
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    Text("Planned Start Date")
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                    
+                    DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    
+                    Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+                }
+                .id("plannedDate")
+                .padding(.horizontal, DesignSystem.Spacing.medium)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                     Text("Currency")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
@@ -674,13 +711,14 @@ struct CreateProjectView: View {
                         items: viewModel.filteredProjectTeamMembers(),
                         itemContent: { user in
                             TruncatedTextWithTooltip(
-                                "\(user.name) - \(user.phoneNumber)",
+                                "\((user.name.count > 25 ? String(user.name.prefix(25)) + "..." : user.name)) - \(user.phoneNumber)",
                                 font: .body,
                                 foregroundColor: .primary,
                                 lineLimit: 1
                             )
                         },
                         onSelect: { member in
+                            HapticManager.selection()
                             viewModel.selectedProjectTeamMembers.insert(member)
                             viewModel.projectTeamMemberSearchText = ""
                         }
@@ -1181,11 +1219,13 @@ struct SingleSelectionPicker: View {
             
             ForEach(users.sorted(by: { $0.name < $1.name })) { user in
                 Button(action: {
+                    HapticManager.selection()
                     selectedUser = user
                 }) {
                     HStack {
+                        let truncatedName = user.name.count > 25 ? String(user.name.prefix(25)) + "..." : user.name
                         TruncatedTextWithTooltip(
-                            "\(user.name) - \(user.email ?? user.phoneNumber)",
+                            "\(truncatedName) - \(user.email ?? user.phoneNumber)",
                             font: .body,
                             foregroundColor: .primary,
                             lineLimit: 1
@@ -1198,12 +1238,19 @@ struct SingleSelectionPicker: View {
             }
         } label: {
             HStack {
-                TruncatedTextWithTooltip(
-                    selectedUser?.name ?? placeholder,
-                    font: .body,
-                    foregroundColor: selectedUser == nil ? .secondary : .primary,
-                    lineLimit: 1
-                )
+                if let selectedUser = selectedUser {
+                    let truncatedName = selectedUser.name.count > 25 ? String(selectedUser.name.prefix(25)) + "..." : selectedUser.name
+                    TruncatedTextWithTooltip(
+                        truncatedName,
+                        font: .body,
+                        foregroundColor: .primary,
+                        lineLimit: 1
+                    )
+                } else {
+                    Text(placeholder)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
                 Image(systemName: "chevron.down")
                     .font(.caption)
@@ -1222,37 +1269,57 @@ struct SearchableDropdownView<Content: View>: View {
     let items: [User]
     let itemContent: (User) -> Content
     let onSelect: (User) -> Void
+    @FocusState private var isSearchFocused: Bool
     
     var body: some View {
         VStack(alignment: .leading) {
             TextField(title, text: $searchText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                .focused($isSearchFocused)
                 .overlay(alignment: .trailing) {
                     if !searchText.isEmpty {
-                        Button(action: { searchText = "" }) {
+                        Button(action: { 
+                            searchText = ""
+                            isSearchFocused = true
+                        }) {
                             Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                         }.padding(.trailing, 8)
                     }
                 }
+                .onTapGesture {
+                    isSearchFocused = true
+                }
             
-            if !items.isEmpty && !searchText.isEmpty {
-                ScrollView(.vertical) {
+            // Show dropdown when focused or when there's search text
+            if !items.isEmpty && (isSearchFocused || !searchText.isEmpty) {
+                ScrollView(.vertical, showsIndicators: true) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(items) { item in
-                            Button(action: { onSelect(item) }) {
-                                itemContent(item)
-                                    .padding(.vertical, 10).padding(.horizontal)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            Button(action: { 
+                                HapticManager.selection()
+                                onSelect(item)
+                                isSearchFocused = false
+                            }) {
+                                HStack {
+                                    itemContent(item)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 12)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .background(Color.clear)
                             Divider()
                         }
                     }
                 }
-                .frame(maxHeight: 150)
+                .frame(maxHeight: 200)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(8)
-                .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .zIndex(1000)
             }
         }
     }
@@ -1262,15 +1329,22 @@ struct TagView: View {
     let user: User
     let onRemove: () -> Void
     
+    private var truncatedName: String {
+        user.name.count > 25 ? String(user.name.prefix(25)) + "..." : user.name
+    }
+    
     var body: some View {
         HStack(spacing: 4) {
             TruncatedTextWithTooltip(
-                user.name,
+                truncatedName,
                 font: .caption,
                 foregroundColor: .primary,
                 lineLimit: 1
             )
-            Button(action: onRemove) {
+            Button(action: {
+                HapticManager.selection()
+                onRemove()
+            }) {
                 Image(systemName: "xmark")
                     .font(.caption).foregroundColor(.primary)
                     .padding(4).background(Color.black.opacity(0.1)).clipShape(Circle())

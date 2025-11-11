@@ -145,6 +145,11 @@ class ProjectListViewModel: ObservableObject {
             self.projects = loadedProjects.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
             self.isLoading = false
             
+            // Check and update project statuses based on planned date
+            Task {
+                await self.checkAndUpdateProjectStatuses()
+            }
+            
             // Update TempApprover statuses for all projects
             Task {
                 await self.updateTempApproverStatusesForAllProjects()
@@ -153,6 +158,52 @@ class ProjectListViewModel: ObservableObject {
             // Fetch pending expenses for notifications
             Task {
                 await self.fetchPendingExpenses()
+            }
+        }
+    }
+    
+    // MARK: - Project Status Update Based on Planned Date
+    
+    /// Checks all projects and updates status from DRAFT to ACTIVE if planned date has arrived
+    func checkAndUpdateProjectStatuses() async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in checkAndUpdateProjectStatuses")
+            return
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        for project in projects {
+            // Only check projects that are in DRAFT status
+            guard project.statusType == .DRAFT,
+                  let projectId = project.id,
+                  let plannedDateStr = project.plannedDate,
+                  let plannedDate = dateFormatter.date(from: plannedDateStr) else {
+                continue
+            }
+            
+            let planned = calendar.startOfDay(for: plannedDate)
+            
+            // If planned date is today or in the past, update status to ACTIVE
+            if planned <= today {
+                do {
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData([
+                            "status": ProjectStatus.ACTIVE.rawValue,
+                            "updatedAt": Timestamp()
+                        ])
+                    
+                    print("✅ Updated project \(project.name ?? "Unknown") from DRAFT to ACTIVE (planned date: \(plannedDateStr))")
+                    
+                    // Post notification to refresh project list
+                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                } catch {
+                    print("❌ Error updating project status: \(error.localizedDescription)")
+                }
             }
         }
     }

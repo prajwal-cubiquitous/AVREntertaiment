@@ -44,6 +44,7 @@ class CreateProjectViewModel: ObservableObject {
     @Published var projectDescription: String = ""
     @Published var client: String = ""
     @Published var location: String = ""
+    @Published var plannedDate: Date = Date() // Planned start date - project becomes ACTIVE when this date arrives
     @Published var currency: String = "INR" // Only INR exposed in UI for now
     @Published var phases: [PhaseItem] = {
         var initialPhase = PhaseItem(phaseNumber: 1)
@@ -124,12 +125,18 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     func filteredProjectTeamMembers() -> [User] {
-        if projectTeamMemberSearchText.isEmpty { return [] }
         return allUsers.filter { user in
             let isNotSelected = !selectedProjectTeamMembers.contains(user)
-            let matches = user.name.localizedCaseInsensitiveContains(projectTeamMemberSearchText) ||
-                          user.phoneNumber.localizedCaseInsensitiveContains(projectTeamMemberSearchText)
-            return user.isActive && isNotSelected && matches
+            let isActive = user.isActive
+            // If search text is empty, show all (filtered by selection and active status)
+            // If search text exists, also filter by search
+            if projectTeamMemberSearchText.isEmpty {
+                return isActive && isNotSelected
+            } else {
+                let matches = user.name.localizedCaseInsensitiveContains(projectTeamMemberSearchText) ||
+                              user.phoneNumber.localizedCaseInsensitiveContains(projectTeamMemberSearchText)
+                return isActive && isNotSelected && matches
+            }
         }
     }
     
@@ -352,6 +359,12 @@ class CreateProjectViewModel: ObservableObject {
         return nil
     }
     
+    var plannedDateError: String? {
+        guard shouldShowValidationErrors else { return nil }
+        // Planned date is required
+        return nil // No validation needed as DatePicker always has a value
+    }
+    
     var projectManagersError: String? {
         guard shouldShowValidationErrors else { return nil }
         if selectedProjectManager == nil {
@@ -449,6 +462,8 @@ class CreateProjectViewModel: ObservableObject {
         if location.trimmingCharacters(in: .whitespaces).isEmpty {
             return "location"
         }
+        
+        // Check planned date (always has a value from DatePicker, but we can add validation if needed)
         
         // Check description
         if projectDescription.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -693,6 +708,18 @@ class CreateProjectViewModel: ObservableObject {
                 // Use customer-specific projects collection
                 let docRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId).document()
                 
+                // Format planned date
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                let plannedDateStr = dateFormatter.string(from: plannedDate)
+                
+                // Determine initial status based on planned date
+                // If planned date is today or in the past, set to ACTIVE, otherwise DRAFT
+                let calendar = Calendar.current
+                let today = calendar.startOfDay(for: Date())
+                let planned = calendar.startOfDay(for: plannedDate)
+                let initialStatus = planned <= today ? ProjectStatus.ACTIVE.rawValue : ProjectStatus.DRAFT.rawValue
+                
                 let projectData = Project(
                     id: docRef.documentID,
                     name: projectName,
@@ -701,9 +728,10 @@ class CreateProjectViewModel: ObservableObject {
                     location: location,
                     currency: currency,
                     budget: totalBudget,
-                    status: ProjectStatus.DRAFT.rawValue,
+                    status: initialStatus,
                     startDate: nil, // Removed from main project
                     endDate: nil, // Removed from main project
+                    plannedDate: plannedDateStr,
                     teamMembers: Array(allTeamMembers),
                     managerIds: managerIds,
                     tempApproverID: nil,
@@ -716,8 +744,7 @@ class CreateProjectViewModel: ObservableObject {
                 try await docRef.setData(from: projectData)
                 
                 // Save phases in subcollection
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "dd/MM/yyyy"
+                // Reuse the dateFormatter already created above
                 
                 for phase in phases {
                     let phaseRef = docRef.collection("phases").document()
@@ -1063,6 +1090,7 @@ class CreateProjectViewModel: ObservableObject {
         projectDescription = ""
         client = ""
         location = ""
+        plannedDate = Date()
         currency = "INR"
         selectedProjectManager = nil
         selectedProjectTeamMembers = []
