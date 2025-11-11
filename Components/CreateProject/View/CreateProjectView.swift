@@ -20,6 +20,7 @@ struct CreateProjectView: View {
     @State private var showingFileViewer = false
     @State private var showingCamera = false
     @State private var expandedPhaseIds: Set<UUID> = [] // Track which phases are expanded
+    @State private var showingClearFormConfirmation = false
     
     let currencies = [
         ("₹ Indian Rupee", "INR"),
@@ -32,7 +33,10 @@ struct CreateProjectView: View {
         NavigationView {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: DesignSystem.Spacing.large) {
+                    VStack(spacing: DesignSystem.Spacing.medium) {
+                        // MARK: - Draft Management Section
+                        draftManagementSection
+                        
                         // MARK: - Project Information
                         projectDetailsSectionScrollView
                         
@@ -64,6 +68,23 @@ struct CreateProjectView: View {
                         }
                         .foregroundColor(.secondary)
                     }
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        if viewModel.hasAnyData {
+                            Button(action: {
+                                HapticManager.selection()
+                                viewModel.saveDraft()
+                            }) {
+                                if viewModel.isSavingDraft {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Label("Save Draft", systemImage: "square.and.arrow.down")
+                                }
+                            }
+                            .disabled(viewModel.isSavingDraft)
+                        }
+                    }
                 }
                 .onAppear {
                     viewModel.setAuthService(authService)
@@ -76,6 +97,10 @@ struct CreateProjectView: View {
                     // If no phases are expanded, expand the first one by default
                     if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
                         expandedPhaseIds = [firstPhaseId]
+                    }
+                    // Load drafts
+                    Task {
+                        await viewModel.loadDrafts()
                     }
                 }
                 .onChange(of: expandedPhaseIds) { oldValue, newValue in
@@ -96,6 +121,17 @@ struct CreateProjectView: View {
                         // If no phases are expanded, expand the first one
                         if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
                             expandedPhaseIds = [firstPhaseId]
+                        }
+                    }
+                }
+                .onChange(of: viewModel.restoredExpandedPhaseIds) { oldValue, newValue in
+                    // Reset expanded phases when form is cleared (restoredExpandedPhaseIds becomes empty)
+                    if newValue.isEmpty && !oldValue.isEmpty {
+                        // Form was reset, expand first phase
+                        if let firstPhaseId = viewModel.phases.first?.id {
+                            expandedPhaseIds = [firstPhaseId]
+                        } else {
+                            expandedPhaseIds = []
                         }
                     }
                 }
@@ -136,6 +172,15 @@ struct CreateProjectView: View {
                     }
                 } message: {
                     Text(viewModel.alertMessage)
+                }
+                .confirmationDialog("Clear Form", isPresented: $showingClearFormConfirmation, titleVisibility: .visible) {
+                    Button("Clear Form", role: .destructive) {
+                        HapticManager.impact(.medium)
+                        viewModel.clearFormAndLocalStorage()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This will clear all form fields and remove auto-saved data from local storage. This action cannot be undone.")
                 }
                 .confirmationDialog("Select Attachment", isPresented: $viewModel.showingAttachmentOptions, titleVisibility: .visible) {
                     Button("Camera") {
@@ -206,7 +251,68 @@ struct CreateProjectView: View {
                     }
                     .presentationDetents([.large])
                 }
+                .sheet(isPresented: $viewModel.showDraftList) {
+                    DraftProjectListView(viewModel: viewModel)
+                }
             }
+        }
+    }
+    
+    // MARK: - Draft Management Section
+    
+    @ViewBuilder
+    private var draftManagementSection: some View {
+        if !viewModel.drafts.isEmpty || viewModel.hasAnyData {
+            VStack(spacing: DesignSystem.Spacing.small) {
+                // View Drafts Button (only show if drafts exist)
+                if !viewModel.drafts.isEmpty {
+                    Button(action: {
+                        HapticManager.selection()
+                        viewModel.showDraftList = true
+                    }) {
+                        HStack {
+                            Image(systemName: "doc.text.fill")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("View Draft Project Creations")
+                                .font(DesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.vertical, DesignSystem.Spacing.small)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                    }
+                }
+                
+                // Clear Form Button (show when there's any data)
+                if viewModel.hasAnyData {
+                    Button(action: {
+                        HapticManager.selection()
+                        showingClearFormConfirmation = true
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 16, weight: .medium))
+                            Text("Clear Form & Local Storage")
+                                .font(DesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                            Spacer()
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.vertical, DesignSystem.Spacing.small)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                    }
+                }
+            }
+            .padding(.horizontal, DesignSystem.Spacing.medium)
+            .padding(.top, DesignSystem.Spacing.small)
         }
     }
     

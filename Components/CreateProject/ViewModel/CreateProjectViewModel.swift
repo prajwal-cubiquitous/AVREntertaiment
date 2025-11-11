@@ -77,6 +77,42 @@ struct CreateProjectFormState: Codable {
     var expandedPhaseIds: [String] // UUID strings of expanded phases
 }
 
+// Draft Project Model for Firestore
+struct DraftProject: Identifiable, Codable {
+    @DocumentID var id: String?
+    var formState: CreateProjectFormState
+    var createdAt: Timestamp
+    var updatedAt: Timestamp
+    
+    init(formState: CreateProjectFormState, id: String? = nil) {
+        self.id = id
+        self.formState = formState
+        self.createdAt = Timestamp()
+        self.updatedAt = Timestamp()
+    }
+    
+    // Custom Codable implementation to handle Date <-> Timestamp conversion
+    enum CodingKeys: String, CodingKey {
+        case id, formState, createdAt, updatedAt
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        formState = try container.decode(CreateProjectFormState.self, forKey: .formState)
+        createdAt = try container.decode(Timestamp.self, forKey: .createdAt)
+        updatedAt = try container.decode(Timestamp.self, forKey: .updatedAt)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encode(formState, forKey: .formState)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+}
+
 @MainActor // Ensures all UI updates happen on the main thread
 class CreateProjectViewModel: ObservableObject {
     
@@ -111,6 +147,9 @@ class CreateProjectViewModel: ObservableObject {
     @Published var alertMessage: String = ""
     @Published var errorMessage: String? = nil
     @Published var showSuccessMessage: Bool = false
+    @Published var isSavingDraft: Bool = false
+    @Published var showDraftList: Bool = false
+    @Published var drafts: [DraftProject] = []
     
     // MARK: - Attachment State
     @Published var attachmentURL: String?
@@ -311,6 +350,22 @@ class CreateProjectViewModel: ObservableObject {
         
         // Format according to Indian numbering system
         return formatIndianNumber(number)
+    }
+    
+    // MARK: - Check if form has any data
+    var hasAnyData: Bool {
+        !projectName.trimmingCharacters(in: .whitespaces).isEmpty ||
+        !projectDescription.trimmingCharacters(in: .whitespaces).isEmpty ||
+        !client.trimmingCharacters(in: .whitespaces).isEmpty ||
+        !location.trimmingCharacters(in: .whitespaces).isEmpty ||
+        selectedProjectManager != nil ||
+        !selectedProjectTeamMembers.isEmpty ||
+        phases.contains { phase in
+            !phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty ||
+            !phase.departments.isEmpty ||
+            phase.departments.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        } ||
+        attachmentURL != nil
     }
     
     var isFormValid: Bool {
@@ -1346,5 +1401,257 @@ class CreateProjectViewModel: ObservableObject {
         
         // Clear saved form state
         clearFormState()
+    }
+    
+    // MARK: - Draft Management
+    
+    func saveDraft() {
+        Task {
+            guard hasAnyData else {
+                alertMessage = "Please fill in at least one field before saving a draft"
+                showAlert = true
+                return
+            }
+            
+            guard let customerId = authService?.currentCustomerId else {
+                alertMessage = "Customer ID not found. Please log in again."
+                showAlert = true
+                return
+            }
+            
+            isSavingDraft = true
+            
+            do {
+                // Prepare form state for saving
+                let managerId = selectedProjectManager?.email ?? selectedProjectManager?.phoneNumber
+                let teamMemberIds = selectedProjectTeamMembers.map { $0.phoneNumber }
+                
+                // Update phases with manager/team IDs before saving
+                var phasesToSave = phases
+                for i in 0..<phasesToSave.count {
+                    phasesToSave[i].selectedManagerId = phasesToSave[i].selectedManager?.email ?? phasesToSave[i].selectedManager?.phoneNumber
+                    phasesToSave[i].selectedTeamMemberIds = Array(phasesToSave[i].selectedTeamMembers).map { $0.phoneNumber }
+                }
+                
+                let formState = CreateProjectFormState(
+                    projectName: projectName,
+                    projectDescription: projectDescription,
+                    client: client,
+                    location: location,
+                    plannedDate: plannedDate,
+                    currency: currency,
+                    allowTemplateOverrides: allowTemplateOverrides,
+                    phases: phasesToSave,
+                    selectedProjectManagerId: managerId,
+                    selectedProjectTeamMemberIds: teamMemberIds,
+                    attachmentURL: attachmentURL,
+                    attachmentName: attachmentName,
+                    expandedPhaseIds: restoredExpandedPhaseIds.map { $0.uuidString }
+                )
+                
+                var draft = DraftProject(formState: formState)
+                draft.updatedAt = Timestamp() // Update timestamp
+                
+                // Save to draft_projects collection
+                let draftRef = db.collection("customers")
+                    .document(customerId)
+                    .collection("draft_projects")
+                    .document()
+                
+                try await draftRef.setData(from: draft)
+                
+                // Update customer document with draft info (optional metadata)
+                let customerRef = db.collection("customers").document(customerId)
+                try await customerRef.updateData([
+                    "lastDraftUpdatedAt": Timestamp(),
+                    "hasDrafts": true
+                ])
+                
+                isSavingDraft = false
+                alertMessage = "Draft saved successfully!"
+                showAlert = true
+                
+                // Clear local storage and reset form
+                clearFormState()
+                resetFormAfterDraftSave()
+                
+                // Refresh drafts list
+                await loadDrafts()
+                
+            } catch {
+                isSavingDraft = false
+                alertMessage = "Failed to save draft: \(error.localizedDescription)"
+                showAlert = true
+            }
+        }
+    }
+    
+    // Reset form after saving draft (keeps initial phase)
+    private func resetFormAfterDraftSave() {
+        projectName = ""
+        projectDescription = ""
+        client = ""
+        location = ""
+        plannedDate = Date()
+        currency = "INR"
+        selectedProjectManager = nil
+        selectedProjectTeamMembers = []
+        projectManagerSearchText = ""
+        projectTeamMemberSearchText = ""
+        var initialPhase = PhaseItem(phaseNumber: 1)
+        initialPhase.hasStartDate = true
+        initialPhase.hasEndDate = true
+        phases = [initialPhase]
+        allowTemplateOverrides = false
+        errorMessage = nil
+        shouldShowValidationErrors = false
+        firstInvalidFieldId = nil
+        attachmentURL = nil
+        attachmentName = nil
+        uploadProgress = 0.0
+        restoredExpandedPhaseIds = []
+    }
+    
+    func loadDrafts() async {
+        guard let customerId = authService?.currentCustomerId else { return }
+        
+        do {
+            let querySnapshot = try await db.collection("customers")
+                .document(customerId)
+                .collection("draft_projects")
+                .order(by: "updatedAt", descending: true)
+                .getDocuments()
+            
+            var loadedDrafts: [DraftProject] = []
+            for document in querySnapshot.documents {
+                if let draft = try? document.data(as: DraftProject.self) {
+                    loadedDrafts.append(draft)
+                }
+            }
+            
+            await MainActor.run {
+                drafts = loadedDrafts
+            }
+        } catch {
+            await MainActor.run {
+                alertMessage = "Failed to load drafts: \(error.localizedDescription)"
+                showAlert = true
+            }
+        }
+    }
+    
+    func loadDraft(_ draft: DraftProject) {
+        let formState = draft.formState
+        
+        // Restore form fields
+        projectName = formState.projectName
+        projectDescription = formState.projectDescription
+        client = formState.client
+        location = formState.location
+        plannedDate = formState.plannedDate
+        currency = formState.currency
+        allowTemplateOverrides = formState.allowTemplateOverrides
+        phases = formState.phases
+        attachmentURL = formState.attachmentURL
+        attachmentName = formState.attachmentName
+        
+        // Restore expanded phase IDs
+        restoredExpandedPhaseIds = Set(formState.expandedPhaseIds.compactMap { UUID(uuidString: $0) })
+        
+        // Store IDs for restoration after users load
+        _restoreManagerId = formState.selectedProjectManagerId
+        _restoreTeamMemberIds = formState.selectedProjectTeamMemberIds
+        
+        // Restore team selections if users are already loaded
+        if !allApprovers.isEmpty && !allUsers.isEmpty {
+            restoreTeamSelections()
+        } else {
+            // Fetch users first, then restore
+            Task {
+                await fetchUsers()
+                restoreTeamSelections()
+            }
+        }
+        
+        // Clear local form state since we're loading from draft
+        clearFormState()
+    }
+    
+    func deleteDraft(_ draft: DraftProject) {
+        Task {
+            guard let customerId = authService?.currentCustomerId,
+                  let draftId = draft.id else { return }
+            
+            do {
+                try await db.collection("customers")
+                    .document(customerId)
+                    .collection("draft_projects")
+                    .document(draftId)
+                    .delete()
+                
+                await loadDrafts()
+                
+                await MainActor.run {
+                    alertMessage = "Draft deleted successfully"
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Failed to delete draft: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
+    }
+    
+    func clearFormAndLocalStorage() {
+        // Clear all form fields
+        resetFormAfterDraftSave()
+        
+        // Clear local storage (auto-save feature)
+        clearFormState()
+        
+        // Show success message
+        alertMessage = "Form and local storage cleared successfully"
+        showAlert = true
+    }
+    
+    func deleteAllDrafts() {
+        Task {
+            guard let customerId = authService?.currentCustomerId else { return }
+            
+            do {
+                let querySnapshot = try await db.collection("customers")
+                    .document(customerId)
+                    .collection("draft_projects")
+                    .getDocuments()
+                
+                // Delete all drafts in batch
+                let batch = db.batch()
+                for document in querySnapshot.documents {
+                    batch.deleteDocument(document.reference)
+                }
+                
+                try await batch.commit()
+                
+                // Update customer document
+                let customerRef = db.collection("customers").document(customerId)
+                try await customerRef.updateData([
+                    "hasDrafts": false
+                ])
+                
+                await loadDrafts()
+                
+                await MainActor.run {
+                    alertMessage = "All drafts cleared successfully"
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    alertMessage = "Failed to clear drafts: \(error.localizedDescription)"
+                    showAlert = true
+                }
+            }
+        }
     }
 }
