@@ -15,6 +15,7 @@ struct ProjectDetailView: View {
     // The view takes a single project object as input.
     var project: Project
     @StateObject private var notificationViewModel = NotificationViewModel()
+    @ObservedObject var stateManager: DashboardStateManager
     @State private var showingAddExpense = false
     @State private var showingChats = false
     @State private var showingNotifications = false
@@ -28,12 +29,18 @@ struct ProjectDetailView: View {
     @EnvironmentObject var authService: FirebaseAuthService
 
 
-    init(project: Project, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil){
+    init(project: Project, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil, stateManager: DashboardStateManager? = nil){
         self.project = project
         self.role = role
         self.phoneNumber = phoneNumber
         self.customerId = customerId
         self._viewModel = ObservedObject(wrappedValue: ProjectDetailViewModel(project: project, CurrentUserPhone: phoneNumber, customerId: customerId))
+        // Use provided state manager or create a new one
+        if let stateManager = stateManager {
+            self._stateManager = ObservedObject(wrappedValue: stateManager)
+        } else {
+            self._stateManager = ObservedObject(wrappedValue: DashboardStateManager())
+        }
     }
 
     var body: some View {
@@ -140,6 +147,14 @@ struct ProjectDetailView: View {
             viewModel.loadPhases()
             viewModel.fetchApprovedExpenses()
             
+            // Load state manager data
+            if let projectId = project.id, let customerId = customerId {
+                Task {
+                    await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
+            
             // Load phase extensions
             Task {
                 await viewModel.loadPhaseExtensions()
@@ -175,6 +190,40 @@ struct ProjectDetailView: View {
             viewModel.fetchApprovedExpenses()
             Task {
                 await viewModel.loadPhaseExtensions()
+                // Refresh state manager data
+                if let projectId = project.id, let customerId = customerId {
+                    await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Reload state manager when project is updated
+            if let projectId = project.id, let customerId = customerId {
+                Task {
+                    await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
+            // Update state manager when expense status changes
+            if let userInfo = notification.userInfo,
+               let phaseId = userInfo["phaseId"] as? String,
+               let department = userInfo["department"] as? String,
+               let oldStatusStr = userInfo["oldStatus"] as? String,
+               let newStatusStr = userInfo["newStatus"] as? String,
+               let amount = userInfo["amount"] as? Double,
+               let oldStatus = ExpenseStatus(rawValue: oldStatusStr),
+               let newStatus = ExpenseStatus(rawValue: newStatusStr) {
+                stateManager.updateExpenseStatus(
+                    expenseId: userInfo["expenseId"] as? String ?? "",
+                    phaseId: phaseId,
+                    department: department,
+                    oldStatus: oldStatus,
+                    newStatus: newStatus,
+                    amount: amount
+                )
             }
         }
     }

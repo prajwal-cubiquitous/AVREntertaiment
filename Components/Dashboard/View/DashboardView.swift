@@ -42,7 +42,7 @@ struct DashboardView: View {
     @State private var selectedRequest: PhaseRequestItem? = nil
     @State private var showingRequestActionSheet = false
     @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
-    @StateObject private var stateManager = DashboardStateManager()
+    @StateObject private var stateManager: DashboardStateManager
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -98,12 +98,14 @@ struct DashboardView: View {
         return formatter
     }
     
-    init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil) {
+    init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil, stateManager: DashboardStateManager? = nil) {
         self.project = project
         self.role = role
         self.phoneNumber = phoneNumber
         self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber, customerId: customerId))
         self._ProjectDetialViewModel = StateObject(wrappedValue: ProjectDetailViewModel(project: project ?? Project.sampleData[0], CurrentUserPhone: phoneNumber, customerId: customerId))
+        // Use provided state manager or create a new one
+        self._stateManager = StateObject(wrappedValue: stateManager ?? DashboardStateManager())
     }
     
     var body: some View {

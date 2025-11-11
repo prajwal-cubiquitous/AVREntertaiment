@@ -20,6 +20,7 @@ struct ProjectListView: View {
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @State private var businessName: String = "Your Projects"
     @StateObject var viewModel: ProjectListViewModel
+    @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
     @EnvironmentObject var authService: FirebaseAuthService
     @Environment(\.scenePhase) private var scenePhase
@@ -155,13 +156,14 @@ struct ProjectListView: View {
                         ProjectDetailView(project: project,
                                           role: role,
                                           phoneNumber: viewModel.phoneNumber,
-                                          customerId: authService.currentCustomerId)
+                                          customerId: authService.currentCustomerId,
+                                          stateManager: sharedStateManager)
                     } else {
                         Text("Project not found")
                     }
                 }else{
                     if let project = viewModel.project(for: projectId) {
-                        DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId)
+                        DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager)
                     } else {
                         Text("Project not found")
                     }
@@ -232,6 +234,36 @@ struct ProjectListView: View {
                 loadTempApproverStatuses()
             }
             loadBusinessName()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Reload state manager when project is updated
+            if let projectId = navigationManager.activeProjectId?.id,
+               let customerId = authService.currentCustomerId {
+                Task {
+                    await sharedStateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    await sharedStateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
+            // Update state manager when expense status changes
+            if let userInfo = notification.userInfo,
+               let phaseId = userInfo["phaseId"] as? String,
+               let department = userInfo["department"] as? String,
+               let oldStatusStr = userInfo["oldStatus"] as? String,
+               let newStatusStr = userInfo["newStatus"] as? String,
+               let amount = userInfo["amount"] as? Double,
+               let oldStatus = ExpenseStatus(rawValue: oldStatusStr),
+               let newStatus = ExpenseStatus(rawValue: newStatusStr) {
+                sharedStateManager.updateExpenseStatus(
+                    expenseId: userInfo["expenseId"] as? String ?? "",
+                    phaseId: phaseId,
+                    department: department,
+                    oldStatus: oldStatus,
+                    newStatus: newStatus,
+                    amount: amount
+                )
+            }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             // Check project statuses when app becomes active
@@ -417,7 +449,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else if role == .ADMIN {
-                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId).environmentObject(navigationManager)) {
+                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -429,7 +461,7 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else {
-                            NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId).environmentObject(navigationManager)) {
+                            NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
@@ -450,7 +482,7 @@ struct ProjectListView: View {
             .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjectsForTempApprover)
             .navigationDestination(isPresented: $shouldNavigateToDashboard) {
                 if let project = selectedProject {
-                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId)
+                    DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager)
                 }
             }
             
