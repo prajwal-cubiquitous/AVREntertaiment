@@ -1242,6 +1242,7 @@ struct TempApproverSheet: View {
     let allApprovers: [User]
     let isInitialAssignment: Bool
     let onSet: (TempApprover) -> Void
+    let currentProjectManagerIds: [String]? // Manager IDs to exclude from the list
     
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -1250,11 +1251,26 @@ struct TempApproverSheet: View {
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
     @State private var showingDateSelection = false
     
-    var filteredApprovers: [User] {
-        if searchText.isEmpty {
+    // Filter out the current project manager(s) from the approvers list
+    private var availableApprovers: [User] {
+        guard let managerIds = currentProjectManagerIds, !managerIds.isEmpty else {
             return allApprovers
         }
+        
         return allApprovers.filter { approver in
+            // Exclude approvers whose phoneNumber or email matches any manager ID
+            let matchesPhone = managerIds.contains(approver.phoneNumber)
+            let matchesEmail = approver.email != nil && managerIds.contains(approver.email!)
+            return !matchesPhone && !matchesEmail
+        }
+    }
+    
+    var filteredApprovers: [User] {
+        let approvers = availableApprovers
+        if searchText.isEmpty {
+            return approvers
+        }
+        return approvers.filter { approver in
             approver.name.localizedCaseInsensitiveContains(searchText) ||
             approver.phoneNumber.localizedCaseInsensitiveContains(searchText)
         }

@@ -57,15 +57,12 @@ struct DelegateView: View {
             }
             .navigationTitle("Delegate Management")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.blue)
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    dismiss()
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
+                .foregroundColor(.blue),
+                trailing: Group {
                     if viewModel.tempApprover != nil {
                         Button("Save") {
                             saveDelegateDetails()
@@ -75,7 +72,7 @@ struct DelegateView: View {
                         .disabled(viewModel.isSaving)
                     }
                 }
-            }
+            )
         }
         .task{
             await viewModel.loadAllApprovers()
@@ -114,7 +111,8 @@ struct DelegateView: View {
                         }
                         showingDelegate = false
                     }
-                }
+                },
+                currentProjectManagerIds: project.managerIds.isEmpty ? nil : project.managerIds
             )
         }
     }
