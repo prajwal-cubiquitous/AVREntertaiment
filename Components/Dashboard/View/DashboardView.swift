@@ -15,6 +15,33 @@ struct DepartmentSelection: Identifiable {
     let phaseId: String?
 }
 
+// MARK: - Department Key Helpers
+extension String {
+    /// Formats department key for storage: "phaseId_departmentName"
+    static func departmentKey(phaseId: String, departmentName: String) -> String {
+        return "\(phaseId)_\(departmentName)"
+    }
+    
+    /// Extracts department name from stored key by removing "phaseId_" prefix
+    /// Handles both old format (just department name) and new format (phaseId_departmentName)
+    func displayDepartmentName() -> String {
+        // Check if it contains underscore (new format)
+        if let underscoreIndex = self.firstIndex(of: "_") {
+            // Extract everything after the first underscore
+            return String(self[self.index(after: underscoreIndex)...])
+        }
+        // Old format or no underscore, return as is
+        return self
+    }
+    
+    /// Checks if a department key matches a given department name
+    /// Handles both old format (just department name) and new format (phaseId_departmentName)
+    func matchesDepartmentName(_ departmentName: String) -> Bool {
+        let displayName = self.displayDepartmentName()
+        return displayName == departmentName || self == departmentName
+    }
+}
+
 
 struct DashboardView: View {
     @Environment(\.dismiss) private var dismiss
@@ -613,14 +640,10 @@ struct DashboardView: View {
                     if let project = try await viewModel.fetchProject(byId: projectId) {
                         selectedProject = project
                         showProjectDetail = true
-                    } else {
-                        print("⚠️ No project found for ID: \(projectId)")
                     }
-                } else {
-                    print("⚠️ No active project ID found in navigation manager.")
                 }
             } catch {
-                print("❌ Error fetching project: \(error)")
+                // Error fetching project
             }
         }
     }
@@ -933,13 +956,16 @@ struct DashboardView: View {
                             ZStack(alignment: .leading) {
                                 ScrollView(.horizontal, showsIndicators: true) {
                                     HStack(spacing: DesignSystem.Spacing.medium) {
-                                        ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                                        ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
+                                            // Strip phaseId_ prefix for display
+                                            let displayName = deptKey.displayDepartmentName()
                                             DepartmentMiniCard(
-                                                title: dept,
+                                                title: displayName,
                                                 amount: amount,
-                                                spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
+                                                spent: phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0,
                                                 onTap: {
-                                                    selectedDepartmentForDetail = dept
+                                                    // Use the display name (without phaseId prefix) for selection
+                                                    selectedDepartmentForDetail = displayName
                                                     selectedPhaseIdForDetail = phase.id
                                                     // Small delay to ensure state is set before showing sheet
                                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -1159,9 +1185,7 @@ struct DashboardView: View {
 
     private func isPhaseInProgress(_ phase: PhaseSummary) -> Bool {
         let current = now
-//        if phase.name == "SDFSD"{
-//            print("DEBUG 3: \(phase.start)")
-            if let startDate = phase.start, let endDate = phase.end {
+        if let startDate = phase.start, let endDate = phase.end {
                 // both are non-nil
                 return startDate <= current && current <= endDate
             } else if let startDate = phase.start {
@@ -1225,7 +1249,6 @@ struct DashboardView: View {
     /// Uses structured concurrency for parallel data loading as recommended by Apple
     private func refreshAllData() async {
         guard let projectId = project?.id, let customerId = customerId else {
-            print("❌ Cannot refresh: Missing project ID or customer ID")
             return
         }
         
@@ -1279,7 +1302,6 @@ struct DashboardView: View {
     private func loadPhases() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPhases")
             return
         }
         do {
@@ -1310,20 +1332,18 @@ struct DashboardView: View {
             // Load anonymous expenses per phase
             await loadPhaseAnonymousExpenses()
         } catch {
-            print("Error loading phases: \(error)")
+            // Error loading phases
         }
     }
     
     private func loadPhaseExtensions() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPhaseExtensions")
             return
         }
         
         // Wait for phases to be loaded
         guard !allPhases.isEmpty else {
-            print("⚠️ No phases loaded yet, skipping extension check")
             return
         }
         
@@ -1360,42 +1380,33 @@ struct DashboardView: View {
                 for requestDoc in requestsSnapshot.documents {
                     let requestData = requestDoc.data()
                     if let extendedDate = requestData["extendedDate"] as? String {
-                        print("🔍 Comparing: extendedDate='\(extendedDate)' vs phaseEndDate='\(phaseEndDateStr)'")
                         // Compare extendedDate with phase endDate (exact string match)
                         if extendedDate.trimmingCharacters(in: .whitespacesAndNewlines) == phaseEndDateStr.trimmingCharacters(in: .whitespacesAndNewlines) {
                             hasExtension = true
-                            print("✅ Match found! Phase \(phase.name) has extension")
                             break
-                        } else {
-                            print("⚠️ Date mismatch: extendedDate='\(extendedDate)' != phaseEndDate='\(phaseEndDateStr)'")
                         }
                     }
                 }
                 
                 extensionMap[phase.id] = hasExtension
-                if hasExtension {
-                    print("✅ Extension badge will be shown for phase: \(phase.name)")
-                }
             }
             
             await MainActor.run {
                 phaseExtensionMap = extensionMap
             }
         } catch {
-            print("❌ Error loading phase extensions: \(error)")
+            // Error loading phase extensions
         }
     }
     
     private func loadPhaseAnonymousExpenses() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPhaseAnonymousExpenses")
             return
         }
         
         // Wait for phases to be loaded
         guard !allPhases.isEmpty else {
-            print("⚠️ No phases loaded yet, skipping anonymous expenses check")
             return
         }
         
@@ -1420,14 +1431,13 @@ struct DashboardView: View {
                 phaseAnonymousExpensesMap = anonymousMap
             }
         } catch {
-            print("❌ Error loading phase anonymous expenses: \(error)")
+            // Error loading phase anonymous expenses
         }
     }
     
     private func loadPhaseBudgets() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPhaseBudgets")
             return
         }
         do {
@@ -1465,14 +1475,13 @@ struct DashboardView: View {
                 stateManager.recalculateProjectTotals()
             }
         } catch {
-            print("Error loading phase budgets: \(error.localizedDescription)")
+            // Error loading phase budgets
         }
     }
     
     private func loadPhaseDepartmentSpent() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPhaseDepartmentSpent")
             return
         }
         do {
@@ -1493,6 +1502,12 @@ struct DashboardView: View {
                     if departmentSpentMap[phaseId] == nil {
                         departmentSpentMap[phaseId] = [:]
                     }
+                    // Expenses use just department name, but we need to match to phaseId_departmentName keys
+                    // Try both formats: phaseId_departmentName (new) and just departmentName (old/expense format)
+                    let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
+                    // Store using the new format key, but also support old format for backward compatibility
+                    departmentSpentMap[phaseId]?[departmentKey, default: 0] += expense.amount
+                    // Also store with old format for backward compatibility
                     departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
                 }
             }
@@ -1504,14 +1519,13 @@ struct DashboardView: View {
                 stateManager.recalculateProjectTotals()
             }
         } catch {
-            print("Error loading phase department spent: \(error.localizedDescription)")
+            // Error loading phase department spent
         }
     }
 
     private func updatePhaseEnabled(phaseId: String, enabled: Bool) {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in updatePhaseEnabled")
             return
         }
         FirebasePathHelper.shared
@@ -1521,8 +1535,8 @@ struct DashboardView: View {
                 "isEnabled": enabled,
                 "updatedAt": Timestamp()
             ]) { error in
-                if let error = error {
-                    print("Failed to update isEnabled: \(error.localizedDescription)")
+                if let _ = error {
+                    // Error updating phase enabled status
                 }
             }
     }
@@ -1620,7 +1634,6 @@ struct DashboardView: View {
         }
         
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in fetchTempApproverData")
             return
         }
         
@@ -1928,12 +1941,15 @@ private struct AddDepartmentSheet: View {
             return
         }
 
+        // Format department key as phaseId_departmentName
+        let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: departmentName)
+        
         FirebasePathHelper.shared
             .phasesCollection(customerId: customerId, projectId: projectId)
             .document(phaseId)
             .setData([
                 "departments": [
-                    departmentName: amount
+                    departmentKey: amount
                 ]
             ], merge: true) { error in
                 if let error = error {
@@ -2431,7 +2447,7 @@ private struct AllPhasesView: View {
                     phaseEnabledMap = enabledMap
                 }
             } catch {
-                print("Error loading phase enabled states: \(error.localizedDescription)")
+                // Error loading phase enabled states
             }
         }
     }
@@ -2477,7 +2493,7 @@ private struct AllPhasesView: View {
                     phaseBudgetMap = budgetMap
                 }
             } catch {
-                print("Error loading phase budgets: \(error.localizedDescription)")
+                // Error loading phase budgets
             }
         }
     }
@@ -2509,6 +2525,12 @@ private struct AllPhasesView: View {
                         if departmentSpentMap[phaseId] == nil {
                             departmentSpentMap[phaseId] = [:]
                         }
+                        // Expenses use just department name, but we need to match to phaseId_departmentName keys
+                        // Try both formats: phaseId_departmentName (new) and just departmentName (old/expense format)
+                        let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
+                        // Store using the new format key, but also support old format for backward compatibility
+                        departmentSpentMap[phaseId]?[departmentKey, default: 0] += expense.amount
+                        // Also store with old format for backward compatibility
                         departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
                     }
                 }
@@ -2517,7 +2539,7 @@ private struct AllPhasesView: View {
                     phaseDepartmentSpentMap = departmentSpentMap
                 }
             } catch {
-                print("Error loading phase department spent: \(error.localizedDescription)")
+                // Error loading phase department spent
             }
         }
     }
@@ -2572,7 +2594,7 @@ private struct AllPhasesView: View {
                     phaseExtensionMap = extensionMap
                 }
             } catch {
-                print("Error loading phase extensions: \(error)")
+                // Error loading phase extensions
             }
         }
     }
@@ -2607,7 +2629,7 @@ private struct AllPhasesView: View {
                     phaseAnonymousExpensesMap = anonymousMap
                 }
             } catch {
-                print("Error loading phase anonymous expenses: \(error)")
+                // Error loading phase anonymous expenses
             }
         }
     }
@@ -2823,13 +2845,16 @@ private struct AllPhasesView: View {
             // Horizontal scroller
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 12) {
-                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { dept, amount in
+                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
+                        // Strip phaseId_ prefix for display
+                        let displayName = deptKey.displayDepartmentName()
                         DepartmentMiniCard(
-                            title: dept,
+                            title: displayName,
                             amount: amount,
-                            spent: phaseDepartmentSpentMap[phase.id]?[dept] ?? 0,
+                            spent: phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0,
                             onTap: {
-                                selectedDepartment = DepartmentSelection(name: dept, phaseId: phase.id)
+                                // Use the display name (without phaseId prefix) for selection
+                                selectedDepartment = DepartmentSelection(name: displayName, phaseId: phase.id)
                                 // Small delay to ensure state is set before showing sheet
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     showingDepartmentDetail = true
@@ -3832,7 +3857,6 @@ private struct AddPhaseSheet: View {
                     }
                 }
             } catch {
-                print("Error loading next phase number: \(error)")
                 // Fallback to count-based calculation
                 await MainActor.run {
                     nextPhaseNumber = existingPhaseCount + 1
@@ -3865,7 +3889,7 @@ private struct AddPhaseSheet: View {
                     existingPhaseNames = phaseNames
                 }
             } catch {
-                print("Error loading existing phase names: \(error.localizedDescription)")
+                // Error loading existing phase names
             }
         }
     }
@@ -3906,11 +3930,15 @@ private struct AddPhaseSheet: View {
                 let startDateStr = dateFormatter.string(from: startDate)
                 let endDateStr = dateFormatter.string(from: endDate)
                 
-                // Create departments dictionary
-                let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { ($0.name, Double(removeFormatting(from: $0.amount)) ?? 0) })
+                // Create departments dictionary with phaseId_departmentName format
+                let phaseId = phaseRef.documentID
+                let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { dept in
+                    let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: dept.name)
+                    return (departmentKey, Double(removeFormatting(from: dept.amount)) ?? 0)
+                })
                 
                 let phaseData = Phase(
-                    id: phaseRef.documentID,
+                    id: phaseId,
                     phaseName: phaseName.trimmingCharacters(in: .whitespacesAndNewlines),
                     phaseNumber: phaseNumber,
                     startDate: startDateStr,
@@ -4169,7 +4197,7 @@ private struct EditPhaseSheet: View {
                     existingPhaseNames = phaseNames
                 }
             } catch {
-                print("Error loading existing phase names: \(error.localizedDescription)")
+                // Error loading existing phase names
             }
         }
     }

@@ -16,9 +16,6 @@ class NavigationManager: ObservableObject {
     @Published var activeExpenseId: ProjectNavigationItem?
     
     init(){
-        print("active project id \(activeProjectId?.id ?? "nil")")
-        print("active chat id \(activeChatId?.id ?? "nil")")
-        print("active expense id \(activeExpenseId?.id ?? "nil")")
     }
     
     func clearNavigation() {

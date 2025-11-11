@@ -69,8 +69,6 @@ class PhaseRequestNotificationViewModel: ObservableObject {
             
             let status = action == .accept ? "ACCEPTED" : "REJECTED"
             
-            print("DEBUG 4 : printing status : \(status)")
-            
             // Update request document (reason is optional)
             var updateData: [String: Any] = [
                 "status": status,
@@ -90,8 +88,6 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                 // Don't parse and reformat to avoid any date conversion issues
                 let extendedDateStr = request.extendedDate
                 
-                print("📅 Updating phase endDate to: \(extendedDateStr)")
-                
                 // Get current phase to get previous end date
                 let phaseRef = FirebasePathHelper.shared
                     .phasesCollection(customerId: customerId, projectId: projectId)
@@ -102,26 +98,11 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                 if let phaseData = phaseDoc.data(),
                    let previousEndDate = phaseData["endDate"] as? String {
                     
-                    print("📅 Previous phase endDate: \(previousEndDate)")
-                    print("📅 New phase endDate: \(extendedDateStr)")
-                    
                     // Update phase end date
                     try await phaseRef.updateData([
                         "endDate": extendedDateStr,
                         "updatedAt": Timestamp()
                     ])
-                    
-                    print("✅ Phase endDate updated in Firebase to: \(extendedDateStr)")
-                    
-                    // Verify the update by refetching the document
-                    let updatedPhaseDoc = try await phaseRef.getDocument()
-                    if let updatedPhaseData = updatedPhaseDoc.data(),
-                       let updatedEndDate = updatedPhaseData["endDate"] as? String {
-                        print("✅ Verified phase endDate is now: \(updatedEndDate)")
-                        if updatedEndDate != extendedDateStr {
-                            print("⚠️ WARNING: Phase endDate update may not have synced. Expected: \(extendedDateStr), Got: \(updatedEndDate)")
-                        }
-                    }
                     
                     // Log to changes collection with requestID
                     let changeLog = PhaseTimelineChange(
@@ -137,26 +118,16 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                     
                     let changesRef = phaseRef.collection("changes").document()
                     try await changesRef.setData(from: changeLog)
-                    
-                    print("✅ Phase end date updated and logged to changes collection with requestID: \(request.id)")
                 } else {
                     // If phase doesn't exist, create it with the new end date
                     try await phaseRef.setData([
                         "endDate": extendedDateStr,
                         "updatedAt": Timestamp()
                     ], merge: true)
-                    
-                    print("✅ Phase end date set (new phase)")
                 }
-            } else {
-                // For reject action, we don't update the phase endDate
-                print("ℹ️ Request rejected - phase endDate not changed")
             }
             
-            print("✅ Request \(action == .accept ? "accepted" : "rejected") successfully")
-            
         } catch {
-            print("❌ Error handling request action: \(error)")
             await MainActor.run {
                 self.errorMessage = "Failed to \(action == .accept ? "accept" : "reject") request: \(error.localizedDescription)"
             }
@@ -165,7 +136,6 @@ class PhaseRequestNotificationViewModel: ObservableObject {
     
     func loadPendingRequests(projectId: String, customerId: String?) async {
         guard let customerId = customerId else {
-            print("❌ Customer ID not found in loadPendingRequests")
             return
         }
         
@@ -271,13 +241,8 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                                     userPhoneNumber = userData["phoneNumber"] as? String ?? cleanUserID
                                 }
                                 
-                                // Debug: Print to verify user data is fetched
-                                print("✅ Fetched user for \(userID): name=\(userName ?? "nil"), phone=\(userPhoneNumber ?? "nil")")
-                            } else {
-                                print("⚠️ User document not found for userID: \(userID) (tried: \(cleanUserID), \(userID))")
                             }
                         } catch {
-                            print("❌ Error fetching user details for \(userID): \(error)")
                             // Continue without user details
                         }
                         

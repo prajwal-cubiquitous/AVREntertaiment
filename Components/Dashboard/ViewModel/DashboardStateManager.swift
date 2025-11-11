@@ -93,7 +93,14 @@ class DashboardStateManager: ObservableObject {
         if let index = allPhases.firstIndex(where: { $0.id == phaseId }) {
             var updatedPhase = allPhases[index]
             var updatedDepartments = updatedPhase.departments
-            updatedDepartments[department] = amount
+            
+            // Use phaseId_departmentName format for storage
+            let departmentKey = "\(phaseId)_\(department)"
+            // Remove old format if exists
+            updatedDepartments.removeValue(forKey: department)
+            // Set new format
+            updatedDepartments[departmentKey] = amount
+            
             updatedPhase = DashboardView.PhaseSummary(
                 id: updatedPhase.id,
                 name: updatedPhase.name,
@@ -181,11 +188,18 @@ class DashboardStateManager: ObservableObject {
         }
         
         // Update department spent map
+        // Expenses use just department name, but departments are stored as phaseId_departmentName
+        // We need to match expenses to both formats for backward compatibility
         if phaseDepartmentSpentMap[phaseId] == nil {
             phaseDepartmentSpentMap[phaseId] = [:]
         }
         
-        var deptSpent = phaseDepartmentSpentMap[phaseId]?[department] ?? 0
+        // Use phaseId_departmentName format for new storage
+        let departmentKey = "\(phaseId)_\(department)"
+        
+        // Get spent from new format key, fallback to old format
+        var deptSpent = phaseDepartmentSpentMap[phaseId]?[departmentKey] ?? 
+                       phaseDepartmentSpentMap[phaseId]?[department] ?? 0
         
         // Remove from old status
         if oldStatus == .approved {
@@ -197,6 +211,9 @@ class DashboardStateManager: ObservableObject {
             deptSpent += amount
         }
         
+        // Store using new format key
+        phaseDepartmentSpentMap[phaseId]?[departmentKey] = max(0, deptSpent)
+        // Also update old format for backward compatibility
         phaseDepartmentSpentMap[phaseId]?[department] = max(0, deptSpent)
         
         // Recalculate project-level totals

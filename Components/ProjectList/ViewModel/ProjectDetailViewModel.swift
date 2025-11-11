@@ -98,8 +98,6 @@ class ProjectDetailViewModel: ObservableObject {
                     }
                     return
                 }
-                
-                print("DEBUG 1 : Count documents : \(snapshot.documents.count)")
             
                 // Load all approved expenses once using customer-specific path
                 let expensesSnapshot = try await FirebasePathHelper.shared
@@ -120,9 +118,15 @@ class ProjectDetailViewModel: ObservableObject {
                         expensesByPhaseId[phaseId]?.append(expense)
                         
                         // Track by phase and department
+                        // Expenses use just department name, but departments are stored as phaseId_departmentName
+                        // We need to match expenses to both formats for backward compatibility
                         if expensesByPhaseAndDepartment[phaseId] == nil {
                             expensesByPhaseAndDepartment[phaseId] = [:]
                         }
+                        // Store with new format key (phaseId_departmentName)
+                        let departmentKey = "\(phaseId)_\(expense.department)"
+                        expensesByPhaseAndDepartment[phaseId]?[departmentKey, default: 0] += expense.amount
+                        // Also store with old format for backward compatibility
                         expensesByPhaseAndDepartment[phaseId]?[expense.department, default: 0] += expense.amount
                     }
                 }
@@ -146,12 +150,22 @@ class ProjectDetailViewModel: ObservableObject {
                         let remainingAmount = totalBudget - approvedAmount
                         
                         // Build department info
-                        let departmentInfos = phase.departments.map { deptName, deptBudget in
-                            let deptApproved = expensesByPhaseAndDepartment[phaseId]?[deptName] ?? 0
+                        // Strip phaseId_ prefix from department keys for display
+                        let departmentInfos = phase.departments.map { deptKey, deptBudget in
+                            // Extract display name by removing phaseId_ prefix
+                            let displayName: String
+                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                displayName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                            } else {
+                                displayName = deptKey // Old format, use as is
+                            }
+                            
+                            // Look up expenses using the original key (with phaseId prefix)
+                            let deptApproved = expensesByPhaseAndDepartment[phaseId]?[deptKey] ?? 0
                             let deptRemaining = deptBudget - deptApproved
                             
                             return DepartmentInfo(
-                                name: deptName,
+                                name: displayName,
                                 allocatedBudget: deptBudget,
                                 approvedAmount: deptApproved,
                                 remainingAmount: deptRemaining
@@ -340,8 +354,6 @@ class ProjectDetailViewModel: ObservableObject {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
             
-            print("🔍 Checking extensions for \(phases.count) phases")
-            
             // Check each phase for accepted extension requests
             for phase in phases {
                 // Get phase end date from Firebase directly (as String)
@@ -352,11 +364,8 @@ class ProjectDetailViewModel: ObservableObject {
                 
                 guard let phaseData = phaseDoc.data(),
                       let phaseEndDateStr = phaseData["endDate"] as? String else {
-                    print("⚠️ Phase \(phase.id) has no endDate")
                     continue
                 }
-                
-                print("📅 Phase \(phase.phaseName) endDate: \(phaseEndDateStr)")
                 
                 // Query requests collection for accepted requests
                 let requestsSnapshot = try await FirebasePathHelper.shared
@@ -372,20 +381,15 @@ class ProjectDetailViewModel: ObservableObject {
                 for requestDoc in requestsSnapshot.documents {
                     let requestData = requestDoc.data()
                     if let extendedDate = requestData["extendedDate"] as? String {
-                        print("🔍 Comparing: extendedDate='\(extendedDate)' vs phaseEndDate='\(phaseEndDateStr)'")
                         // Compare extendedDate with phase endDate
                         if extendedDate == phaseEndDateStr {
                             hasExtension = true
-                            print("✅ Match found! Phase \(phase.phaseName) has extension")
                             break
                         }
                     }
                 }
                 
                 extensionMap[phase.id] = hasExtension
-                if hasExtension {
-                    print("✅ Extension badge will be shown for phase: \(phase.phaseName)")
-                }
             }
             
             await MainActor.run {

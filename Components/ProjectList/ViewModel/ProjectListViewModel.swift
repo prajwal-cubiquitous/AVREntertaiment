@@ -72,14 +72,12 @@ class ProjectListViewModel: ObservableObject {
         
         // Get customer ID - required for customer-specific queries
         guard let customerId = customerId else {
-            print("❌ Customer ID not found")
             isLoading = false
             return
         }
         
         // Clean phone number - remove +91 prefix if it exists
         let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
-        print("🔍 Setting up listener for user: \(cleanPhone) with role: \(role), customerId: \(customerId)")
         
         // Start with the customer-specific projects collection
         let projectsRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId)
@@ -88,19 +86,15 @@ class ProjectListViewModel: ObservableObject {
         let query: Query
         
         if phoneNumber == "admin@avr.com" || role == .ADMIN {
-            print("👑 Admin user - listening to all projects for customer: \(customerId)")
             query = projectsRef
         } else {
             switch role {
             case .USER:
-                print("🔍 Querying as USER - Looking for teamMember: \(cleanPhone)")
                 query = projectsRef
                     .whereField("teamMembers", arrayContains: cleanPhone)
 //                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
                 
             case .APPROVER:
-                print("🔍 Querying as APPROVER - Looking for managerIds contains: \(cleanPhone)")
-                
                 query = projectsRef
                     .whereFilter(
                         Filter.orFilter([
@@ -111,7 +105,6 @@ class ProjectListViewModel: ObservableObject {
 //                    .whereField("status", isEqualTo: ProjectStatus.ACTIVE.rawValue)
                 
             default:
-                print("🔍 Default role - fetching all projects")
                 query = projectsRef
             }
         }
@@ -121,18 +114,14 @@ class ProjectListViewModel: ObservableObject {
             guard let self = self else { return }
             
             if let error = error {
-                print("❌ Error listening to projects: \(error)")
                 self.isLoading = false
                 return
             }
             
             guard let documents = snapshot?.documents else {
-                print("No documents found")
                 self.isLoading = false
                 return
             }
-            
-            print("📊 Found \(documents.count) projects")
             
             var loadedProjects: [Project] = []
             for document in documents {
@@ -197,12 +186,10 @@ class ProjectListViewModel: ObservableObject {
                             "updatedAt": Timestamp()
                         ])
                     
-                    print("✅ Updated project \(project.name ?? "Unknown") from DRAFT to ACTIVE (planned date: \(plannedDateStr))")
-                    
                     // Post notification to refresh project list
                     NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
                 } catch {
-                    print("❌ Error updating project status: \(error.localizedDescription)")
+                    // Error updating project status
                 }
             }
         }
@@ -465,12 +452,9 @@ class ProjectListViewModel: ObservableObject {
                     "updatedAt": Date()
                 ])
                 
-                print("DEBUG 2 : \(newStatus.rawValue)")
-                
-                print("✅ Successfully updated tempApprover status to \(newStatus.rawValue)")
             }
         } catch {
-            print("❌ Error updating tempApprover status for project \(projectId): \(error)")
+            // Error updating tempApprover status
         }
     }
     

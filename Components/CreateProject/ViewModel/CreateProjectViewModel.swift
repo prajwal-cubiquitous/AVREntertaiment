@@ -797,16 +797,20 @@ class CreateProjectViewModel: ObservableObject {
                 
                 for phase in phases {
                     let phaseRef = docRef.collection("phases").document()
+                    let phaseId = phaseRef.documentID
                     
                     // Format dates (dates are now always required)
                     let startDateStr = dateFormatter.string(from: phase.startDate)
                     let endDateStr = dateFormatter.string(from: phase.endDate)
                     
-                    // Create departments dictionary
-                    let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { ($0.name, Double(removeFormatting(from: $0.amount)) ?? 0) })
+                    // Create departments dictionary with phaseId_departmentName format
+                    let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { dept in
+                        let departmentKey = "\(phaseId)_\(dept.name)"
+                        return (departmentKey, Double(removeFormatting(from: dept.amount)) ?? 0)
+                    })
                     
                     let phaseData = Phase(
-                        id: phaseRef.documentID,
+                        id: phaseId,
                         phaseName: phase.phaseName,
                         phaseNumber: phase.phaseNumber,
                         startDate: startDateStr,

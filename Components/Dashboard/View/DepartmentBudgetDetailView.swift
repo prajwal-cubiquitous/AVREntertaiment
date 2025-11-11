@@ -250,10 +250,20 @@ struct DepartmentBudgetDetailView: View {
                         } else {
                             // Update all phases that contain this department
                             for phase in stateManager.allPhases {
-                                if phase.departments.keys.contains(where: { $0 == department || $0.hasSuffix("_\(department)") }) {
-                                    // Calculate proportional budget
+                                // Find the department key (handle both old and new formats)
+                                let departmentKey = phase.departments.keys.first { key in
+                                    key == department || key == "\(phase.id)_\(department)" || key.displayDepartmentName() == department
+                                }
+                                
+                                if let deptKey = departmentKey {
+                                    // Calculate proportional budget using the found key
                                     let currentTotal = stateManager.departmentBudgets[department]?.total ?? 0
-                                    let proportion = currentTotal > 0 ? (phase.departments[department] ?? 0) / currentTotal : 1.0 / Double(stateManager.allPhases.filter { $0.departments.keys.contains(where: { $0 == department || $0.hasSuffix("_\(department)") }) }.count)
+                                    let phaseBudget = phase.departments[deptKey] ?? 0
+                                    let proportion = currentTotal > 0 ? phaseBudget / currentTotal : 1.0 / Double(stateManager.allPhases.filter { phase in
+                                        phase.departments.keys.contains { key in
+                                            key == department || key == "\(phase.id)_\(department)" || key.displayDepartmentName() == department
+                                        }
+                                    }.count)
                                     stateManager.updateDepartmentBudget(phaseId: phase.id, department: department, newBudget: newBudget * proportion)
                                 }
                             }
@@ -1103,7 +1113,6 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             
                             if hasDepartment {
                                 effectivePhaseId = currentPhaseId
-                                print("🔍 [No phaseId provided] Using first matching phase: \(currentPhaseId) for department: \(department)")
                                 break
                             }
                         }
@@ -1121,17 +1130,13 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     let query: Query
                     if let effectivePhaseId = effectivePhaseId {
                         query = baseQuery.whereField("phaseId", isEqualTo: effectivePhaseId)
-                        print("🔍 [Other Department] Loading anonymous expenses with phaseId: \(effectivePhaseId)")
                     } else {
                         query = baseQuery
-                        print("🔍 [Other Department] Loading all anonymous expenses (no phaseId filter)")
                     }
                     
                     let expensesSnapshot = try await query
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
-                    
-                    print("🔍 [Other Department] Found \(expensesSnapshot.documents.count) anonymous expenses in query")
                     
                     loadedExpenses = expensesSnapshot.documents.compactMap { doc in
                         do {
@@ -1139,12 +1144,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             expense.id = doc.documentID
                             return expense
                         } catch {
-                            print("❌ Error decoding expense document \(doc.documentID): \(error)")
                             return nil
                         }
                     }
-                    
-                    print("✅ [Other Department] Successfully loaded \(loadedExpenses.count) expenses")
                 } else {
                     // Load expenses for the specific department
                     let baseQuery = FirebasePathHelper.shared
@@ -1155,17 +1157,13 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     let query: Query
                     if let effectivePhaseId = effectivePhaseId {
                         query = baseQuery.whereField("phaseId", isEqualTo: effectivePhaseId)
-                        print("🔍 Loading expenses for department: \(department), phaseId: \(effectivePhaseId)")
                     } else {
                         query = baseQuery
-                        print("🔍 Loading expenses for department: \(department), all phases (no phaseId filter)")
                     }
                     
                     let expensesSnapshot = try await query
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
-                    
-                    print("🔍 Found \(expensesSnapshot.documents.count) expenses in query for department: \(department)")
                     
                     loadedExpenses = expensesSnapshot.documents.compactMap { doc in
                         do {
@@ -1173,12 +1171,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             expense.id = doc.documentID
                             return expense
                         } catch {
-                            print("❌ Error decoding expense document \(doc.documentID): \(error)")
                             return nil
                         }
                     }
-                    
-                    print("✅ Successfully loaded \(loadedExpenses.count) expenses for department: \(department)")
                 }
                 
                 // Calculate totals
@@ -1202,7 +1197,7 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             .getDocument()
                         
                         if let phase = try? phaseDoc.data(as: Phase.self) {
-                            // Try new format: phaseId_department
+                            // Try new format: phaseId_departmentName
                             let compositeKey = "\(requiredPhaseId)_\(department)"
                             
                             // Check both old format (for backward compatibility) and new format
@@ -1219,9 +1214,9 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                                 phaseIdsWithDepartment.append(requiredPhaseId)
                                 
                                 // Check if this is the only department in this phase
-                                // Count only departments that match our pattern
+                                // Count only departments that match our pattern (handle both formats)
                                 let matchingDepartments = phase.departments.keys.filter { key in
-                                    key == department || key == compositeKey || key.hasSuffix("_\(department)")
+                                    key == department || key == compositeKey || key.displayDepartmentName() == department
                                 }
                                 if matchingDepartments.count == 1 {
                                     phasesOnlyWithThisDepartment.append((id: requiredPhaseId, name: phase.phaseName))
@@ -1236,6 +1231,8 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                             .phasesCollection(customerId: customerID, projectId: projectId)
                             .order(by: "phaseNumber")
                             .getDocuments()
+                        
+//                        print("DEBUG 120 : Fetched all phases for \(customerID)/\(projectId)")
                         
                         // Find the first phase that contains this department
                         for doc in phasesSnapshot.documents {
@@ -1409,9 +1406,11 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     
                     // Check both old and new format for current budget
                     var currentBudget: Double = 0
+                    // Try new format first: phaseId_departmentName
                     if let newFormatBudget = phase.departments[compositeKey] {
                         currentBudget = newFormatBudget
                     } else if let oldFormatBudget = phase.departments[department] {
+                        // Fallback to old format for backward compatibility
                         currentBudget = oldFormatBudget
                     }
                     
@@ -2061,10 +2060,21 @@ struct AddDepartmentSheetForDelete: View {
                     .phasesCollection(customerId: customerId, projectId: projectId)
                     .document(phaseId)
                 
+                // Use phaseId_departmentName format for storage
+                let departmentKey = "\(phaseId)_\(departmentName)"
+                
                 // Use updateData with the department key path to properly merge
-                try await phaseRef.updateData([
-                    "departments.\(departmentName)": amount
-                ])
+                var updateData: [String: Any] = [
+                    "departments.\(departmentKey)": amount
+                ]
+                
+                // Remove old format if it exists (migration)
+                if let phase = try? await phaseRef.getDocument().data(as: Phase.self),
+                   phase.departments[departmentName] != nil {
+                    updateData["departments.\(departmentName)"] = FieldValue.delete()
+                }
+                
+                try await phaseRef.updateData(updateData)
                 
                 // Update project budget after adding department
                 await updateProjectBudget(projectId: projectId, customerId: customerId)
