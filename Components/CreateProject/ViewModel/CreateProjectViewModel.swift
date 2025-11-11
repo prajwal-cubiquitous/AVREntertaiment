@@ -14,14 +14,20 @@ import Combine
 import UIKit
 import UniformTypeIdentifiers
 
-struct DepartmentItem: Identifiable {
-    let id = UUID()
+struct DepartmentItem: Identifiable, Codable {
+    let id: UUID
     var name: String = ""
     var amount: String = "" // Use String for TextField, convert to Double later
+    
+    init(id: UUID = UUID(), name: String = "", amount: String = "") {
+        self.id = id
+        self.name = name
+        self.amount = amount
+    }
 }
 
-struct PhaseItem: Identifiable {
-    let id = UUID()
+struct PhaseItem: Identifiable, Codable {
+    let id: UUID
     var phaseNumber: Int
     var phaseName: String = ""
     var startDate: Date = Date()
@@ -30,10 +36,45 @@ struct PhaseItem: Identifiable {
     var hasEndDate: Bool = false
     var managerSearchText: String = ""
     var teamMemberSearchText: String = ""
-    var selectedManager: User?
-    var selectedTeamMembers: Set<User> = []
     var departments: [DepartmentItem] = [DepartmentItem()]
     var categories: [String] = []
+    
+    // For persistence: store manager and team member identifiers
+    var selectedManagerId: String? = nil // phoneNumber or email
+    var selectedTeamMemberIds: [String] = [] // phoneNumbers
+    
+    // Non-Codable properties (will be restored from IDs)
+    var selectedManager: User? = nil
+    var selectedTeamMembers: Set<User> = []
+    
+    init(id: UUID = UUID(), phaseNumber: Int) {
+        self.id = id
+        self.phaseNumber = phaseNumber
+    }
+    
+    // Custom Codable implementation to exclude User objects
+    enum CodingKeys: String, CodingKey {
+        case id, phaseNumber, phaseName, startDate, endDate
+        case hasStartDate, hasEndDate, managerSearchText, teamMemberSearchText
+        case departments, categories, selectedManagerId, selectedTeamMemberIds
+    }
+}
+
+// Form state for persistence
+struct CreateProjectFormState: Codable {
+    var projectName: String
+    var projectDescription: String
+    var client: String
+    var location: String
+    var plannedDate: Date
+    var currency: String
+    var allowTemplateOverrides: Bool
+    var phases: [PhaseItem]
+    var selectedProjectManagerId: String? // phoneNumber or email
+    var selectedProjectTeamMemberIds: [String] // phoneNumbers
+    var attachmentURL: String?
+    var attachmentName: String?
+    var expandedPhaseIds: [String] // UUID strings of expanded phases
 }
 
 @MainActor // Ensures all UI updates happen on the main thread
@@ -87,6 +128,10 @@ class CreateProjectViewModel: ObservableObject {
     private var db = Firestore.firestore()
     private var authService: FirebaseAuthService?
     private let storage = Storage.storage()
+    
+    // MARK: - Form State Persistence
+    private let formStateKey = "CreateProjectFormState"
+    private var saveCancellables = Set<AnyCancellable>()
     
     // MARK: - Computed Properties for Filtering
     
@@ -540,8 +585,12 @@ class CreateProjectViewModel: ObservableObject {
     // MARK: - Initialization
     init(authService: FirebaseAuthService? = nil) {
         self.authService = authService
+        loadFormState()
+        setupAutoSave()
         Task {
             await fetchUsers()
+            // Restore team selections after users are loaded
+            restoreTeamSelections()
         }
     }
     
@@ -777,6 +826,9 @@ class CreateProjectViewModel: ObservableObject {
                 showSuccessMessage = true
                 alertMessage = "Project created successfully!"
                 showAlert = true
+                
+                // Clear saved form state before resetting
+                clearFormState()
                 resetForm()
                 
                 // Notify that a new project was created
@@ -796,6 +848,8 @@ class CreateProjectViewModel: ObservableObject {
         self.authService = authService
         Task {
             await fetchUsers() // Refresh users with new auth service
+            // Restore team selections after users are loaded
+            restoreTeamSelections()
         }
     }
     
@@ -1084,6 +1138,183 @@ class CreateProjectViewModel: ObservableObject {
         uploadImage(image)
     }
     
+    // MARK: - Form State Persistence
+    
+    private func setupAutoSave() {
+        // Debounce saves to avoid excessive writes
+        Publishers.CombineLatest4(
+            $projectName,
+            $projectDescription,
+            $phases,
+            $plannedDate
+        )
+        .debounce(for: .seconds(1), scheduler: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.saveFormState(expandedPhaseIds: self?.restoredExpandedPhaseIds ?? [])
+        }
+        .store(in: &saveCancellables)
+        
+        // Also save on other field changes
+        Publishers.CombineLatest4(
+            $client,
+            $location,
+            $currency,
+            $allowTemplateOverrides
+        )
+        .debounce(for: .seconds(1), scheduler: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.saveFormState(expandedPhaseIds: self?.restoredExpandedPhaseIds ?? [])
+        }
+        .store(in: &saveCancellables)
+        
+        // Save when team selections change
+        $selectedProjectManager
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.saveFormState(expandedPhaseIds: self?.restoredExpandedPhaseIds ?? [])
+            }
+            .store(in: &saveCancellables)
+        
+        $selectedProjectTeamMembers
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.saveFormState(expandedPhaseIds: self?.restoredExpandedPhaseIds ?? [])
+            }
+            .store(in: &saveCancellables)
+        
+        // Save attachment info
+        Publishers.CombineLatest(
+            $attachmentURL,
+            $attachmentName
+        )
+        .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.saveFormState(expandedPhaseIds: self?.restoredExpandedPhaseIds ?? [])
+        }
+        .store(in: &saveCancellables)
+    }
+    
+    func saveFormState(expandedPhaseIds: Set<UUID>? = nil) {
+        // Create form state with current values
+        // Note: We save manager/team member IDs, not full User objects
+        let managerId = selectedProjectManager?.email ?? selectedProjectManager?.phoneNumber
+        let teamMemberIds = selectedProjectTeamMembers.map { $0.phoneNumber }
+        
+        // Update phases with manager/team IDs before saving
+        var phasesToSave = phases
+        for i in 0..<phasesToSave.count {
+            phasesToSave[i].selectedManagerId = phasesToSave[i].selectedManager?.email ?? phasesToSave[i].selectedManager?.phoneNumber
+            phasesToSave[i].selectedTeamMemberIds = Array(phasesToSave[i].selectedTeamMembers).map { $0.phoneNumber }
+        }
+        
+        // Use provided expandedPhaseIds or fall back to restoredExpandedPhaseIds
+        let phaseIdsToSave = expandedPhaseIds ?? restoredExpandedPhaseIds
+        
+        // Update restoredExpandedPhaseIds if new IDs were provided
+        if let newPhaseIds = expandedPhaseIds {
+            restoredExpandedPhaseIds = newPhaseIds
+        }
+        
+        let formState = CreateProjectFormState(
+            projectName: projectName,
+            projectDescription: projectDescription,
+            client: client,
+            location: location,
+            plannedDate: plannedDate,
+            currency: currency,
+            allowTemplateOverrides: allowTemplateOverrides,
+            phases: phasesToSave,
+            selectedProjectManagerId: managerId,
+            selectedProjectTeamMemberIds: teamMemberIds,
+            attachmentURL: attachmentURL,
+            attachmentName: attachmentName,
+            expandedPhaseIds: phaseIdsToSave.map { $0.uuidString }
+        )
+        
+        // Encode and save to UserDefaults
+        if let encoded = try? JSONEncoder().encode(formState) {
+            UserDefaults.standard.set(encoded, forKey: formStateKey)
+        }
+    }
+    
+    private func loadFormState() {
+        guard let data = UserDefaults.standard.data(forKey: formStateKey),
+              let formState = try? JSONDecoder().decode(CreateProjectFormState.self, from: data) else {
+            // No saved state, use defaults
+            return
+        }
+        
+        // Restore form fields
+        projectName = formState.projectName
+        projectDescription = formState.projectDescription
+        client = formState.client
+        location = formState.location
+        plannedDate = formState.plannedDate
+        currency = formState.currency
+        allowTemplateOverrides = formState.allowTemplateOverrides
+        phases = formState.phases
+        attachmentURL = formState.attachmentURL
+        attachmentName = formState.attachmentName
+        
+        // Restore expanded phase IDs
+        restoredExpandedPhaseIds = Set(formState.expandedPhaseIds.compactMap { UUID(uuidString: $0) })
+        
+        // Note: Manager and team members will be restored after users are loaded
+        // Store IDs for later restoration
+        if let managerId = formState.selectedProjectManagerId {
+            // Will be restored in restoreTeamSelections after users load
+            _restoreManagerId = managerId
+        }
+        _restoreTeamMemberIds = formState.selectedProjectTeamMemberIds
+    }
+    
+    // Temporary storage for restoration after users load
+    private var _restoreManagerId: String?
+    private var _restoreTeamMemberIds: [String] = []
+    @Published var restoredExpandedPhaseIds: Set<UUID> = []
+    
+    func restoreTeamSelections() {
+        // Restore project manager
+        if let managerId = _restoreManagerId {
+            if let manager = allApprovers.first(where: { $0.email == managerId || $0.phoneNumber == managerId }) {
+                selectedProjectManager = manager
+            }
+            _restoreManagerId = nil
+        }
+        
+        // Restore team members
+        if !_restoreTeamMemberIds.isEmpty {
+            let restoredMembers = allUsers.filter { user in
+                _restoreTeamMemberIds.contains(user.phoneNumber)
+            }
+            selectedProjectTeamMembers = Set(restoredMembers)
+            _restoreTeamMemberIds = []
+        }
+        
+        // Restore phase-level selections
+        for i in 0..<phases.count {
+            let phase = phases[i]
+            if let managerId = phase.selectedManagerId {
+                if let manager = allApprovers.first(where: { $0.email == managerId || $0.phoneNumber == managerId }) {
+                    phases[i].selectedManager = manager
+                }
+            }
+            
+            if !phase.selectedTeamMemberIds.isEmpty {
+                let restoredMembers = allUsers.filter { user in
+                    phase.selectedTeamMemberIds.contains(user.phoneNumber)
+                }
+                phases[i].selectedTeamMembers = Set(restoredMembers)
+            }
+        }
+    }
+    
+    func clearFormState() {
+        UserDefaults.standard.removeObject(forKey: formStateKey)
+        _restoreManagerId = nil
+        _restoreTeamMemberIds = []
+    }
+    
     // MARK: - Reset Form
     private func resetForm() {
         projectName = ""
@@ -1108,5 +1339,8 @@ class CreateProjectViewModel: ObservableObject {
         attachmentURL = nil
         attachmentName = nil
         uploadProgress = 0.0
+        
+        // Clear saved form state
+        clearFormState()
     }
 }

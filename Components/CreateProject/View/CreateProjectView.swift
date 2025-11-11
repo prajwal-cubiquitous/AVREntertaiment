@@ -67,10 +67,20 @@ struct CreateProjectView: View {
                 }
                 .onAppear {
                     viewModel.setAuthService(authService)
-                    // Expand the first phase by default
-                    if let firstPhaseId = viewModel.phases.first?.id {
+                    // Restore expanded phases from saved state
+                    if !viewModel.restoredExpandedPhaseIds.isEmpty {
+                        expandedPhaseIds = viewModel.restoredExpandedPhaseIds.filter { id in
+                            viewModel.phases.contains { $0.id == id }
+                        }
+                    }
+                    // If no phases are expanded, expand the first one by default
+                    if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
                         expandedPhaseIds = [firstPhaseId]
                     }
+                }
+                .onChange(of: expandedPhaseIds) { oldValue, newValue in
+                    // Save expanded phase state when it changes
+                    viewModel.saveFormState(expandedPhaseIds: newValue)
                 }
                 .onChange(of: viewModel.phases.count) { oldCount, newCount in
                     // When a new phase is added, collapse all and expand the new one
