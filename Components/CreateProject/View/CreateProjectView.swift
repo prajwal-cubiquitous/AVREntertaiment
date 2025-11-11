@@ -280,9 +280,16 @@ struct CreateProjectView: View {
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     
-                    DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
+                    HStack {
+                        DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                        Spacer()
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.vertical, DesignSystem.Spacing.small)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.field)
                     
                     Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
                         .font(DesignSystem.Typography.caption1)
@@ -291,7 +298,7 @@ struct CreateProjectView: View {
                 }
                 .id("plannedDate")
                 
-                // Currency Picker (currently only INR)
+                // Currency Picker
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                     Text("Currency")
                         .font(DesignSystem.Typography.headline)
@@ -303,6 +310,11 @@ struct CreateProjectView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.vertical, DesignSystem.Spacing.small)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.field)
                 }
                 
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -580,9 +592,16 @@ struct CreateProjectView: View {
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     
-                    DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
+                    HStack {
+                        DatePicker("Select planned start date", selection: $viewModel.plannedDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .labelsHidden()
+                        Spacer()
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.vertical, DesignSystem.Spacing.small)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.field)
                     
                     Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
                         .font(DesignSystem.Typography.caption1)
@@ -606,6 +625,11 @@ struct CreateProjectView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.vertical, DesignSystem.Spacing.small)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.field)
                 }
                 .padding(.horizontal, DesignSystem.Spacing.medium)
                 .padding(.vertical, DesignSystem.Spacing.small)
