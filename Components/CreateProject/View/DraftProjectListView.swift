@@ -34,6 +34,7 @@ struct DraftProjectListView: View {
             .alert("Delete Draft", isPresented: $showDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     if let draft = draftToDelete {
+                        HapticManager.impact(.medium)
                         viewModel.deleteDraft(draft)
                         draftToDelete = nil
                     }
@@ -84,6 +85,17 @@ struct DraftProjectListView: View {
                         showDeleteConfirmation = true
                     }
                 )
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+            .onDelete { indexSet in
+                HapticManager.selection()
+                for index in indexSet {
+                    if index < viewModel.drafts.count {
+                        let draft = viewModel.drafts[index]
+                        draftToDelete = draft
+                        showDeleteConfirmation = true
+                    }
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -133,43 +145,58 @@ struct DraftProjectRow: View {
     
     var body: some View {
         Button(action: onContinue) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                        Text(projectName)
-                            .font(DesignSystem.Typography.headline)
-                            .foregroundColor(.primary)
+            HStack(alignment: .top, spacing: 12) {
+                // Project Icon
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.blue)
+                    .frame(width: 44, height: 44)
+                    .background(Color.blue.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                
+                // Project Info
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(projectName)
+                        .font(DesignSystem.Typography.headline)
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    
+                    if !summaryText.isEmpty {
+                        Text(summaryText)
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
                             .lineLimit(2)
-                        
-                        if !summaryText.isEmpty {
-                            Text(summaryText)
-                                .font(DesignSystem.Typography.subheadline)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
-                        }
-                        
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
                         Text("Updated \(lastUpdated)")
                             .font(DesignSystem.Typography.caption1)
                             .foregroundColor(.secondary)
                     }
-                    
-                    Spacer()
-                    
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 16))
-                            .foregroundColor(.red)
-                            .padding(8)
-                            .background(Color.red.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
                 }
+                
+                Spacer()
+                
+                // Delete Button
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.red)
+                        .frame(width: 36, height: 36)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.vertical, DesignSystem.Spacing.small)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }

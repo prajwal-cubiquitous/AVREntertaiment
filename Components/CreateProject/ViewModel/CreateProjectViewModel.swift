@@ -13,6 +13,7 @@ import FirebaseStorage
 import Combine
 import UIKit
 import UniformTypeIdentifiers
+import SwiftUI
 
 struct DepartmentItem: Identifiable, Codable {
     let id: UUID
@@ -1529,8 +1530,14 @@ class CreateProjectViewModel: ObservableObject {
             
             var loadedDrafts: [DraftProject] = []
             for document in querySnapshot.documents {
-                if let draft = try? document.data(as: DraftProject.self) {
+                do {
+                    var draft = try document.data(as: DraftProject.self)
+                    // Ensure document ID is set
+                    draft.id = document.documentID
                     loadedDrafts.append(draft)
+                } catch {
+                    // Skip documents that can't be decoded
+                    continue
                 }
             }
             
@@ -1583,28 +1590,67 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     func deleteDraft(_ draft: DraftProject) {
+        guard let customerId = authService?.currentCustomerId else {
+            alertMessage = "Customer ID not found. Please log in again."
+            showAlert = true
+            return
+        }
+        
+        guard let draftId = draft.id, !draftId.isEmpty else {
+            alertMessage = "Draft ID is missing. Cannot delete."
+            showAlert = true
+            return
+        }
+        
+        // Store the draft ID for restoration if deletion fails
+        let draftIdToDelete = draftId
+        
+        // Optimistically remove from UI immediately with smooth animation
+        withAnimation(.easeInOut(duration: 0.25)) {
+            drafts.removeAll { $0.id == draftIdToDelete }
+        }
+        
         Task {
-            guard let customerId = authService?.currentCustomerId,
-                  let draftId = draft.id else { return }
-            
             do {
-                try await db.collection("customers")
+                let draftRef = db.collection("customers")
                     .document(customerId)
                     .collection("draft_projects")
-                    .document(draftId)
-                    .delete()
+                    .document(draftIdToDelete)
                 
+                // Verify document exists before deleting
+                let documentSnapshot = try await draftRef.getDocument()
+                
+                guard documentSnapshot.exists else {
+                    // Document doesn't exist, just refresh the list
+                    await loadDrafts()
+                    return
+                }
+                
+                // Delete the document
+                try await draftRef.delete()
+                
+                // Update customer document if no drafts remain
+                let remainingDrafts = try await db.collection("customers")
+                    .document(customerId)
+                    .collection("draft_projects")
+                    .getDocuments()
+                
+                if remainingDrafts.documents.isEmpty {
+                    let customerRef = db.collection("customers").document(customerId)
+                    try await customerRef.updateData([
+                        "hasDrafts": false
+                    ])
+                }
+                
+                // Refresh drafts list to ensure consistency
                 await loadDrafts()
                 
-                await MainActor.run {
-                    alertMessage = "Draft deleted successfully"
-                    showAlert = true
-                }
             } catch {
-                await MainActor.run {
-                    alertMessage = "Failed to delete draft: \(error.localizedDescription)"
-                    showAlert = true
-                }
+                // If deletion fails, reload drafts to restore the item
+                await loadDrafts()
+                
+                alertMessage = "Failed to delete draft: \(error.localizedDescription)"
+                showAlert = true
             }
         }
     }
