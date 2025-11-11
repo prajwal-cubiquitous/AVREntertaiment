@@ -19,6 +19,7 @@ struct CreateProjectView: View {
     @State private var showingReviewScreen = false
     @State private var showingFileViewer = false
     @State private var showingCamera = false
+    @State private var expandedPhaseIds: Set<UUID> = [] // Track which phases are expanded
     
     let currencies = [
         ("₹ Indian Rupee", "INR"),
@@ -66,10 +67,48 @@ struct CreateProjectView: View {
                 }
                 .onAppear {
                     viewModel.setAuthService(authService)
+                    // Expand the first phase by default
+                    if let firstPhaseId = viewModel.phases.first?.id {
+                        expandedPhaseIds = [firstPhaseId]
+                    }
+                }
+                .onChange(of: viewModel.phases.count) { oldCount, newCount in
+                    // When a new phase is added, collapse all and expand the new one
+                    if newCount > oldCount, let newPhaseId = viewModel.phases.last?.id {
+                        withAnimation(DesignSystem.Animation.standardSpring) {
+                            expandedPhaseIds = [newPhaseId]
+                        }
+                    } else if newCount < oldCount {
+                        // When a phase is removed, update expanded set
+                        expandedPhaseIds = expandedPhaseIds.filter { id in
+                            viewModel.phases.contains { $0.id == id }
+                        }
+                        // If no phases are expanded, expand the first one
+                        if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
+                            expandedPhaseIds = [firstPhaseId]
+                        }
+                    }
                 }
                 .onChange(of: viewModel.firstInvalidFieldId) { fieldId in
                     if let fieldId = fieldId {
                         print("🔄 Attempting to scroll to field: \(fieldId)")
+                        
+                        // Extract phase ID from field ID (format: "phase_{uuid}_name" or "phase_{uuid}_dates", etc.)
+                        if fieldId.hasPrefix("phase_") {
+                            // Remove "phase_" prefix
+                            let withoutPrefix = String(fieldId.dropFirst(6)) // "phase_".count = 6
+                            // Find the next underscore to get the UUID
+                            if let underscoreIndex = withoutPrefix.firstIndex(of: "_") {
+                                let uuidString = String(withoutPrefix[..<underscoreIndex])
+                                if let phaseId = UUID(uuidString: uuidString) {
+                                    // Expand the phase that has the error
+                                    withAnimation(DesignSystem.Animation.standardSpring) {
+                                        expandedPhaseIds.insert(phaseId)
+                                    }
+                                }
+                            }
+                        }
+                        
                         // Use Task to ensure it runs after view updates
                         Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
@@ -275,8 +314,19 @@ struct CreateProjectView: View {
                     PhaseCardView(
                         phase: phaseBinding(for: phase.id),
                         phaseNumber: phase.phaseNumber,
+                        totalPhases: viewModel.phases.count,
+                        isExpanded: expandedPhaseIds.contains(phase.id),
                         canDelete: viewModel.phases.count > 1,
                         viewModel: viewModel,
+                        onToggleExpand: {
+                            withAnimation(DesignSystem.Animation.standardSpring) {
+                                if expandedPhaseIds.contains(phase.id) {
+                                    expandedPhaseIds.remove(phase.id)
+                                } else {
+                                    expandedPhaseIds.insert(phase.id)
+                                }
+                            }
+                        },
                         onDelete: {
                             HapticManager.selection()
                             viewModel.removePhaseById(phase.id)
@@ -549,8 +599,19 @@ struct CreateProjectView: View {
                     PhaseCardView(
                         phase: phaseBinding(for: phase.id),
                         phaseNumber: phase.phaseNumber,
+                        totalPhases: viewModel.phases.count,
+                        isExpanded: expandedPhaseIds.contains(phase.id),
                         canDelete: viewModel.phases.count > 1,
                         viewModel: viewModel,
+                        onToggleExpand: {
+                            withAnimation(DesignSystem.Animation.standardSpring) {
+                                if expandedPhaseIds.contains(phase.id) {
+                                    expandedPhaseIds.remove(phase.id)
+                                } else {
+                                    expandedPhaseIds.insert(phase.id)
+                                }
+                            }
+                        },
                         onDelete: {
                             HapticManager.selection()
                             viewModel.removePhaseById(phase.id)
@@ -845,140 +906,216 @@ struct CreateProjectView: View {
 struct PhaseCardView: View {
     @Binding var phase: PhaseItem
     let phaseNumber: Int
+    let totalPhases: Int
+    let isExpanded: Bool
     let canDelete: Bool
     @ObservedObject var viewModel: CreateProjectViewModel
+    let onToggleExpand: () -> Void
     let onDelete: () -> Void
     let onAddDepartment: () -> Void
     
+    // Check if phase has required fields filled
+    private var hasRequiredFields: Bool {
+        !phase.phaseName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        phase.endDate > phase.startDate &&
+        !phase.departments.isEmpty &&
+        phase.departments.contains { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            // Phase Header
-            HStack {
-                Text("Phase \(phaseNumber)")
-                    .font(DesignSystem.Typography.headline)
-                    .foregroundColor(.primary)
-
-                Spacer()
-
-                // Delete Phase Button
-                if canDelete {
-                    Button(action: onDelete) {
-                        Image(systemName: "trash")
-                            .foregroundColor(.red)
-                            .font(.system(size: 16))
+        VStack(alignment: .leading, spacing: 0) {
+            // Phase Header - Always visible, clickable to expand/collapse
+            Button(action: {
+                HapticManager.selection()
+                onToggleExpand()
+            }) {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    HStack {
+                        // Phase number with total (e.g., "Phase 1/2")
+                        Text("Phase \(phaseNumber)/\(totalPhases)")
+                            .font(DesignSystem.Typography.headline)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        // Completion indicator
+                        if hasRequiredFields {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 18))
+                        } else {
+                            Image(systemName: "circle")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 18))
+                        }
+                        
+                        // Expand/Collapse chevron
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.secondary)
+                            .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                        
+                        // Delete Phase Button
+                        if canDelete {
+                            Button(action: {
+                                HapticManager.selection()
+                                onDelete()
+                            }) {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                                    .font(.system(size: 16))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.leading, DesignSystem.Spacing.small)
+                        }
+                    }
+                    
+                    // Phase Budget - Always visible in collapsed state
+                    HStack(spacing: DesignSystem.Spacing.small) {
+                        Image(systemName: "indianrupeesign.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(DesignSystem.Typography.caption1)
+                            .symbolRenderingMode(.hierarchical)
+                        
+                        Text("Budget:")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                        
+                        Text(viewModel.phaseBudgetFormatted(for: phase.id))
+                            .font(DesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
                     }
                 }
+                .contentShape(Rectangle())
             }
-
-            // Phase Name
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                Text("Phase Name")
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
-
-                TextField("Enter phase name", text: $phase.phaseName)
-                    .font(DesignSystem.Typography.body)
-                    .fieldStyle()
-                    .overlay(
-                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
-                            .stroke(viewModel.phaseNameError(for: phase.id) != nil ? Color.red : Color.clear, lineWidth: 1)
-                    )
-                
-                if let error = viewModel.phaseNameError(for: phase.id) {
-                    InlineErrorMessage(message: error)
-                }
-            }
-            .id("phase_\(phase.id)_name")
-
-            // Timeline Section
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Timeline")
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
-
-                // Start Date (Required)
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Start Date", systemImage: "calendar.badge.plus")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    
-                    DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                }
-                .padding(.vertical, 4)
-
-                // End Date (Required)
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("End Date", systemImage: "calendar.badge.minus")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    
-                    DatePicker("Select end date", selection: $phase.endDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                }
-                .padding(.vertical, 4)
-
-                // Date Validation Warnings
-                if let error = viewModel.phaseDateError(for: phase.id) {
-                    InlineErrorMessage(message: error)
-                }
-                
-                if let timelineError = viewModel.phaseTimelineError(for: phase.id) {
-                    InlineErrorMessage(message: timelineError)
-                        .id("phase_\(phase.id)_timeline")
-                }
-            }
-            .id("phase_\(phase.id)_dates")
-
-            // Manager & Team note
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Manager & Team for this phase are inherited from Project Team section")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            // Departments
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Departments")
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
-
-                ForEach($phase.departments) { $dept in
-                    DepartmentInputRow(
-                        item: $dept,
-                        errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id),
-                        viewModel: viewModel,
-                        canDelete: phase.departments.count > 1,
-                        onDelete: {
-                            viewModel.removeDepartmentById(from: phase.id, departmentId: dept.id)
-                        }
-                    )
-                    .id("phase_\(phase.id)_dept_\(dept.id)_name")
-                }
-
-                Button(action: {
-                    HapticManager.selection()
-                    onAddDepartment()
-                }) {
-                    Label("Add Department", systemImage: "plus.circle.fill")
-                        .foregroundColor(.accentColor)
-                        .font(DesignSystem.Typography.caption1)
-                        .fontWeight(.medium)
-                }
-                .buttonStyle(.plain)
-                
-                if let error = viewModel.phaseDepartmentsError(for: phase.id) {
-                    InlineErrorMessage(message: error)
-                }
-            }
-            .id("phase_\(phase.id)_departments")
+            .buttonStyle(.plain)
+            .padding(DesignSystem.Spacing.medium)
             
-            // Phase Budget Summary
-            phaseBudgetView(for: phase.id)
+            // Expandable Content
+            if isExpanded {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                    Divider()
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Phase Name
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        Text("Phase Name")
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
 
-            Divider()
+                        TextField("Enter phase name", text: $phase.phaseName)
+                            .font(DesignSystem.Typography.body)
+                            .fieldStyle()
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                    .stroke(viewModel.phaseNameError(for: phase.id) != nil ? Color.red : Color.clear, lineWidth: 1)
+                            )
+                        
+                        if let error = viewModel.phaseNameError(for: phase.id) {
+                            InlineErrorMessage(message: error)
+                        }
+                    }
+                    .id("phase_\(phase.id)_name")
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+
+                    // Timeline Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Timeline")
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
+
+                        // Start Date (Required)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Start Date", systemImage: "calendar.badge.plus")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            
+                            DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                        }
+                        .padding(.vertical, 4)
+
+                        // End Date (Required)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("End Date", systemImage: "calendar.badge.minus")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            
+                            DatePicker("Select end date", selection: $phase.endDate, displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                        }
+                        .padding(.vertical, 4)
+
+                        // Date Validation Warnings
+                        if let error = viewModel.phaseDateError(for: phase.id) {
+                            InlineErrorMessage(message: error)
+                        }
+                        
+                        if let timelineError = viewModel.phaseTimelineError(for: phase.id) {
+                            InlineErrorMessage(message: timelineError)
+                                .id("phase_\(phase.id)_timeline")
+                        }
+                    }
+                    .id("phase_\(phase.id)_dates")
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+
+                    // Manager & Team note
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Manager & Team for this phase are inherited from Project Team section")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+
+                    // Departments
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Departments")
+                            .font(DesignSystem.Typography.subheadline)
+                            .foregroundColor(.secondary)
+
+                        ForEach($phase.departments) { $dept in
+                            DepartmentInputRow(
+                                item: $dept,
+                                errorMessage: viewModel.departmentNameError(for: phase.id, departmentId: dept.id),
+                                viewModel: viewModel,
+                                canDelete: phase.departments.count > 1,
+                                onDelete: {
+                                    viewModel.removeDepartmentById(from: phase.id, departmentId: dept.id)
+                                }
+                            )
+                            .id("phase_\(phase.id)_dept_\(dept.id)_name")
+                        }
+
+                        Button(action: {
+                            HapticManager.selection()
+                            onAddDepartment()
+                        }) {
+                            Label("Add Department", systemImage: "plus.circle.fill")
+                                .foregroundColor(.accentColor)
+                                .font(DesignSystem.Typography.caption1)
+                                .fontWeight(.medium)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if let error = viewModel.phaseDepartmentsError(for: phase.id) {
+                            InlineErrorMessage(message: error)
+                        }
+                    }
+                    .id("phase_\(phase.id)_departments")
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Phase Budget Summary
+                    phaseBudgetView(for: phase.id)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                        .padding(.top, DesignSystem.Spacing.small)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .padding(DesignSystem.Spacing.medium)
+        .padding(.vertical, DesignSystem.Spacing.medium)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.medium)
     }
