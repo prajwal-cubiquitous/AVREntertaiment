@@ -189,8 +189,8 @@ enum PaymentMode: String, Codable, CaseIterable {
     var icon: String {
         switch self {
         case .cash: return "banknote"
-        case .upi: return "creditcard"
-        case .check: return "doc.text"
+        case .upi: return "qrcode"
+        case .check: return "checkmark.rectangle"
         case .Card: return "creditcard"
         }
     }

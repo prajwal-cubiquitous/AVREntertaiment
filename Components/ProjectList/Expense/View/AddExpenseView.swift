@@ -194,17 +194,7 @@ struct AddExpenseView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                
-                // MARK: - Receipt
-                Section {
-                    receiptView
-                } header: {
-                    Text("Receipt")
-                        .textCase(.none)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
+                    
                 // MARK: - Payment Proof (Required for UPI and Check)
                 if viewModel.selectedPaymentMode == .upi || viewModel.selectedPaymentMode == .check {
                     Section {
@@ -220,6 +210,18 @@ struct AddExpenseView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                
+                // MARK: - Receipt
+                Section {
+                    receiptView
+                } header: {
+                    Text("Receipt")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+
                 
                 // MARK: - Submit Button
                 Section {
