@@ -4,6 +4,7 @@ import FirebaseFirestore
 struct AdminProjectDetailView: View {
     let project: Project
     @StateObject private var viewModel: AdminProjectDetailViewModel
+    @StateObject private var stateManager = DashboardStateManager()
     @Environment(\.dismiss) private var dismiss
     @State private var showingTeamMembersDetail = false
     @State private var pendingManagerChange: User? = nil
@@ -73,6 +74,26 @@ struct AdminProjectDetailView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectDeleted"))) { _ in
             dismiss()
+        }
+        .onAppear {
+            // Load team members in state manager when view appears
+            if let projectId = project.id,
+               let customerId = viewModel.customerId {
+                Task {
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Refresh team members when project is updated
+            Task {
+                await viewModel.fetchTeamMembers()
+                // Also update state manager
+                if let projectId = project.id,
+                   let customerId = viewModel.customerId {
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
+            }
         }
     }
     
@@ -394,14 +415,8 @@ struct AdminProjectDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         .sheet(isPresented: $showingTeamMembersDetail) {
-            TeamMembersDetailView(project: project, role: .ADMIN)
+            TeamMembersDetailView(project: project, role: .ADMIN, stateManager: stateManager)
                 .presentationDetents([.large])
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
-            // Refresh team members when project is updated
-            Task {
-                await viewModel.fetchTeamMembers()
-            }
         }
     }
     

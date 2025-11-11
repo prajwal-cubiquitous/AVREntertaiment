@@ -458,7 +458,7 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingTeamMembersDetail) {
             if let project = project {
-                TeamMembersDetailView(project: project, role: role)
+                TeamMembersDetailView(project: project, role: role, stateManager: stateManager)
                     .presentationDetents([.large])
             }
         }
@@ -541,6 +541,8 @@ struct DashboardView: View {
                 if let customerId = customerId {
                     Task {
                         await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                        // Load team members
+                        await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
                     }
                 }
             }
@@ -586,6 +588,14 @@ struct DashboardView: View {
                     newStatus: newStatus,
                     amount: amount
                 )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Reload team members when project is updated
+            if let projectId = project?.id, let customerId = customerId {
+                Task {
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                }
             }
         }
 
@@ -675,7 +685,7 @@ struct DashboardView: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(project?.teamMembers.count ?? 0)")
+                            Text("\(stateManager.teamMembers.count > 0 ? stateManager.teamMembers.count : (project?.teamMembers.count ?? 0))")
                                 .font(DesignSystem.Typography.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
@@ -1222,6 +1232,7 @@ struct DashboardView: View {
         // All tasks run concurrently to minimize refresh time
         async let phasesTask = loadPhases()
         async let stateManagerTask = stateManager.loadAllData(projectId: projectId, customerId: customerId)
+        async let teamMembersTask = stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
         async let tempApproverTask = fetchTempApproverData()
         async let phaseRequestsTask: Void = {
             if role == .ADMIN {
@@ -1236,6 +1247,7 @@ struct DashboardView: View {
         // All tasks run in parallel for optimal performance
         _ = await phasesTask
         _ = await stateManagerTask
+        _ = await teamMembersTask
         _ = await tempApproverTask
         await phaseRequestsTask
         

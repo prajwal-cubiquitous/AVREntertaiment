@@ -11,6 +11,7 @@ import FirebaseFirestore
 struct TeamMembersDetailView: View {
     let project: Project
     let role: UserRole?
+    @ObservedObject var stateManager: DashboardStateManager
     @StateObject private var viewModel = TeamMembersDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -20,8 +21,14 @@ struct TeamMembersDetailView: View {
     @State private var showingDeleteAlert = false
     @State private var showingAddUser = false
     @State private var isDeleting = false
+    
+    // Use state manager's team members if available, otherwise fall back to viewModel
+    private var currentTeamMembers: [User] {
+        stateManager.teamMembers.isEmpty ? viewModel.teamMembers : stateManager.teamMembers
+    }
+    
     private var filteredMembers: [User] {
-        var members = viewModel.teamMembers
+        var members = currentTeamMembers
         
         // Filter by search text
         if !searchText.isEmpty {
@@ -47,7 +54,7 @@ struct TeamMembersDetailView: View {
                 // Content
                 if viewModel.isLoading {
                     loadingView
-                } else if viewModel.teamMembers.isEmpty {
+                } else if currentTeamMembers.isEmpty {
                     emptyView
                 } else {
                     membersListView
@@ -56,7 +63,14 @@ struct TeamMembersDetailView: View {
             .navigationBarHidden(true)
         }
         .onAppear {
-            viewModel.loadTeamMembers(for: project)
+            // Load from state manager if available, otherwise load from Firebase
+            if stateManager.teamMembers.isEmpty {
+                viewModel.loadTeamMembers(for: project)
+            }
+            // Sync viewModel with stateManager
+            if !stateManager.teamMembers.isEmpty {
+                viewModel.updateTeamMembers(stateManager.teamMembers)
+            }
         }
         .sheet(isPresented: $showingMemberExpenses) {
             if let member = selectedMember {
@@ -65,10 +79,20 @@ struct TeamMembersDetailView: View {
             }
         }
         .sheet(isPresented: $showingAddUser) {
-            AddTeamMemberView(project: project) {
+            AddTeamMemberView(project: project, stateManager: stateManager) {
                 viewModel.loadTeamMembers(for: project)
             }
             .presentationDetents([.large])
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
+            // Reload team members when project is updated
+            Task {
+                if let projectId = project.id,
+                   let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() {
+                    await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                    viewModel.updateTeamMembers(stateManager.teamMembers)
+                }
+            }
         }
         .alert("Remove Team Member", isPresented: $showingDeleteAlert) {
             Button("Cancel", role: .cancel) {
@@ -106,7 +130,7 @@ struct TeamMembersDetailView: View {
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                     
-                    Text("\(viewModel.teamMembers.count) members")
+                    Text("\(currentTeamMembers.count) members")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.8))
                 }
@@ -129,7 +153,13 @@ struct TeamMembersDetailView: View {
                     // Refresh Button
                     Button(action: {
                         HapticManager.selection()
-                        viewModel.refreshData()
+                        Task {
+                            if let projectId = project.id,
+                               let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() {
+                                await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                            }
+                            viewModel.refreshData()
+                        }
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .foregroundColor(.white)
@@ -259,32 +289,36 @@ struct TeamMembersDetailView: View {
             // Get member identifier (phone number for regular users, email for admin)
             let memberId = member.role == .ADMIN ? (member.email ?? "") : member.phoneNumber
             
-            // Remove member from project's teamMembers array
-            let projectRef = FirebasePathHelper.shared
-                .projectDocument(customerId: customerId, projectId: projectId)
-            
-            // Get current team members
-            let projectDoc = try await projectRef.getDocument()
-            if let data = projectDoc.data(),
-               var teamMembers = data["teamMembers"] as? [String] {
-                // Remove the member from the array
-                teamMembers.removeAll { $0 == memberId }
+                // Remove member immediately from state manager (before Firebase update)
+                stateManager.removeTeamMember(memberId: memberId)
                 
-                // Update the project
-                try await projectRef.updateData([
-                    "teamMembers": teamMembers
-                ])
+                // Remove member from project's teamMembers array
+                let projectRef = FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
                 
-                // Reload team members
-                await MainActor.run {
-                    viewModel.loadTeamMembers(for: project)
-                    isDeleting = false
-                    memberToDelete = nil
-                    HapticManager.notification(.success)
-                    // Notify that project was updated
-                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                // Get current team members
+                let projectDoc = try await projectRef.getDocument()
+                if let data = projectDoc.data(),
+                   var teamMembers = data["teamMembers"] as? [String] {
+                    // Remove the member from the array
+                    teamMembers.removeAll { $0 == memberId }
+                    
+                    // Update the project
+                    try await projectRef.updateData([
+                        "teamMembers": teamMembers
+                    ])
+                    
+                    // Update state manager with final list
+                    await MainActor.run {
+                        stateManager.updateTeamMembers(stateManager.teamMembers, memberIds: teamMembers)
+                        viewModel.updateTeamMembers(stateManager.teamMembers)
+                        isDeleting = false
+                        memberToDelete = nil
+                        HapticManager.notification(.success)
+                        // Notify that project was updated
+                        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                    }
                 }
-            }
         } catch {
             print("❌ Error deleting team member: \(error)")
             await MainActor.run {
@@ -466,6 +500,10 @@ class TeamMembersDetailViewModel: ObservableObject {
         if let project = currentProject {
             loadTeamMembers(for: project)
         }
+    }
+    
+    func updateTeamMembers(_ members: [User]) {
+        self.teamMembers = members
     }
     
     private var currentProject: Project?

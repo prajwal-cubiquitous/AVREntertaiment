@@ -11,6 +11,7 @@ import FirebaseAuth
 
 struct AddTeamMemberView: View {
     let project: Project
+    let stateManager: DashboardStateManager
     let onMemberAdded: () -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = AddTeamMemberViewModel()
@@ -168,6 +169,9 @@ struct AddTeamMemberView: View {
                 // Get member identifier (phone number for regular users, email for admin)
                 let memberId = user.role == .ADMIN ? (user.email ?? "") : user.phoneNumber
                 
+                // Add member immediately to state manager (before Firebase update)
+                stateManager.addTeamMember(user, memberId: memberId)
+                
                 // Get current team members
                 let projectRef = FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
@@ -184,8 +188,9 @@ struct AddTeamMemberView: View {
                             "teamMembers": teamMembers
                         ])
                         
-                        // Reload and dismiss
+                        // Update state manager with final list
                         await MainActor.run {
+                            stateManager.updateTeamMembers(stateManager.teamMembers, memberIds: teamMembers)
                             onMemberAdded()
                             isAdding = false
                             HapticManager.notification(.success)
@@ -194,6 +199,8 @@ struct AddTeamMemberView: View {
                             dismiss()
                         }
                     } else {
+                        // Rollback state manager change
+                        stateManager.removeTeamMember(memberId: memberId)
                         await MainActor.run {
                             isAdding = false
                             errorMessage = "User is already a team member"
@@ -203,6 +210,11 @@ struct AddTeamMemberView: View {
                 }
             } catch {
                 print("❌ Error adding team member: \(error)")
+                // Rollback state manager change
+                if let user = selectedUser {
+                    let memberId = user.role == .ADMIN ? (user.email ?? "") : user.phoneNumber
+                    stateManager.removeTeamMember(memberId: memberId)
+                }
                 await MainActor.run {
                     isAdding = false
                     errorMessage = "Failed to add team member: \(error.localizedDescription)"

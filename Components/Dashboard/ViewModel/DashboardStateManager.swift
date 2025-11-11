@@ -27,6 +27,10 @@ class DashboardStateManager: ObservableObject {
     @Published var totalProjectSpent: Double = 0
     @Published var departmentBudgets: [String: (total: Double, spent: Double)] = [:]
     
+    // Team members data for shared state management
+    @Published var teamMembers: [User] = []
+    @Published var teamMemberIds: [String] = []
+    
     // MARK: - Private Properties
     private var refreshTask: Task<Void, Never>?
     private let dateFormatter: DateFormatter = {
@@ -262,6 +266,121 @@ class DashboardStateManager: ObservableObject {
         }
         
         departmentBudgets = deptTotals
+    }
+    
+    // MARK: - Team Members Management
+    
+    /// Load team members for a project
+    func loadTeamMembers(projectId: String, customerId: String) async {
+        do {
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard let data = projectDoc.data(),
+                  let memberIds = data["teamMembers"] as? [String] else {
+                teamMemberIds = []
+                teamMembers = []
+                return
+            }
+            
+            teamMemberIds = memberIds
+            
+            // Load user details in parallel
+            var loadedMembers: [User] = []
+            await withTaskGroup(of: User?.self) { group in
+                for memberId in memberIds {
+                    group.addTask {
+                        await self.fetchUserDetails(userId: memberId, customerId: customerId)
+                    }
+                }
+                
+                for await member in group {
+                    if let member = member {
+                        loadedMembers.append(member)
+                    }
+                }
+            }
+            
+            // Sort members by role (Admin first, then by name)
+            loadedMembers.sort { first, second in
+                if first.role == .ADMIN && second.role != .ADMIN {
+                    return true
+                } else if first.role != .ADMIN && second.role == .ADMIN {
+                    return false
+                } else {
+                    return first.name < second.name
+                }
+            }
+            
+            teamMembers = loadedMembers
+        } catch {
+            print("❌ Error loading team members: \(error)")
+            teamMemberIds = []
+            teamMembers = []
+        }
+    }
+    
+    /// Fetch user details by ID
+    private func fetchUserDetails(userId: String, customerId: String) async -> User? {
+        do {
+            let document = try await FirebasePathHelper.shared
+                .usersCollection(customerId: customerId)
+                .document(userId)
+                .getDocument()
+            
+            if document.exists {
+                var user = try document.data(as: User.self)
+                user.id = document.documentID
+                return user
+            }
+            return nil
+        } catch {
+            print("❌ Error fetching user \(userId): \(error)")
+            return nil
+        }
+    }
+    
+    /// Add team member immediately (before Firebase update)
+    func addTeamMember(_ user: User, memberId: String) {
+        // Add to IDs if not already present
+        if !teamMemberIds.contains(memberId) {
+            teamMemberIds.append(memberId)
+        }
+        
+        // Add to members if not already present
+        if !teamMembers.contains(where: { $0.id == user.id || $0.phoneNumber == user.phoneNumber }) {
+            teamMembers.append(user)
+            
+            // Sort members by role (Admin first, then by name)
+            teamMembers.sort { first, second in
+                if first.role == .ADMIN && second.role != .ADMIN {
+                    return true
+                } else if first.role != .ADMIN && second.role == .ADMIN {
+                    return false
+                } else {
+                    return first.name < second.name
+                }
+            }
+        }
+    }
+    
+    /// Remove team member immediately (before Firebase update)
+    func removeTeamMember(memberId: String) {
+        // Remove from IDs
+        teamMemberIds.removeAll { $0 == memberId }
+        
+        // Remove from members (check both phone number and email for admin)
+        teamMembers.removeAll { user in
+            let userMemberId = user.role == .ADMIN ? (user.email ?? "") : user.phoneNumber
+            return userMemberId == memberId
+        }
+    }
+    
+    /// Update team members list (called after Firebase sync)
+    func updateTeamMembers(_ members: [User], memberIds: [String]) {
+        teamMembers = members
+        teamMemberIds = memberIds
     }
     
     // MARK: - Private Loading Methods
