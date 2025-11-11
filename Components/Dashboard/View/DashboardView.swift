@@ -139,6 +139,9 @@ struct DashboardView: View {
                         .padding(.horizontal, DesignSystem.Spacing.medium)
                         .padding(.bottom, DesignSystem.Spacing.extraLarge)
                     }
+                    .refreshable {
+                        await refreshAllData()
+                    }
                     .onChange(of: scrollToDepartmentSection) { newValue in
                         if newValue {
                             withAnimation(.easeInOut(duration: 0.6)) {
@@ -1204,6 +1207,61 @@ struct DashboardView: View {
         }
     }
     
+    // MARK: - Refresh All Data
+    /// Comprehensive refresh function that fetches all data from Firebase
+    /// Follows Apple's refreshable pattern for pull-to-refresh
+    /// Uses structured concurrency for parallel data loading as recommended by Apple
+    private func refreshAllData() async {
+        guard let projectId = project?.id, let customerId = customerId else {
+            print("❌ Cannot refresh: Missing project ID or customer ID")
+            return
+        }
+        
+        // Use structured concurrency to load all data in parallel for optimal performance
+        // This follows Apple's recommendation for efficient data loading
+        // All tasks run concurrently to minimize refresh time
+        async let phasesTask = loadPhases()
+        async let stateManagerTask = stateManager.loadAllData(projectId: projectId, customerId: customerId)
+        async let tempApproverTask = fetchTempApproverData()
+        async let phaseRequestsTask: Void = {
+            if role == .ADMIN {
+                await phaseRequestNotificationViewModel.loadPendingRequests(
+                    projectId: projectId,
+                    customerId: customerId
+                )
+            }
+        }()
+        
+        // Wait for all async tasks to complete
+        // All tasks run in parallel for optimal performance
+        _ = await phasesTask
+        _ = await stateManagerTask
+        _ = await tempApproverTask
+        await phaseRequestsTask
+        
+        // Load dashboard data after phases are loaded (needs phase data)
+        await MainActor.run {
+            viewModel.loadDashboardData()
+        }
+        
+        // Ensure state manager is synced with local state after refresh
+        await MainActor.run {
+            // Sync phase enabled map
+            stateManager.phaseEnabledMap = phaseEnabledMap
+            // Sync extension map
+            stateManager.phaseExtensionMap = phaseExtensionMap
+            // Sync anonymous expenses map
+            stateManager.phaseAnonymousExpensesMap = phaseAnonymousExpensesMap
+            // Recalculate totals after all data is loaded
+            stateManager.recalculateProjectTotals()
+        }
+        
+        // Provide haptic feedback when refresh completes
+        await MainActor.run {
+            HapticManager.impact(.light)
+        }
+    }
+    
     private func loadPhases() async {
         guard let projectId = project?.id else { return }
         guard let customerId = customerId else {
@@ -1538,10 +1596,12 @@ struct DashboardView: View {
     // MARK: - Fetch Temporary Approver Data
     private func fetchTempApproverData() async {
         guard let project = project, let tempApproverID = project.tempApproverID else {
-            tempApproverName = nil
-            tempApproverPhoneNumber = nil
-            tempApproverStatus = nil
-            tempApproverEndDate = nil
+            await MainActor.run {
+                tempApproverName = nil
+                tempApproverPhoneNumber = nil
+                tempApproverStatus = nil
+                tempApproverEndDate = nil
+            }
             return
         }
         
@@ -1560,8 +1620,8 @@ struct DashboardView: View {
                 .getDocument()
             
             if userDocument.exists, let user = try? userDocument.data(as: User.self) {
-                tempApproverName = user.name
-                tempApproverPhoneNumber = user.phoneNumber
+                let approverName = user.name
+                let approverPhoneNumber = user.phoneNumber
                 
                 // Always use the temp approver's phone number for the query
                 // This ensures temp approver details show for all users (admin, approver, etc.)
@@ -1577,26 +1637,37 @@ struct DashboardView: View {
                     .limit(to: 1)
                     .getDocuments()
                 
+                var endDate: Date? = nil
+                var status: TempApproverStatus? = nil
+                
                 if let tempApproverDoc = tempApproverSnapshot.documents.first,
                    let tempApprover = try? tempApproverDoc.data(as: TempApprover.self) {
-                    tempApproverEndDate = tempApprover.endDate
-                    tempApproverStatus = tempApprover.status
-                } else {
-                    tempApproverEndDate = nil
-                    tempApproverStatus = nil
+                    endDate = tempApprover.endDate
+                    status = tempApprover.status
+                }
+                
+                await MainActor.run {
+                    tempApproverName = approverName
+                    tempApproverPhoneNumber = approverPhoneNumber
+                    tempApproverEndDate = endDate
+                    tempApproverStatus = status
                 }
             } else {
+                await MainActor.run {
+                    tempApproverName = nil
+                    tempApproverPhoneNumber = nil
+                    tempApproverStatus = nil
+                    tempApproverEndDate = nil
+                }
+            }
+        } catch {
+            print("Error fetching temp approver data: \(error)")
+            await MainActor.run {
                 tempApproverName = nil
                 tempApproverPhoneNumber = nil
                 tempApproverStatus = nil
                 tempApproverEndDate = nil
             }
-        } catch {
-            print("Error fetching temp approver data: \(error)")
-            tempApproverName = nil
-            tempApproverPhoneNumber = nil
-            tempApproverStatus = nil
-            tempApproverEndDate = nil
         }
     }
 
