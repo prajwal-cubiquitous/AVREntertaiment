@@ -639,7 +639,7 @@ private struct CurrentPhaseView: View {
                         
                         // In Progress Tag - only show if phase is enabled and in progress
                         if phase.isEnabled && isPhaseInProgress(phase) {
-                            Text("In Progress")
+                            Text("Active")
                                 .font(.caption2)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)

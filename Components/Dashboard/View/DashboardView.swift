@@ -901,7 +901,7 @@ struct DashboardView: View {
                                         }
                                         // Show "In Progress" badge if phase is in progress AND enabled
                                         else if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                            Text("In Progress")
+                                            Text("Active")
                                                 .font(DesignSystem.Typography.caption2)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(.green)
@@ -909,7 +909,7 @@ struct DashboardView: View {
                                                 .padding(.vertical, 4)
                                                 .background(Color.green.opacity(0.12))
                                                 .clipShape(Capsule())
-                                                .accessibilityLabel("Phase status: In Progress")
+                                                .accessibilityLabel("Phase status: Active")
                                         }
                                         // Show "Planned" badge if phase is in the future
                                         else if isPhaseInFuture(phase) {
@@ -3310,7 +3310,7 @@ private struct AllPhasesView: View {
                 }
                 // Show "In Progress" badge if phase is in progress AND enabled
                 else if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                    Text("In Progress")
+                    Text("Active")
                         .font(DesignSystem.Typography.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.green)
