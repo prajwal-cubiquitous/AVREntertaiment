@@ -70,6 +70,8 @@ struct DashboardView: View {
     @State private var showingRequestActionSheet = false
     @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
     @StateObject private var stateManager: DashboardStateManager
+    @State private var showingCompletePhaseConfirmation = false
+    @State private var phaseToComplete: PhaseSummary? = nil
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -562,6 +564,23 @@ struct DashboardView: View {
                 .presentationDetents([.medium])
             }
         }
+        .alert("Complete Phase", isPresented: $showingCompletePhaseConfirmation) {
+            Button("Cancel", role: .cancel) {
+                phaseToComplete = nil
+            }
+            Button("Confirm", role: .destructive) {
+                if let phase = phaseToComplete {
+                    Task {
+                        await completePhase(phase)
+                    }
+                }
+                phaseToComplete = nil
+            }
+        } message: {
+            if let phase = phaseToComplete {
+                Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
+            }
+        }
 
         .onAppear {
             if let projectId = project?.id{
@@ -873,34 +892,64 @@ struct DashboardView: View {
                                             .transition(.opacity.combined(with: .scale))
                                         }
                                     }
-                                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                        if role == .ADMIN{
-                                            // Enable toggle
-                                            Toggle("", isOn: Binding(
-                                                get: { phaseEnabledMap[phase.id] ?? true },
-                                                set: { newValue in
-                                                    phaseEnabledMap[phase.id] = newValue
-                                                    updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                    Spacer()
+                                    VStack{
+                                        HStack{
+                                            Spacer()
+                                            
+                                            // 3-dot menu for Complete Phase (available for all roles)
+                                            Menu {
+                                                Button(role: .destructive) {
+                                                    HapticManager.selection()
+                                                    phaseToComplete = phase
+                                                    showingCompletePhaseConfirmation = true
+                                                } label: {
+                                                    Label("Complete Phase", systemImage: "checkmark.circle.fill")
                                                 }
-                                            ))
-                                            .labelsHidden()
-                                            .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                            .scaleEffect(0.85)
-                                            .padding(.leading, 6)
-
-                                            Button {
-                                                HapticManager.selection()
-                                                phaseForDepartmentAdd = phase
-                                                showingAddDepartment = true
                                             } label: {
-                                                Image(systemName: "plus.circle.fill")
+                                                Image(systemName: "ellipsis")
                                                     .font(.system(size: 16, weight: .medium))
-                                                    .foregroundColor(.accentColor)
-                                                    .accessibilityLabel("Add department to this phase")
+                                                    .foregroundColor(.secondary)
+                                                    .frame(width: 24, height: 24)
+                                                    .contentShape(Rectangle())
                                             }
                                             .buttonStyle(.plain)
-                                            .padding(.leading, 2)
+                                            .padding(.leading, role == .ADMIN ? 4 : 0)
                                             .padding(.vertical, 2)
+                                        }
+
+                                        
+                                            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                                if role == .ADMIN{
+                                                    HStack{
+                                                    // Enable toggle
+                                                    Toggle("", isOn: Binding(
+                                                        get: { phaseEnabledMap[phase.id] ?? true },
+                                                        set: { newValue in
+                                                            phaseEnabledMap[phase.id] = newValue
+                                                            updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                                        }
+                                                    ))
+                                                    .labelsHidden()
+                                                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                                    .scaleEffect(0.85)
+                                                    .padding(.leading, 6)
+                                                        Spacer()
+                                                    Button {
+                                                        HapticManager.selection()
+                                                        phaseForDepartmentAdd = phase
+                                                        showingAddDepartment = true
+                                                    } label: {
+                                                        Image(systemName: "plus.circle.fill")
+                                                            .font(.system(size: 16, weight: .medium))
+                                                            .foregroundColor(.accentColor)
+                                                            .accessibilityLabel("Add department to this phase")
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .padding(.leading, 2)
+                                                    .padding(.vertical, 2)
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1539,6 +1588,65 @@ struct DashboardView: View {
                     // Error updating phase enabled status
                 }
             }
+    }
+    
+    // MARK: - Complete Phase
+    private func completePhase(_ phase: PhaseSummary) async {
+        guard let projectId = project?.id,
+              let customerId = customerId else {
+            return
+        }
+        
+        do {
+            // Format today's date as end date
+            let today = Date()
+            let endDateStr = phaseDateFormatter.string(from: today)
+            
+            // Update phase end date to today
+            try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .updateData([
+                    "endDate": endDateStr,
+                    "updatedAt": Timestamp()
+                ])
+            
+            // Log timeline change
+            if let currentUserUID = Auth.auth().currentUser?.uid {
+                let changeLog = PhaseTimelineChange(
+                    phaseId: phase.id,
+                    projectId: projectId,
+                    previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                    previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                    newStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                    newEndDate: endDateStr,
+                    changedBy: currentUserUID
+                )
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                
+                let changesRef = phaseRef.collection("changes").document()
+                try await changesRef.setData(from: changeLog)
+            }
+            
+            // Reload phases to reflect the change
+            await loadPhases()
+            
+            // Post notification to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+            
+            // Provide haptic feedback
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error completing phase: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
     }
     
     // MARK: - Department Legend Row
@@ -2478,6 +2586,8 @@ private struct AllPhasesView: View {
     @State private var showingAddPhase = false
     @State private var showingEditPhase = false
     @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
+    @State private var showingCompletePhaseConfirmation = false
+    @State private var phaseToComplete: DashboardView.PhaseSummary? = nil
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -2729,6 +2839,70 @@ private struct AllPhasesView: View {
         }
     }
     
+    // MARK: - Complete Phase in AllPhasesView
+    private func completePhaseInAllPhasesView(phase: DashboardView.PhaseSummary, projectId: String, customerId: String) async {
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            // Format today's date as end date
+            let today = Date()
+            let endDateStr = dateFormatter.string(from: today)
+            
+            // Update phase end date to today
+            try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .updateData([
+                    "endDate": endDateStr,
+                    "updatedAt": Timestamp()
+                ])
+            
+            // Log timeline change
+            if let currentUserUID = Auth.auth().currentUser?.uid {
+                let changeLog = PhaseTimelineChange(
+                    phaseId: phase.id,
+                    projectId: projectId,
+                    previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                    previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                    newStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                    newEndDate: endDateStr,
+                    changedBy: currentUserUID
+                )
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                
+                let changesRef = phaseRef.collection("changes").document()
+                try await changesRef.setData(from: changeLog)
+            }
+            
+            // Reload phases
+            loadPhaseEnabledStates()
+            loadPhaseBudgets()
+            loadPhaseDepartmentSpent()
+            loadPhaseExtensions()
+            loadPhaseAnonymousExpenses()
+            
+            // Post notification to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+            
+            // Call parent callback to reload phases
+            onPhaseAdded?()
+            
+            // Provide haptic feedback
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error completing phase: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
+    }
+    
     // MARK: - Phase Row View
     private func phaseRowView(phase: DashboardView.PhaseSummary) -> some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
@@ -2855,41 +3029,72 @@ private struct AllPhasesView: View {
                     .accessibilityLabel("Phase extended via accepted request")
                 }
             }
-
-            if role == .ADMIN {
-                // Enable toggle (always visible in All Phases for admins)
-                Toggle("", isOn: Binding(
-                    get: { phaseEnabledMap[phase.id] ?? false },
-                    set: { newValue in
-                        phaseEnabledMap[phase.id] = newValue
-                        if let projectId = project?.id,
-                           let customerId = Auth.auth().currentUser?.uid {
-                            FirebasePathHelper.shared
-                                .phasesCollection(customerId: customerId, projectId: projectId)
-                                .document(phase.id)
-                                .updateData([
-                                    "isEnabled": newValue,
-                                    "updatedAt": Timestamp()
-                                ])
+            Spacer()
+            
+            VStack{
+                
+                HStack{
+                    Spacer()
+                    // 3-dot menu for Complete Phase (available for all roles, only for active phases)
+                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                        Menu {
+                            Button(role: .destructive) {
+                                HapticManager.selection()
+                                phaseToComplete = phase
+                                showingCompletePhaseConfirmation = true
+                            } label: {
+                                Label("Complete Phase", systemImage: "checkmark.circle.fill")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .padding(.leading, role == .ADMIN ? 4 : 0)
+                        .padding(.vertical, 2)
                     }
-                ))
-                .labelsHidden()
-                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                .scaleEffect(0.85)
-
-                Button {
-                    HapticManager.selection()
-                    phaseForDepartmentAdd = phase
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.accentColor)
-                        .accessibilityLabel("Add department to this phase")
                 }
-                .buttonStyle(.plain)
-                .padding(.leading, 6)
-                .padding(.vertical, 2)
+                
+                if role == .ADMIN {
+                    HStack{
+                    // Enable toggle (always visible in All Phases for admins)
+                    Toggle("", isOn: Binding(
+                        get: { phaseEnabledMap[phase.id] ?? false },
+                        set: { newValue in
+                            phaseEnabledMap[phase.id] = newValue
+                            if let projectId = project?.id,
+                               let customerId = Auth.auth().currentUser?.uid {
+                                FirebasePathHelper.shared
+                                    .phasesCollection(customerId: customerId, projectId: projectId)
+                                    .document(phase.id)
+                                    .updateData([
+                                        "isEnabled": newValue,
+                                        "updatedAt": Timestamp()
+                                    ])
+                            }
+                        }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                    .scaleEffect(0.85)
+                    Spacer()
+                    Button {
+                        HapticManager.selection()
+                        phaseForDepartmentAdd = phase
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.accentColor)
+                            .accessibilityLabel("Add department to this phase")
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 6)
+                    .padding(.vertical, 2)
+                }
+            }
             }
         }
     }
@@ -3091,6 +3296,25 @@ private struct AllPhasesView: View {
                 onSaved: { onPhaseAdded?() }
             )
             .presentationDetents([.medium])
+        }
+        .alert("Complete Phase", isPresented: $showingCompletePhaseConfirmation) {
+            Button("Cancel", role: .cancel) {
+                phaseToComplete = nil
+            }
+            Button("Confirm", role: .destructive) {
+                if let phase = phaseToComplete,
+                   let projectId = project?.id,
+                   let customerId = Auth.auth().currentUser?.uid {
+                    Task {
+                        await completePhaseInAllPhasesView(phase: phase, projectId: projectId, customerId: customerId)
+                    }
+                }
+                phaseToComplete = nil
+            }
+        } message: {
+            if let phase = phaseToComplete {
+                Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
+            }
         }
 //        .sheet(isPresented: $showingDepartmentDetail) {
 //            if let department = selectedDepartment, let project = project, let projectId = project.id, !projectId.isEmpty {
