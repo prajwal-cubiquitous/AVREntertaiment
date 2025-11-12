@@ -313,6 +313,7 @@ extension ProjectStatus {
         case .IN_REVIEW: return .purple
         case .LOCKED: return .indigo
         case .SUSPENDED: return .orange
+        case .REVIEW_REJECTED: return .red
         }
     }
     
@@ -325,6 +326,7 @@ extension ProjectStatus {
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
         case .SUSPENDED: return "SUSPENDED"
+        case .REVIEW_REJECTED: return "REVIEW REJECTED"
         }
     }
 }

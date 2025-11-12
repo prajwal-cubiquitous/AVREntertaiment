@@ -22,6 +22,12 @@ struct CreateProjectView: View {
     @State private var expandedPhaseIds: Set<UUID> = [] // Track which phases are expanded
     @State private var showingClearFormConfirmation = false
     
+    let projectToEdit: Project? // Optional project for editing
+    
+    init(projectToEdit: Project? = nil) {
+        self.projectToEdit = projectToEdit
+    }
+    
     let currencies = [
         ("₹ Indian Rupee", "INR"),
         ("$ US Dollar", "USD"),
@@ -59,7 +65,7 @@ struct CreateProjectView: View {
                     .padding(.vertical, DesignSystem.Spacing.medium)
                 }
                 .background(Color(.systemGroupedBackground))
-                .navigationTitle("New Project")
+                .navigationTitle(projectToEdit != nil ? "Edit Project" : "New Project")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
@@ -102,19 +108,29 @@ struct CreateProjectView: View {
                 }
                 .onAppear {
                     viewModel.setAuthService(authService)
-                    // Restore expanded phases from saved state
-                    if !viewModel.restoredExpandedPhaseIds.isEmpty {
-                        expandedPhaseIds = viewModel.restoredExpandedPhaseIds.filter { id in
-                            viewModel.phases.contains { $0.id == id }
+                    
+                    // Load project for editing if provided
+                    if let project = projectToEdit {
+                        Task {
+                            await viewModel.loadProjectForEditing(project)
+                            // Expand all phases when editing
+                            expandedPhaseIds = Set(viewModel.phases.map { $0.id })
                         }
-                    }
-                    // If no phases are expanded, expand the first one by default
-                    if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
-                        expandedPhaseIds = [firstPhaseId]
-                    }
-                    // Load drafts
-                    Task {
-                        await viewModel.loadDrafts()
+                    } else {
+                        // Restore expanded phases from saved state
+                        if !viewModel.restoredExpandedPhaseIds.isEmpty {
+                            expandedPhaseIds = viewModel.restoredExpandedPhaseIds.filter { id in
+                                viewModel.phases.contains { $0.id == id }
+                            }
+                        }
+                        // If no phases are expanded, expand the first one by default
+                        if expandedPhaseIds.isEmpty, let firstPhaseId = viewModel.phases.first?.id {
+                            expandedPhaseIds = [firstPhaseId]
+                        }
+                        // Load drafts
+                        Task {
+                            await viewModel.loadDrafts()
+                        }
                     }
                 }
                 .onChange(of: expandedPhaseIds) { oldValue, newValue in

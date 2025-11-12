@@ -10,6 +10,7 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case INACTIVE
     case COMPLETED
     case HANDOVER
+    case REVIEW_REJECTED
 }
 
 struct Project: Identifiable, Codable, Equatable, Hashable {

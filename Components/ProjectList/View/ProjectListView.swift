@@ -19,7 +19,6 @@ struct ProjectListView: View {
     @State private var tempApproverData: TempApprover?
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @State private var businessName: String = "Your Projects"
-    @State private var showingProjectReview = false
     @State private var projectToReview: Project?
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
@@ -153,22 +152,21 @@ struct ProjectListView: View {
             .navigationBarHidden(true)
             .navigationDestination(item: $navigationManager.activeProjectId) { projectNavigationItem in
                 let projectId = projectNavigationItem.id
-                if role == .USER{
-                    if let project = viewModel.project(for: projectId) {
+                if let project = viewModel.project(for: projectId) {
+                    // If project is REVIEW_REJECTED and user is ADMIN, show edit view
+                    if role == .ADMIN && project.statusType == .REVIEW_REJECTED {
+                        CreateProjectView(projectToEdit: project)
+                    } else if role == .USER {
                         ProjectDetailView(project: project,
                                           role: role,
                                           phoneNumber: viewModel.phoneNumber,
                                           customerId: authService.currentCustomerId,
                                           stateManager: sharedStateManager)
                     } else {
-                        Text("Project not found")
-                    }
-                }else{
-                    if let project = viewModel.project(for: projectId) {
                         DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager)
-                    } else {
-                        Text("Project not found")
                     }
+                } else {
+                    Text("Project not found")
                 }
             }
             .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
@@ -305,31 +303,26 @@ struct ProjectListView: View {
                 )
             }
         }
-        .sheet(isPresented: $showingProjectReview) {
-            if let project = projectToReview {
-                ProjectApprovalReviewView(
-                    project: project,
-                    customerId: authService.currentCustomerId,
-                    onApprove: {
-                        Task {
-                            await approveProject(project)
-                            showingProjectReview = false
-                            projectToReview = nil
-                        }
-                    },
-                    onReject: { reason in
-                        Task {
-                            await rejectProject(project, reason: reason)
-                            showingProjectReview = false
-                            projectToReview = nil
-                        }
-                    },
-                    onDismiss: {
-                        showingProjectReview = false
+        .sheet(item: $projectToReview) { project in
+            ProjectApprovalReviewView(
+                project: project,
+                customerId: authService.currentCustomerId,
+                onApprove: {
+                    Task {
+                        await approveProject(project)
                         projectToReview = nil
                     }
-                )
-            }
+                },
+                onReject: { reason in
+                    Task {
+                        await rejectProject(project, reason: reason)
+                        projectToReview = nil
+                    }
+                },
+                onDismiss: {
+                    projectToReview = nil
+                }
+            )
         }
     }
     
@@ -372,11 +365,11 @@ struct ProjectListView: View {
         }
         
         do {
-            // Update project status to LOCKED so admin can edit and resubmit
+            // Update project status to REVIEW_REJECTED so admin can edit and resubmit
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": ProjectStatus.LOCKED.rawValue,
+                    "status": ProjectStatus.REVIEW_REJECTED.rawValue,
                     "rejectionReason": reason,
                     "rejectedBy": viewModel.phoneNumber,
                     "rejectedAt": Timestamp(),
@@ -521,7 +514,6 @@ struct ProjectListView: View {
                                     // Check if project is IN_REVIEW - show review view
                                     if project.statusType == .IN_REVIEW {
                                         projectToReview = project
-                                        showingProjectReview = true
                                     } else {
                                         let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
                                         if needsApproval {
@@ -542,7 +534,6 @@ struct ProjectListView: View {
                                     tempApproverStatus: projectTempStatuses[project.id ?? ""],
                                     onReviewTap: {
                                         projectToReview = project
-                                        showingProjectReview = true
                                     }
                                 )
                             }
@@ -551,17 +542,32 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else if role == .ADMIN {
-                            NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
-                                ProjectCell(
-                                    project: project,
-                                    role: role,
-                                    tempApproverStatus: projectTempStatuses[project.id ?? ""]
-                                )
+                            // If project is REVIEW_REJECTED, navigate to edit view, otherwise to dashboard
+                            if project.statusType == .REVIEW_REJECTED {
+                                NavigationLink(destination: CreateProjectView(projectToEdit: project).environmentObject(navigationManager)) {
+                                    ProjectCell(
+                                        project: project,
+                                        role: role,
+                                        tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    HapticManager.selection()
+                                })
+                            } else {
+                                NavigationLink(destination: DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
+                                    ProjectCell(
+                                        project: project,
+                                        role: role,
+                                        tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    HapticManager.selection()
+                                })
                             }
-                            .buttonStyle(.plain)
-                            .simultaneousGesture(TapGesture().onEnded {
-                                HapticManager.selection()
-                            })
                         } else {
                             NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
                                 ProjectCell(

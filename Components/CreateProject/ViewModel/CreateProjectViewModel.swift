@@ -163,6 +163,10 @@ class CreateProjectViewModel: ObservableObject {
     
     // MARK: - Validation State
     @Published var shouldShowValidationErrors: Bool = false
+    
+    // MARK: - Edit Mode State
+    @Published var isEditingMode: Bool = false
+    @Published var editingProjectId: String? = nil
     @Published var firstInvalidFieldId: String? = nil
     
     private var db = Firestore.firestore()
@@ -772,6 +776,113 @@ class CreateProjectViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Load Project for Editing
+    func loadProjectForEditing(_ project: Project) async {
+        guard let projectId = project.id,
+              let customerId = authService?.currentCustomerId else {
+            return
+        }
+        
+        isLoading = true
+        
+        do {
+            // Set edit mode
+            isEditingMode = true
+            editingProjectId = projectId
+            
+            // Load project basic info
+            projectName = project.name
+            projectDescription = project.description
+            client = project.client
+            location = project.location
+            currency = project.currency
+            
+            // Parse planned date
+            if let plannedDateStr = project.plannedDate {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                if let date = dateFormatter.date(from: plannedDateStr) {
+                    plannedDate = date
+                }
+            }
+            
+            allowTemplateOverrides = project.Allow_Template_Overrides ?? false
+            
+            // Load phases
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .order(by: "phaseNumber")
+                .getDocuments()
+            
+            var loadedPhases: [PhaseItem] = []
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    var phaseItem = PhaseItem(phaseNumber: phase.phaseNumber)
+                    phaseItem.phaseName = phase.phaseName
+                    
+                    // Parse dates
+                    if let startDateStr = phase.startDate,
+                       let startDate = dateFormatter.date(from: startDateStr) {
+                        phaseItem.startDate = startDate
+                        phaseItem.hasStartDate = true
+                    }
+                    if let endDateStr = phase.endDate,
+                       let endDate = dateFormatter.date(from: endDateStr) {
+                        phaseItem.endDate = endDate
+                        phaseItem.hasEndDate = true
+                    }
+                    
+                    // Load departments
+                    var departments: [DepartmentItem] = []
+                    for (deptKey, amount) in phase.departments {
+                        // Extract department name from key (handles "phaseId_departmentName" format)
+                        let deptName: String
+                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                            deptName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                        } else {
+                            deptName = deptKey
+                        }
+                        departments.append(DepartmentItem(
+                            id: UUID(),
+                            name: deptName,
+                            amount: formatIndianNumber(amount)
+                        ))
+                    }
+                    phaseItem.departments = departments.isEmpty ? [DepartmentItem()] : departments
+                    phaseItem.categories = phase.categories
+                    
+                    loadedPhases.append(phaseItem)
+                }
+            }
+            
+            phases = loadedPhases.isEmpty ? [PhaseItem(phaseNumber: 1)] : loadedPhases
+            
+            // Load team members and manager (need to fetch users first)
+            await fetchUsers()
+            
+            // Set manager
+            if let managerId = project.managerIds.first {
+                selectedProjectManager = allApprovers.first { approver in
+                    approver.phoneNumber == managerId || approver.email == managerId
+                }
+            }
+            
+            // Set team members
+            selectedProjectTeamMembers = Set(allUsers.filter { user in
+                project.teamMembers.contains(user.phoneNumber)
+            })
+            
+            isLoading = false
+        } catch {
+            print("Error loading project for editing: \(error)")
+            errorMessage = "Failed to load project: \(error.localizedDescription)"
+            isLoading = false
+        }
+    }
+    
     // MARK: - Phase Management
     func addPhase() {
         let nextPhaseNumber = phases.count + 1
@@ -896,44 +1007,70 @@ class CreateProjectViewModel: ObservableObject {
                 let managerId = selectedProjectManager?.email ?? selectedProjectManager?.phoneNumber ?? ""
                 let managerIds = managerId.isEmpty ? [] : [managerId] // Store as array for backend compatibility
                 
-                // Create project data (without departments, they're in phases now)
-                // Use customer-specific projects collection
-                let docRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId).document()
-                
                 // Format planned date
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "dd/MM/yyyy"
                 let plannedDateStr = dateFormatter.string(from: plannedDate)
                 
-                // Set status to IN_REVIEW - project needs approver approval before becoming active
-                let initialStatus = ProjectStatus.IN_REVIEW.rawValue
-                
-                let projectData = Project(
-                    id: docRef.documentID,
-                    name: projectName,
-                    description: projectDescription,
-                    client: client,
-                    location: location,
-                    currency: currency,
-                    budget: totalBudget,
-                    status: initialStatus,
-                    startDate: nil, // Removed from main project
-                    endDate: nil, // Removed from main project
-                    plannedDate: plannedDateStr,
-                    teamMembers: Array(allTeamMembers),
-                    managerIds: managerIds,
-                    tempApproverID: nil,
-                    Allow_Template_Overrides: allowTemplateOverrides,
-                    createdAt: Timestamp(),
-                    updatedAt: Timestamp()
-                )
-                
-                // Save project
-                try await docRef.setData(from: projectData)
+                // Get project document reference
+                let docRef: DocumentReference
+                if isEditingMode, let projectId = editingProjectId {
+                    // Editing existing project
+                    docRef = FirebasePathHelper.shared.projectDocument(customerId: customerId, projectId: projectId)
+                    
+                    // Update project data
+                    try await docRef.updateData([
+                        "name": projectName,
+                        "description": projectDescription,
+                        "client": client,
+                        "location": location,
+                        "currency": currency,
+                        "budget": totalBudget,
+                        "status": ProjectStatus.IN_REVIEW.rawValue, // Reset to IN_REVIEW when resubmitting
+                        "plannedDate": plannedDateStr,
+                        "teamMembers": Array(allTeamMembers),
+                        "managerIds": managerIds,
+                        "Allow_Template_Overrides": allowTemplateOverrides,
+                        "updatedAt": Timestamp()
+                    ])
+                    
+                    // Delete existing phases and create new ones
+                    let existingPhasesSnapshot = try await docRef.collection("phases").getDocuments()
+                    for phaseDoc in existingPhasesSnapshot.documents {
+                        try await phaseDoc.reference.delete()
+                    }
+                } else {
+                    // Creating new project
+                    docRef = FirebasePathHelper.shared.projectsCollection(customerId: customerId).document()
+                    
+                    // Set status to IN_REVIEW - project needs approver approval before becoming active
+                    let initialStatus = ProjectStatus.IN_REVIEW.rawValue
+                    
+                    let projectData = Project(
+                        id: docRef.documentID,
+                        name: projectName,
+                        description: projectDescription,
+                        client: client,
+                        location: location,
+                        currency: currency,
+                        budget: totalBudget,
+                        status: initialStatus,
+                        startDate: nil, // Removed from main project
+                        endDate: nil, // Removed from main project
+                        plannedDate: plannedDateStr,
+                        teamMembers: Array(allTeamMembers),
+                        managerIds: managerIds,
+                        tempApproverID: nil,
+                        Allow_Template_Overrides: allowTemplateOverrides,
+                        createdAt: Timestamp(),
+                        updatedAt: Timestamp()
+                    )
+                    
+                    // Save project
+                    try await docRef.setData(from: projectData)
+                }
                 
                 // Save phases in subcollection
-                // Reuse the dateFormatter already created above
-                
                 for phase in phases {
                     let phaseRef = docRef.collection("phases").document()
                     let phaseId = phaseRef.documentID
@@ -964,17 +1101,25 @@ class CreateProjectViewModel: ObservableObject {
                     try await phaseRef.setData(from: phaseData)
                 }
                 
-                // Show success message with review status info
+                // Show success message
                 isLoading = false
                 showSuccessMessage = true
-                alertMessage = "Project created successfully! The project is now IN REVIEW and will be sent to the approver for approval."
+                if isEditingMode {
+                    alertMessage = "Project updated successfully! The project is now IN REVIEW and will be sent to the approver for approval."
+                } else {
+                    alertMessage = "Project created successfully! The project is now IN REVIEW and will be sent to the approver for approval."
+                }
                 showAlert = true
                 
                 // Clear saved form state before resetting
                 clearFormState()
                 resetForm()
                 
-                // Notify that a new project was created
+                // Reset edit mode
+                isEditingMode = false
+                editingProjectId = nil
+                
+                // Notify that project was created/updated
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
                 
             } catch {
