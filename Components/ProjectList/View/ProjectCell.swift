@@ -12,7 +12,15 @@ struct ProjectCell: View {
     let project: Project
     let role: UserRole?
     let tempApproverStatus: TempApproverStatus?
+    let onReviewTap: (() -> Void)?
     @State private var isPressed = false
+    
+    init(project: Project, role: UserRole?, tempApproverStatus: TempApproverStatus? = nil, onReviewTap: (() -> Void)? = nil) {
+        self.project = project
+        self.role = role
+        self.tempApproverStatus = tempApproverStatus
+        self.onReviewTap = onReviewTap
+    }
     
     private var daysRemainingText: String {
         guard let endDateStr = project.endDate else {
@@ -72,6 +80,20 @@ struct ProjectCell: View {
                     // Temp Approver Status Indicator
                     if let tempStatus = tempApproverStatus {
                         TempApproverStatusView(status: tempStatus)
+                    }
+                    
+                    // Review icon for APPROVER when project is IN_REVIEW
+                    if role == .APPROVER && project.statusType == .IN_REVIEW {
+                        Button(action: {
+                            HapticManager.selection()
+                            onReviewTap?()
+                        }) {
+                            Image(systemName: "eye.fill")
+                                .font(.title3)
+                                .foregroundColor(.purple)
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .buttonStyle(.plain)
                     }
                     
                     // Edit button for Admin role
@@ -289,6 +311,8 @@ extension ProjectStatus {
         case .COMPLETED: return .blue
         case .HANDOVER: return .yellow
         case .DRAFT: return .orange
+        case .IN_REVIEW: return .purple
+        case .LOCKED: return .indigo
         }
     }
     
@@ -299,6 +323,8 @@ extension ProjectStatus {
         case .COMPLETED: return "Completed"
         case .HANDOVER: return "Handover"
         case .DRAFT: return "DRAFT"
+        case .IN_REVIEW: return "IN REVIEW"
+        case .LOCKED: return "LOCKED"
         }
     }
 }

@@ -375,7 +375,7 @@ struct CreateProjectView: View {
                 
                 // Planned Date
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                    Text("Planned Start Date")
+                    Text("Planned Date")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     

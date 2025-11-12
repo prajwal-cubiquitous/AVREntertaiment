@@ -153,7 +153,7 @@ class ProjectListViewModel: ObservableObject {
     
     // MARK: - Project Status Update Based on Planned Date
     
-    /// Checks all projects and updates status from DRAFT to ACTIVE if planned date has arrived
+    /// Checks all projects and updates status from DRAFT/LOCKED to ACTIVE if planned date or phase start date has arrived
     func checkAndUpdateProjectStatuses() async {
         guard let customerId = customerId else {
             print("❌ Customer ID not found in checkAndUpdateProjectStatuses")
@@ -166,30 +166,82 @@ class ProjectListViewModel: ObservableObject {
         let today = calendar.startOfDay(for: Date())
         
         for project in projects {
-            // Only check projects that are in DRAFT status
-            guard project.statusType == .DRAFT,
-                  let projectId = project.id,
-                  let plannedDateStr = project.plannedDate,
-                  let plannedDate = dateFormatter.date(from: plannedDateStr) else {
-                continue
+            guard let projectId = project.id else { continue }
+            
+            // Check DRAFT projects with planned date
+            if project.statusType == .DRAFT,
+               let plannedDateStr = project.plannedDate,
+               let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                let planned = calendar.startOfDay(for: plannedDate)
+                
+                // If planned date is today or in the past, update status to ACTIVE
+                if planned <= today {
+                    do {
+                        try await FirebasePathHelper.shared
+                            .projectDocument(customerId: customerId, projectId: projectId)
+                            .updateData([
+                                "status": ProjectStatus.ACTIVE.rawValue,
+                                "updatedAt": Timestamp()
+                            ])
+                        
+                        // Post notification to refresh project list
+                        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                    } catch {
+                        // Error updating project status
+                    }
+                }
             }
             
-            let planned = calendar.startOfDay(for: plannedDate)
-            
-            // If planned date is today or in the past, update status to ACTIVE
-            if planned <= today {
-                do {
-                    try await FirebasePathHelper.shared
-                        .projectDocument(customerId: customerId, projectId: projectId)
-                        .updateData([
-                            "status": ProjectStatus.ACTIVE.rawValue,
-                            "updatedAt": Timestamp()
-                        ])
-                    
-                    // Post notification to refresh project list
-                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
-                } catch {
-                    // Error updating project status
+            // Check LOCKED projects - transition to ACTIVE when planned date or earliest phase start date arrives
+            if project.statusType == .LOCKED {
+                var shouldActivate = false
+                
+                // First check planned date
+                if let plannedDateStr = project.plannedDate,
+                   let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    if planned <= today {
+                        shouldActivate = true
+                    }
+                }
+                
+                // If no planned date or planned date hasn't arrived, check earliest phase start date
+                if !shouldActivate {
+                    do {
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerId, projectId: projectId)
+                            .order(by: "phaseNumber")
+                            .limit(to: 1)
+                            .getDocuments()
+                        
+                        if let firstPhaseDoc = phasesSnapshot.documents.first,
+                           let phase = try? firstPhaseDoc.data(as: Phase.self),
+                           let phaseStartDateStr = phase.startDate,
+                           let phaseStartDate = dateFormatter.date(from: phaseStartDateStr) {
+                            let phaseStart = calendar.startOfDay(for: phaseStartDate)
+                            if phaseStart <= today {
+                                shouldActivate = true
+                            }
+                        }
+                    } catch {
+                        // Error loading phases
+                    }
+                }
+                
+                if shouldActivate {
+                    do {
+                        try await FirebasePathHelper.shared
+                            .projectDocument(customerId: customerId, projectId: projectId)
+                            .updateData([
+                                "status": ProjectStatus.ACTIVE.rawValue,
+                                "updatedAt": Timestamp()
+                            ])
+                        
+                        // Post notification to refresh project list
+                        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                    } catch {
+                        // Error updating project status
+                    }
                 }
             }
         }

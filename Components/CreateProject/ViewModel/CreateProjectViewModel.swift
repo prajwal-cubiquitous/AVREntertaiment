@@ -905,12 +905,8 @@ class CreateProjectViewModel: ObservableObject {
                 dateFormatter.dateFormat = "dd/MM/yyyy"
                 let plannedDateStr = dateFormatter.string(from: plannedDate)
                 
-                // Determine initial status based on planned date
-                // If planned date is today or in the past, set to ACTIVE, otherwise DRAFT
-                let calendar = Calendar.current
-                let today = calendar.startOfDay(for: Date())
-                let planned = calendar.startOfDay(for: plannedDate)
-                let initialStatus = planned <= today ? ProjectStatus.ACTIVE.rawValue : ProjectStatus.DRAFT.rawValue
+                // Set status to IN_REVIEW - project needs approver approval before becoming active
+                let initialStatus = ProjectStatus.IN_REVIEW.rawValue
                 
                 let projectData = Project(
                     id: docRef.documentID,
@@ -968,10 +964,10 @@ class CreateProjectViewModel: ObservableObject {
                     try await phaseRef.setData(from: phaseData)
                 }
                 
-                // Show success message and reset form
+                // Show success message with review status info
                 isLoading = false
                 showSuccessMessage = true
-                alertMessage = "Project created successfully!"
+                alertMessage = "Project created successfully! The project is now IN REVIEW and will be sent to the approver for approval."
                 showAlert = true
                 
                 // Clear saved form state before resetting

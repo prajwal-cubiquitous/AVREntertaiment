@@ -19,6 +19,8 @@ struct ProjectListView: View {
     @State private var tempApproverData: TempApprover?
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @State private var businessName: String = "Your Projects"
+    @State private var showingProjectReview = false
+    @State private var projectToReview: Project?
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -303,6 +305,112 @@ struct ProjectListView: View {
                 )
             }
         }
+        .sheet(isPresented: $showingProjectReview) {
+            if let project = projectToReview {
+                ProjectApprovalReviewView(
+                    project: project,
+                    customerId: authService.currentCustomerId,
+                    onApprove: {
+                        Task {
+                            await approveProject(project)
+                            showingProjectReview = false
+                            projectToReview = nil
+                        }
+                    },
+                    onReject: { reason in
+                        Task {
+                            await rejectProject(project, reason: reason)
+                            showingProjectReview = false
+                            projectToReview = nil
+                        }
+                    },
+                    onDismiss: {
+                        showingProjectReview = false
+                        projectToReview = nil
+                    }
+                )
+            }
+        }
+    }
+    
+    // MARK: - Project Approval/Rejection
+    
+    private func approveProject(_ project: Project) async {
+        guard let projectId = project.id,
+              let customerId = authService.currentCustomerId else {
+            return
+        }
+        
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            
+            // Get planned date to determine if project should be LOCKED or ACTIVE
+            var newStatus: ProjectStatus
+            if let plannedDateStr = project.plannedDate,
+               let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                let planned = calendar.startOfDay(for: plannedDate)
+                // If planned date is today or in the past, set to ACTIVE, otherwise LOCKED
+                newStatus = planned <= today ? .ACTIVE : .LOCKED
+            } else {
+                // No planned date, set to LOCKED (will be activated when phase starts)
+                newStatus = .LOCKED
+            }
+            
+            // Update project status
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "status": newStatus.rawValue,
+                    "updatedAt": Timestamp()
+                ])
+            
+            // Post notification to refresh project list
+            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error approving project: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
+    }
+    
+    private func rejectProject(_ project: Project, reason: String) async {
+        guard let projectId = project.id,
+              let customerId = authService.currentCustomerId else {
+            return
+        }
+        
+        do {
+            // Update project status to DRAFT so admin can edit and resubmit
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData([
+                    "status": ProjectStatus.DRAFT.rawValue,
+                    "rejectionReason": reason,
+                    "rejectedBy": viewModel.phoneNumber,
+                    "rejectedAt": Timestamp(),
+                    "updatedAt": Timestamp()
+                ])
+            
+            // Post notification to refresh project list
+            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error rejecting project: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -426,22 +534,32 @@ struct ProjectListView: View {
                             Button(action: {
                                 Task {
                                     selectedProject = project
-                                    let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
-                                    if needsApproval {
-                                        // Show temp approver approval view
-                                        if let tempApprover = await viewModel.getTempApproverForProject(project) {
-                                            tempApproverData = tempApprover
-                                            showingTempApproval = true
-                                        }
+                                    // Check if project is IN_REVIEW - show review view
+                                    if project.statusType == .IN_REVIEW {
+                                        projectToReview = project
+                                        showingProjectReview = true
                                     } else {
-                                        shouldNavigateToDashboard = true
+                                        let needsApproval = await viewModel.checkTempApproverStatusForProject(project)
+                                        if needsApproval {
+                                            // Show temp approver approval view
+                                            if let tempApprover = await viewModel.getTempApproverForProject(project) {
+                                                tempApproverData = tempApprover
+                                                showingTempApproval = true
+                                            }
+                                        } else {
+                                            shouldNavigateToDashboard = true
+                                        }
                                     }
                                 }
                             }) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
-                                    tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                    tempApproverStatus: projectTempStatuses[project.id ?? ""],
+                                    onReviewTap: {
+                                        projectToReview = project
+                                        showingProjectReview = true
+                                    }
                                 )
                             }
                             .buttonStyle(.plain)
