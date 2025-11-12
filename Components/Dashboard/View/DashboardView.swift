@@ -1694,25 +1694,31 @@ struct DashboardView: View {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             }
             
-            // Log timeline change
-            if let currentUserUID = Auth.auth().currentUser?.uid {
-                let changeLog = PhaseTimelineChange(
-                    phaseId: phase.id,
-                    projectId: projectId,
-                    previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
-                    previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
-                    newStartDate: startDateStr,
-                    newEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
-                    changedBy: currentUserUID
-                )
-                
-                let phaseRef = FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .document(phase.id)
-                
-                let changesRef = phaseRef.collection("changes").document()
-                try await changesRef.setData(from: changeLog)
+            // Log timeline change to Firebase changes collection
+            guard let currentUserUID = Auth.auth().currentUser?.uid else {
+                print("⚠️ Warning: No current user UID found, skipping change log")
+                return
             }
+            
+            let changeLog = PhaseTimelineChange(
+                phaseId: phase.id,
+                projectId: projectId,
+                previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                newStartDate: startDateStr,
+                newEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                changedBy: currentUserUID,
+                requestID: nil // Manual change via "Start Now" button
+            )
+            
+            let phaseRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+            
+            let changesRef = phaseRef.collection("changes").document()
+            try await changesRef.setData(from: changeLog)
+            
+            print("✅ Logged phase start change: phaseId=\(phase.id), changedBy=\(currentUserUID), newStartDate=\(startDateStr)")
             
             // Reload phases to reflect the change
             await loadPhases()
@@ -1753,25 +1759,31 @@ struct DashboardView: View {
                     "updatedAt": Timestamp()
                 ])
             
-            // Log timeline change
-            if let currentUserUID = Auth.auth().currentUser?.uid {
-                let changeLog = PhaseTimelineChange(
-                    phaseId: phase.id,
-                    projectId: projectId,
-                    previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
-                    previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
-                    newStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
-                    newEndDate: endDateStr,
-                    changedBy: currentUserUID
-                )
-                
-                let phaseRef = FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .document(phase.id)
-                
-                let changesRef = phaseRef.collection("changes").document()
-                try await changesRef.setData(from: changeLog)
+            // Log timeline change to Firebase changes collection
+            guard let currentUserUID = Auth.auth().currentUser?.uid else {
+                print("⚠️ Warning: No current user UID found, skipping change log")
+                return
             }
+            
+            let changeLog = PhaseTimelineChange(
+                phaseId: phase.id,
+                projectId: projectId,
+                previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                newStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                newEndDate: endDateStr,
+                changedBy: currentUserUID,
+                requestID: nil // Manual change via "Complete Phase" button
+            )
+            
+            let phaseRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+            
+            let changesRef = phaseRef.collection("changes").document()
+            try await changesRef.setData(from: changeLog)
+            
+            print("✅ Logged phase completion change: phaseId=\(phase.id), changedBy=\(currentUserUID), newEndDate=\(endDateStr)")
             
             // Reload phases to reflect the change
             await loadPhases()
@@ -3037,25 +3049,31 @@ private struct AllPhasesView: View {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             }
             
-            // Log timeline change
-            if let currentUserUID = Auth.auth().currentUser?.uid {
-                let changeLog = PhaseTimelineChange(
-                    phaseId: phase.id,
-                    projectId: projectId,
-                    previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
-                    previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
-                    newStartDate: startDateStr,
-                    newEndDate: phase.end.map { dateFormatter.string(from: $0) },
-                    changedBy: currentUserUID
-                )
-                
-                let phaseRef = FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .document(phase.id)
-                
-                let changesRef = phaseRef.collection("changes").document()
-                try await changesRef.setData(from: changeLog)
+            // Log timeline change to Firebase changes collection
+            guard let currentUserUID = Auth.auth().currentUser?.uid else {
+                print("⚠️ Warning: No current user UID found, skipping change log")
+                return
             }
+            
+            let changeLog = PhaseTimelineChange(
+                phaseId: phase.id,
+                projectId: projectId,
+                previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                newStartDate: startDateStr,
+                newEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                changedBy: currentUserUID,
+                requestID: nil // Manual change via "Start Now" button
+            )
+            
+            let phaseRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+            
+            let changesRef = phaseRef.collection("changes").document()
+            try await changesRef.setData(from: changeLog)
+            
+            print("✅ Logged phase start change (AllPhasesView): phaseId=\(phase.id), changedBy=\(currentUserUID), newStartDate=\(startDateStr)")
             
             // Reload phases
             loadPhaseEnabledStates()
@@ -3101,25 +3119,31 @@ private struct AllPhasesView: View {
                     "updatedAt": Timestamp()
                 ])
             
-            // Log timeline change
-            if let currentUserUID = Auth.auth().currentUser?.uid {
-                let changeLog = PhaseTimelineChange(
-                    phaseId: phase.id,
-                    projectId: projectId,
-                    previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
-                    previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
-                    newStartDate: phase.start.map { dateFormatter.string(from: $0) },
-                    newEndDate: endDateStr,
-                    changedBy: currentUserUID
-                )
-                
-                let phaseRef = FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .document(phase.id)
-                
-                let changesRef = phaseRef.collection("changes").document()
-                try await changesRef.setData(from: changeLog)
+            // Log timeline change to Firebase changes collection
+            guard let currentUserUID = Auth.auth().currentUser?.uid else {
+                print("⚠️ Warning: No current user UID found, skipping change log")
+                return
             }
+            
+            let changeLog = PhaseTimelineChange(
+                phaseId: phase.id,
+                projectId: projectId,
+                previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                newStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                newEndDate: endDateStr,
+                changedBy: currentUserUID,
+                requestID: nil // Manual change via "Complete Phase" button
+            )
+            
+            let phaseRef = FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+            
+            let changesRef = phaseRef.collection("changes").document()
+            try await changesRef.setData(from: changeLog)
+            
+            print("✅ Logged phase completion change (AllPhasesView): phaseId=\(phase.id), changedBy=\(currentUserUID), newEndDate=\(endDateStr)")
             
             // Reload phases
             loadPhaseEnabledStates()
