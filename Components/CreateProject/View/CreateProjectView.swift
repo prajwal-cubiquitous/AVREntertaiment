@@ -1204,7 +1204,7 @@ struct PhaseCardView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.primary)
                             
-                            DatePicker("Select start date", selection: $phase.startDate, displayedComponents: .date)
+                            DatePicker("Select start date", selection: $phase.startDate, in: viewModel.plannedDate..., displayedComponents: .date)
                                 .datePickerStyle(.compact)
                         }
                         .padding(.vertical, 4)

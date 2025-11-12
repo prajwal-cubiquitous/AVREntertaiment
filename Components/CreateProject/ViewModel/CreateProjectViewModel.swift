@@ -416,6 +416,14 @@ class CreateProjectViewModel: ObservableObject {
                 return false // Duplicate department names found
             }
             
+            // Date validation: phase start date must be >= planned start date
+            let calendar = Calendar.current
+            let plannedStart = calendar.startOfDay(for: plannedDate)
+            let phaseStart = calendar.startOfDay(for: phase.startDate)
+            if phaseStart < plannedStart {
+                return false
+            }
+            
             // Date validation: end date must be after start date (dates are now required)
             if phase.endDate <= phase.startDate {
                 return false
@@ -518,12 +526,33 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     func phaseDateError(for phaseId: UUID) -> String? {
-        guard shouldShowValidationErrors else { return nil }
         guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
-        if phase.endDate <= phase.startDate {
-            return "End date must be after start date"
+        
+        // Check if phase start date is before planned start date (show in real-time)
+        let calendar = Calendar.current
+        let plannedStart = calendar.startOfDay(for: plannedDate)
+        let phaseStart = calendar.startOfDay(for: phase.startDate)
+        
+        if phaseStart < plannedStart {
+            return "Phase start date must be on or after planned start date (\(formatDate(plannedDate)))"
         }
+        
+        // Check if end date is after start date (only show after submit attempt)
+        if shouldShowValidationErrors {
+            if phase.endDate <= phase.startDate {
+                return "End date must be after start date"
+            }
+        }
+        
         return nil
+    }
+    
+    // Helper function to format date for error messages
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
     }
     
     func phaseTimelineError(for phaseId: UUID) -> String? {
@@ -625,6 +654,14 @@ class CreateProjectViewModel: ObservableObject {
             
             if duplicateCount > 0 {
                 return "phase_\(phase.id)_name"
+            }
+            
+            // Check if phase start date is before planned start date
+            let calendar = Calendar.current
+            let plannedStart = calendar.startOfDay(for: plannedDate)
+            let phaseStart = calendar.startOfDay(for: phase.startDate)
+            if phaseStart < plannedStart {
+                return "phase_\(phase.id)_dates"
             }
             
             if phase.endDate <= phase.startDate {
@@ -740,10 +777,20 @@ class CreateProjectViewModel: ObservableObject {
         let nextPhaseNumber = phases.count + 1
         var newPhase = PhaseItem(phaseNumber: nextPhaseNumber)
         
+        let calendar = Calendar.current
+        let plannedStart = calendar.startOfDay(for: plannedDate)
+        
         // If previous phase exists, set start date to day after its end date
         if let lastPhase = phases.last {
-            newPhase.startDate = Calendar.current.date(byAdding: .day, value: 1, to: lastPhase.endDate) ?? Date()
-            newPhase.endDate = Calendar.current.date(byAdding: .day, value: 31, to: newPhase.startDate) ?? Date().addingTimeInterval(86400 * 30)
+            let dayAfterLastPhase = calendar.date(byAdding: .day, value: 1, to: lastPhase.endDate) ?? Date()
+            let dayAfterLastPhaseStart = calendar.startOfDay(for: dayAfterLastPhase)
+            // Use the later of: day after last phase end date, or planned start date
+            newPhase.startDate = max(dayAfterLastPhaseStart, plannedStart)
+            newPhase.endDate = calendar.date(byAdding: .day, value: 31, to: newPhase.startDate) ?? Date().addingTimeInterval(86400 * 30)
+        } else {
+            // First phase: start date should be at least planned start date
+            newPhase.startDate = plannedStart
+            newPhase.endDate = calendar.date(byAdding: .day, value: 31, to: newPhase.startDate) ?? Date().addingTimeInterval(86400 * 30)
         }
         
         // Dates are now always required
