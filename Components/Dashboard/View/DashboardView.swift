@@ -890,7 +890,7 @@ struct DashboardView: View {
                                         
                                         // Only show "In Progress" badge if phase is in progress AND enabled
                                         if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                                            Text("Active")
+                                            Text("In Progress")
                                                 .font(DesignSystem.Typography.caption2)
                                                 .fontWeight(.semibold)
                                                 .foregroundColor(.green)
@@ -2742,7 +2742,7 @@ private struct AllPhasesView: View {
         case (nil, let e?):
             return "End: \(phaseDateFormatter.string(from: e))"
         case (let s?, let e?):
-            return "\(phaseDateFormatter.string(from: s)) - \(phaseDateFormatter.string(from: e))"
+            return "\(phaseDateFormatter.string(from: s)) -\n\(phaseDateFormatter.string(from: e))"
         }
     }
     
@@ -3120,53 +3120,59 @@ private struct AllPhasesView: View {
     
     // MARK: - Phase Header View
     private func phaseHeaderView(phase: DashboardView.PhaseSummary) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
-            HStack(spacing: 8) {
-                VStack {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            TruncatedTextWithTooltip(
-                                phase.name,
-                                font: DesignSystem.Typography.headline,
-                                foregroundColor: .primary,
-                                lineLimit: 1
-                            )
+        VStack{
+            HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
+                HStack(spacing: 8) {
+                    VStack {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                TruncatedTextWithTooltip(
+                                    phase.name,
+                                    font: DesignSystem.Typography.headline,
+                                    foregroundColor: .primary,
+                                    lineLimit: 1
+                                )
 
-                            if phaseTimelineText(phase) != "" {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "calendar")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                        .accessibilityHidden(true)
-                                    Text(phaseTimelineText(phase))
-                                        .font(DesignSystem.Typography.caption1)
-                                        .foregroundColor(.secondary)
+                                if phaseTimelineText(phase) != "" {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "calendar")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .accessibilityHidden(true)
+                                        
+                                        Text(phaseTimelineText(phase))
+                                            .font(DesignSystem.Typography.caption1)
+                                            .foregroundColor(.secondary)
+                                            .multilineTextAlignment(.leading)   // 👈 allows line breaks
+                                            .lineLimit(nil)                     // 👈 no limit on number of lines
+                                            .fixedSize(horizontal: false, vertical: true) // 👈 prevent truncation
+                                    }
+
                                 }
                             }
-                        }
-                        
-                        if role == .ADMIN {
-                            Button {
-                                HapticManager.selection()
-                                phaseToEdit = phase
-                            } label: {
-                                Image(systemName: "pencil.circle.fill")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.accentColor)
-                                    .accessibilityLabel("Edit phase")
+                            
+                            if role == .ADMIN {
+                                Button {
+                                    HapticManager.selection()
+                                    phaseToEdit = phase
+                                } label: {
+                                    Image(systemName: "pencil.circle.fill")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.accentColor)
+                                        .accessibilityLabel("Edit phase")
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
-                    }
-                    
-                    if let phaseBudget = phaseBudgetMap[phase.id] {
-                        phaseTotalBudgetView(phaseBudget: phaseBudget)
                     }
                 }
+                Spacer()
+                
+                phaseBadgesAndControls(phase: phase)
             }
-            Spacer()
-            
-            phaseBadgesAndControls(phase: phase)
+            if let phaseBudget = phaseBudgetMap[phase.id] {
+                phaseTotalBudgetView(phaseBudget: phaseBudget)
+            }
         }
     }
     
@@ -3201,7 +3207,7 @@ private struct AllPhasesView: View {
             VStack {
                 // Only show "In Progress" badge if phase is in progress AND enabled
                 if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                    Text("Active")
+                    Text("In Progress")
                         .font(DesignSystem.Typography.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.green)
@@ -3216,7 +3222,7 @@ private struct AllPhasesView: View {
                 if phaseExtensionMap[phase.id] == true {
                     HStack(spacing: 4) {
                         Text("Extended")
-                            .font(.caption2)
+                            .font(.caption)
                             .fontWeight(.semibold)
                             .scaleEffect(0.8)
                     }
