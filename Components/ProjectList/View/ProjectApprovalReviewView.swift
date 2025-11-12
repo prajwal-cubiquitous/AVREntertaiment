@@ -20,6 +20,7 @@ struct ProjectApprovalReviewView: View {
     @State private var showingRejectionSheet = false
     @State private var rejectionReason = ""
     @State private var isProcessing = false
+    @State private var showingApprovalConfirmation = false
     
     var body: some View {
         NavigationStack {
@@ -71,6 +72,25 @@ struct ProjectApprovalReviewView: View {
         }
         .sheet(isPresented: $showingRejectionSheet) {
             rejectionSheet
+        }
+        .alert("Approve Project", isPresented: $showingApprovalConfirmation) {
+            Button("Cancel", role: .cancel) {
+                // Do nothing, just dismiss
+            }
+            Button("Confirm") {
+                Task {
+                    isProcessing = true
+                    await onApprove()
+                    isProcessing = false
+                    onDismiss()
+                }
+            }
+        } message: {
+            if let plannedDateStr = project.plannedDate {
+                Text("Project status will change to LOCKED until the planned start date (\(plannedDateStr)). The project will automatically become ACTIVE when the planned start date arrives.")
+            } else {
+                Text("Project status will change to LOCKED until the phase start date. The project will automatically become ACTIVE when the first phase starts.")
+            }
         }
         .onAppear {
             Task {
@@ -242,24 +262,14 @@ struct ProjectApprovalReviewView: View {
         VStack(spacing: DesignSystem.Spacing.medium) {
             // Approve Button
             Button(action: {
-                Task {
-                    isProcessing = true
-                    await onApprove()
-                    isProcessing = false
-                    onDismiss()
-                }
+                HapticManager.selection()
+                showingApprovalConfirmation = true
             }) {
                 HStack {
-                    if isProcessing {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .foregroundColor(.white)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.title3)
-                    }
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
                     
-                    Text(isProcessing ? "Approving..." : "Approve Project")
+                    Text("Approve Project")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
