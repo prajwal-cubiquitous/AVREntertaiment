@@ -885,11 +885,22 @@ struct DashboardView: View {
                                 Spacer()
 
                                 HStack(spacing: 6){
-                                    // Extension Badge - Show if phase has accepted extension
-                                    VStack{
-                                        
-                                        // Only show "In Progress" badge if phase is in progress AND enabled
-                                        if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                    // Phase Status Badges
+                                    VStack(spacing: 4){
+                                        // Show "Completed" badge if phase is completed
+                                        if isPhaseCompleted(phase) {
+                                            Text("Completed")
+                                                .font(DesignSystem.Typography.caption2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.blue)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.blue.opacity(0.12))
+                                                .clipShape(Capsule())
+                                                .accessibilityLabel("Phase status: Completed")
+                                        }
+                                        // Show "In Progress" badge if phase is in progress AND enabled
+                                        else if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
                                             Text("In Progress")
                                                 .font(DesignSystem.Typography.caption2)
                                                 .fontWeight(.semibold)
@@ -900,11 +911,22 @@ struct DashboardView: View {
                                                 .clipShape(Capsule())
                                                 .accessibilityLabel("Phase status: In Progress")
                                         }
+                                        // Show "Planned" badge if phase is in the future
+                                        else if isPhaseInFuture(phase) {
+                                            Text("Planned")
+                                                .font(DesignSystem.Typography.caption2)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.purple)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.purple.opacity(0.12))
+                                                .clipShape(Capsule())
+                                                .accessibilityLabel("Phase status: Planned")
+                                        }
                                         
+                                        // Extension Badge - Show if phase has accepted extension
                                         if phaseExtensionMap[phase.id] == true {
                                             HStack(spacing: 4) {
-//                                                Image(systemName: "arrow.clockwise.circle.fill")
-//                                                    .font(.caption2)
                                                 Text("Extended")
                                                     .font(DesignSystem.Typography.caption2)
                                                     .fontWeight(.semibold)
@@ -945,10 +967,10 @@ struct DashboardView: View {
                                         }
 
                                         
-                                            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                                            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && !isPhaseCompleted(phase) {
                                                 if role == .ADMIN{
                                                     HStack{
-                                                    // Enable toggle
+                                                    // Enable toggle (not shown for completed phases)
                                                     Toggle("", isOn: Binding(
                                                         get: { phaseEnabledMap[phase.id] ?? true },
                                                         set: { newValue in
@@ -1265,6 +1287,17 @@ struct DashboardView: View {
             let today = calendar.startOfDay(for: current)
             let phaseStart = calendar.startOfDay(for: startDate)
             return phaseStart > today
+        }
+        return false
+    }
+    
+    private func isPhaseCompleted(_ phase: PhaseSummary) -> Bool {
+        let current = now
+        if let endDate = phase.end {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: current)
+            let phaseEnd = calendar.startOfDay(for: endDate)
+            return today > phaseEnd
         }
         return false
     }
@@ -2719,6 +2752,17 @@ private struct AllPhasesView: View {
         return false
     }
     
+    private func isPhaseCompleted(_ phase: DashboardView.PhaseSummary) -> Bool {
+        let current = now
+        if let endDate = phase.end {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: current)
+            let phaseEnd = calendar.startOfDay(for: endDate)
+            return today > phaseEnd
+        }
+        return false
+    }
+    
     private func isPhaseInProgress(_ phase: DashboardView.PhaseSummary) -> Bool {
         let current = now
         switch (phase.start, phase.end) {
@@ -3204,9 +3248,21 @@ private struct AllPhasesView: View {
     // MARK: - Phase Badges and Controls
     private func phaseBadgesAndControls(phase: DashboardView.PhaseSummary) -> some View {
         HStack {
-            VStack {
-                // Only show "In Progress" badge if phase is in progress AND enabled
-                if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+            VStack(spacing: 4) {
+                // Show "Completed" badge if phase is completed
+                if isPhaseCompleted(phase) {
+                    Text("Completed")
+                        .font(DesignSystem.Typography.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.blue.opacity(0.12))
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Phase status: Completed")
+                }
+                // Show "In Progress" badge if phase is in progress AND enabled
+                else if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
                     Text("In Progress")
                         .font(DesignSystem.Typography.caption2)
                         .fontWeight(.semibold)
@@ -3216,6 +3272,18 @@ private struct AllPhasesView: View {
                         .background(Color.green.opacity(0.12))
                         .clipShape(Capsule())
                         .accessibilityLabel("Phase status: In Progress")
+                }
+                // Show "Planned" badge if phase is in the future
+                else if isPhaseInFuture(phase) {
+                    Text("Planned")
+                        .font(DesignSystem.Typography.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.purple)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.purple.opacity(0.12))
+                        .clipShape(Capsule())
+                        .accessibilityLabel("Phase status: Planned")
                 }
                 
                 // Extension Badge - Show if phase has accepted extension
@@ -3285,9 +3353,9 @@ private struct AllPhasesView: View {
             }
                 }
                 
-                if role == .ADMIN {
+                if role == .ADMIN && !isPhaseCompleted(phase) {
                     HStack{
-                    // Enable toggle (always visible in All Phases for admins)
+                    // Enable toggle (not shown for completed phases)
                     Toggle("", isOn: Binding(
                         get: { phaseEnabledMap[phase.id] ?? false },
                         set: { newValue in
