@@ -1793,12 +1793,15 @@ private struct AddDepartmentSheet: View {
     @State private var budgetText: String = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var departmentNameError: String?
+    @State private var existingDepartmentNames: [String] = []
     @FocusState private var focusedField: Field?
 
     private enum Field { case name, budget }
 
     private var isFormValid: Bool {
-        !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        departmentNameError == nil
     }
     
     // MARK: - Indian Number Formatting Helpers
@@ -1872,6 +1875,66 @@ private struct AddDepartmentSheet: View {
         guard let number = Double(cleaned) else { return cleaned }
         return formatIndianNumber(number)
     }
+    
+    // MARK: - Validation Functions
+    
+    private func validateDepartmentName() {
+        let trimmedName = departmentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedName.isEmpty {
+            departmentNameError = nil
+            return
+        }
+        
+        // Check for duplicate department names within the same phase (case-insensitive)
+        let isDuplicate = existingDepartmentNames.contains { existingName in
+            existingName.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+        }
+        
+        if isDuplicate {
+            departmentNameError = "Department name already exists in this phase"
+        } else {
+            departmentNameError = nil
+        }
+    }
+    
+    private func loadExistingDepartmentNames() {
+        Task {
+            do {
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    return
+                }
+                
+                let phaseDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phaseId)
+                    .getDocument()
+                
+                guard let phaseData = phaseDoc.data(),
+                      let departments = phaseData["departments"] as? [String: Any] else {
+                    await MainActor.run {
+                        existingDepartmentNames = []
+                    }
+                    return
+                }
+                
+                // Extract department names from keys (remove phaseId_ prefix if present)
+                var departmentNames: [String] = []
+                for deptKey in departments.keys {
+                    let displayName = deptKey.displayDepartmentName()
+                    departmentNames.append(displayName)
+                }
+                
+                await MainActor.run {
+                    existingDepartmentNames = departmentNames
+                }
+            } catch {
+                await MainActor.run {
+                    existingDepartmentNames = []
+                }
+            }
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -1890,6 +1953,25 @@ private struct AddDepartmentSheet: View {
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .name)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(departmentNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                        )
+                        .onChange(of: departmentName) { _, _ in
+                            validateDepartmentName()
+                        }
+                    
+                    if let error = departmentNameError {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .padding(.top, 4)
+                    }
 
                     HStack {
                         TextField("Budget (₹)", text: Binding(
@@ -1925,11 +2007,24 @@ private struct AddDepartmentSheet: View {
                 }
                 // Removed custom keyboard toolbar per request
             }
-            .onAppear { focusedField = .name }
+            .onAppear {
+                focusedField = .name
+                loadExistingDepartmentNames()
+            }
         }
     }
 
     private func save() {
+        // Validate department name before saving
+        validateDepartmentName()
+        
+        guard isFormValid else {
+            if let error = departmentNameError {
+                errorMessage = error
+            }
+            return
+        }
+        
         let amount = Double(removeFormatting(from: budgetText)) ?? 0
         isSaving = true
         errorMessage = nil
@@ -3619,11 +3714,66 @@ private struct AddPhaseSheet: View {
     
     private var isFormValid: Bool {
         let trimmedName = phaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasValidDepartments = !departments.isEmpty &&
+        departments.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let noDuplicateDepartments = !hasDuplicateDepartmentNames()
+        
         return !trimmedName.isEmpty &&
         phaseNameError == nil &&
         endDate > startDate &&
-        !departments.isEmpty &&
-        departments.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        hasValidDepartments &&
+        noDuplicateDepartments
+    }
+    
+    // Check for duplicate department names within the same phase
+    private func hasDuplicateDepartmentNames() -> Bool {
+        let trimmedNames = departments.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        // Check for case-insensitive duplicates
+        let lowercasedNames = trimmedNames.map { $0.lowercased() }
+        let uniqueNames = Set(lowercasedNames)
+        
+        return lowercasedNames.count != uniqueNames.count
+    }
+    
+    // Get duplicate department names for error display
+    private func getDuplicateDepartmentNames() -> [String] {
+        var nameCounts: [String: Int] = [:]
+        var duplicates: [String] = []
+        
+        for dept in departments {
+            let trimmedName = dept.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedName.isEmpty {
+                let lowercased = trimmedName.lowercased()
+                nameCounts[lowercased, default: 0] += 1
+                if nameCounts[lowercased] == 2 {
+                    // First time we see a duplicate
+                    duplicates.append(trimmedName)
+                }
+            }
+        }
+        
+        return duplicates
+    }
+    
+    // Check if a specific department name is a duplicate
+    private func isDepartmentNameDuplicate(_ name: String, excludingId: UUID? = nil) -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedName.isEmpty {
+            return false
+        }
+        
+        let lowercased = trimmedName.lowercased()
+        let count = departments.filter { dept in
+            if let excludingId = excludingId, dept.id == excludingId {
+                return false
+            }
+            return dept.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == lowercased
+        }.count
+        
+        // If count > 0, there's at least one other department with the same name (excluding current)
+        return count > 0
     }
     
     private func validatePhaseName() {
@@ -3719,6 +3869,25 @@ private struct AddPhaseSheet: View {
                                         .font(.body)
                                         .textFieldStyle(.plain)
                                         .focused($focusedField, equals: .departmentName)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(isDepartmentNameDuplicate(dept.name, excludingId: dept.id) ? Color.red : Color.clear, lineWidth: 1)
+                                        )
+                                        .onChange(of: dept.name) { _, _ in
+                                            // Trigger validation check
+                                        }
+                                    
+                                    if isDepartmentNameDuplicate(dept.name, excludingId: dept.id) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .font(.caption2)
+                                                .foregroundColor(.red)
+                                            Text("Duplicate department name")
+                                                .font(.caption2)
+                                                .foregroundColor(.red)
+                                        }
+                                        .padding(.top, 2)
+                                    }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 
@@ -3784,8 +3953,19 @@ private struct AddPhaseSheet: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 } footer: {
-                    Text("At least one department with a name is required. Budget can be 0.")
-                        .font(.caption)
+                    if hasDuplicateDepartmentNames() {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                            Text("Department names must be unique within this phase")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    } else {
+                        Text("At least one department with a name is required. Budget can be 0. Department names must be unique within this phase.")
+                            .font(.caption)
+                    }
                 }
                 
                 if let error = errorMessage {
@@ -3898,9 +4078,17 @@ private struct AddPhaseSheet: View {
         // Validate phase name before saving
         validatePhaseName()
         
+        // Check for duplicate department names
+        if hasDuplicateDepartmentNames() {
+            errorMessage = "Department names must be unique within this phase. Please remove duplicate department names."
+            return
+        }
+        
         guard isFormValid else {
             if phaseNameError != nil {
                 errorMessage = phaseNameError
+            } else if hasDuplicateDepartmentNames() {
+                errorMessage = "Department names must be unique within this phase."
             }
             return
         }
