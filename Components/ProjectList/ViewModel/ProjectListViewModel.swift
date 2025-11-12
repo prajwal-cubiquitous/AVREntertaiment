@@ -153,7 +153,7 @@ class ProjectListViewModel: ObservableObject {
     
     // MARK: - Project Status Update Based on Planned Date
     
-    /// Checks all projects and updates status from LOCKED to ACTIVE if planned date or phase start date has arrived
+    /// Checks all projects and updates status from LOCKED to ACTIVE/SUSPENDED based on planned date and phase timelines
     func checkAndUpdateProjectStatuses() async {
         guard let customerId = customerId else {
             print("❌ Customer ID not found in checkAndUpdateProjectStatuses")
@@ -168,21 +168,21 @@ class ProjectListViewModel: ObservableObject {
         for project in projects {
             guard let projectId = project.id else { continue }
             
-            // Check LOCKED projects - transition to ACTIVE when planned date or earliest phase start date arrives
+            // Check LOCKED projects - transition to ACTIVE or SUSPENDED when planned date arrives
             if project.statusType == .LOCKED {
-                var shouldActivate = false
+                var plannedDateHasArrived = false
                 
-                // First check planned date
+                // Check if planned date has arrived
                 if let plannedDateStr = project.plannedDate,
                    let plannedDate = dateFormatter.date(from: plannedDateStr) {
                     let planned = calendar.startOfDay(for: plannedDate)
                     if planned <= today {
-                        shouldActivate = true
+                        plannedDateHasArrived = true
                     }
                 }
                 
-                // If no planned date or planned date hasn't arrived, check earliest phase start date
-                if !shouldActivate {
+                // If no planned date, check earliest phase start date
+                if !plannedDateHasArrived {
                     do {
                         let phasesSnapshot = try await FirebasePathHelper.shared
                             .phasesCollection(customerId: customerId, projectId: projectId)
@@ -196,7 +196,7 @@ class ProjectListViewModel: ObservableObject {
                            let phaseStartDate = dateFormatter.date(from: phaseStartDateStr) {
                             let phaseStart = calendar.startOfDay(for: phaseStartDate)
                             if phaseStart <= today {
-                                shouldActivate = true
+                                plannedDateHasArrived = true
                             }
                         }
                     } catch {
@@ -204,19 +204,181 @@ class ProjectListViewModel: ObservableObject {
                     }
                 }
                 
-                if shouldActivate {
+                // If planned date has arrived, check for active phases
+                if plannedDateHasArrived {
                     do {
+                        // Load all phases to check for active ones
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerId, projectId: projectId)
+                            .getDocuments()
+                        
+                        var hasActivePhase = false
+                        var hasPhaseWithTimeline = false
+                        
+                        for phaseDoc in phasesSnapshot.documents {
+                            if let phase = try? phaseDoc.data(as: Phase.self) {
+                                // Check if phase has a timeline (both start and end dates)
+                                if let startDateStr = phase.startDate,
+                                   let endDateStr = phase.endDate,
+                                   let startDate = dateFormatter.date(from: startDateStr),
+                                   let endDate = dateFormatter.date(from: endDateStr) {
+                                    hasPhaseWithTimeline = true
+                                    
+                                    let start = calendar.startOfDay(for: startDate)
+                                    let end = calendar.startOfDay(for: endDate)
+                                    
+                                    // Check if phase is currently active (today is between start and end)
+                                    if start <= today && today <= end {
+                                        hasActivePhase = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Determine new status
+                        let newStatus: ProjectStatus
+                        if hasActivePhase {
+                            // Has active phases - set to ACTIVE
+                            newStatus = .ACTIVE
+                        } else if hasPhaseWithTimeline {
+                            // Has phases with timelines but none are active - set to SUSPENDED
+                            newStatus = .SUSPENDED
+                        } else {
+                            // No phases with timelines - set to SUSPENDED
+                            newStatus = .SUSPENDED
+                        }
+                        
+                        // Update project status
                         try await FirebasePathHelper.shared
                             .projectDocument(customerId: customerId, projectId: projectId)
                             .updateData([
-                                "status": ProjectStatus.ACTIVE.rawValue,
+                                "status": newStatus.rawValue,
                                 "updatedAt": Timestamp()
                             ])
                         
                         // Post notification to refresh project list
                         NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
                     } catch {
-                        // Error updating project status
+                        // Error loading phases or updating status
+                        print("Error checking project status: \(error.localizedDescription)")
+                    }
+                }
+            }
+            
+            // Check SUSPENDED projects - they might become ACTIVE if a phase becomes active
+            if project.statusType == .SUSPENDED {
+                // Check if planned date has arrived
+                var plannedDateHasArrived = false
+                if let plannedDateStr = project.plannedDate,
+                   let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    if planned <= today {
+                        plannedDateHasArrived = true
+                    }
+                }
+                
+                // Only check for reactivation if planned date has arrived
+                if plannedDateHasArrived {
+                    do {
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerId, projectId: projectId)
+                            .getDocuments()
+                        
+                        var hasActivePhase = false
+                        
+                        for phaseDoc in phasesSnapshot.documents {
+                            if let phase = try? phaseDoc.data(as: Phase.self) {
+                                // Check if phase has a timeline and is currently active
+                                if let startDateStr = phase.startDate,
+                                   let endDateStr = phase.endDate,
+                                   let startDate = dateFormatter.date(from: startDateStr),
+                                   let endDate = dateFormatter.date(from: endDateStr) {
+                                    let start = calendar.startOfDay(for: startDate)
+                                    let end = calendar.startOfDay(for: endDate)
+                                    
+                                    // Check if phase is currently active
+                                    if start <= today && today <= end {
+                                        hasActivePhase = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If there's an active phase, reactivate the project
+                        if hasActivePhase {
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData([
+                                    "status": ProjectStatus.ACTIVE.rawValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                            
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        }
+                    } catch {
+                        // Error loading phases
+                    }
+                }
+            }
+            
+            // Also check ACTIVE projects - they might need to be suspended if no active phases
+            if project.statusType == .ACTIVE {
+                // Check if planned date has arrived
+                var plannedDateHasArrived = false
+                if let plannedDateStr = project.plannedDate,
+                   let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    if planned <= today {
+                        plannedDateHasArrived = true
+                    }
+                }
+                
+                // Only check for suspension if planned date has arrived
+                if plannedDateHasArrived {
+                    do {
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerId, projectId: projectId)
+                            .getDocuments()
+                        
+                        var hasActivePhase = false
+                        var hasPhaseWithTimeline = false
+                        
+                        for phaseDoc in phasesSnapshot.documents {
+                            if let phase = try? phaseDoc.data(as: Phase.self) {
+                                // Check if phase has a timeline (both start and end dates)
+                                if let startDateStr = phase.startDate,
+                                   let endDateStr = phase.endDate,
+                                   let startDate = dateFormatter.date(from: startDateStr),
+                                   let endDate = dateFormatter.date(from: endDateStr) {
+                                    hasPhaseWithTimeline = true
+                                    
+                                    let start = calendar.startOfDay(for: startDate)
+                                    let end = calendar.startOfDay(for: endDate)
+                                    
+                                    // Check if phase is currently active
+                                    if start <= today && today <= end {
+                                        hasActivePhase = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If no active phases but planned date has arrived, suspend
+                        if !hasActivePhase && hasPhaseWithTimeline {
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData([
+                                    "status": ProjectStatus.SUSPENDED.rawValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                            
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        }
+                    } catch {
+                        // Error loading phases
                     }
                 }
             }

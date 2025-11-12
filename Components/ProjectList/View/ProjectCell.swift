@@ -312,6 +312,7 @@ extension ProjectStatus {
         case .HANDOVER: return .yellow
         case .IN_REVIEW: return .purple
         case .LOCKED: return .indigo
+        case .SUSPENDED: return .orange
         }
     }
     
@@ -323,6 +324,7 @@ extension ProjectStatus {
         case .HANDOVER: return "Handover"
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
+        case .SUSPENDED: return "SUSPENDED"
         }
     }
 }
