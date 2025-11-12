@@ -72,6 +72,8 @@ struct DashboardView: View {
     @StateObject private var stateManager: DashboardStateManager
     @State private var showingCompletePhaseConfirmation = false
     @State private var phaseToComplete: PhaseSummary? = nil
+    @State private var showingStartNowConfirmation = false
+    @State private var phaseToStart: PhaseSummary? = nil
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -580,6 +582,30 @@ struct DashboardView: View {
             if let phase = phaseToComplete {
                 Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
             }
+        }
+        .alert("Start Phase Now", isPresented: $showingStartNowConfirmation) {
+            Button("Cancel", role: .cancel) {
+                phaseToStart = nil
+            }
+            Button("Confirm") {
+                if let phase = phaseToStart {
+                    Task {
+                        await startPhaseNow(phase)
+                    }
+                }
+                phaseToStart = nil
+            }
+        } message: {
+            if let phase = phaseToStart {
+                let message: String
+                if project?.statusType == .LOCKED {
+                    message = "The phase start date will be set to today (\(phaseDateFormatter.string(from: Date()))). The project planned start date will also be updated to today since the project is locked."
+                } else {
+                    message = "The phase start date will be set to today (\(phaseDateFormatter.string(from: Date())))."
+                }
+                return Text(message)
+            }
+            return Text("")
         }
 
         .onAppear {
@@ -1231,6 +1257,17 @@ struct DashboardView: View {
             isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true)
         }
     }
+    
+    private func isPhaseInFuture(_ phase: PhaseSummary) -> Bool {
+        let current = now
+        if let startDate = phase.start {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: current)
+            let phaseStart = calendar.startOfDay(for: startDate)
+            return phaseStart > today
+        }
+        return false
+    }
 
     private func isPhaseInProgress(_ phase: PhaseSummary) -> Bool {
         let current = now
@@ -1588,6 +1625,78 @@ struct DashboardView: View {
                     // Error updating phase enabled status
                 }
             }
+    }
+    
+    // MARK: - Start Phase Now
+    private func startPhaseNow(_ phase: PhaseSummary) async {
+        guard let projectId = project?.id,
+              let customerId = customerId else {
+            return
+        }
+        
+        do {
+            // Format today's date as start date
+            let today = Date()
+            let startDateStr = phaseDateFormatter.string(from: today)
+            
+            // Update phase start date to today
+            try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .updateData([
+                    "startDate": startDateStr,
+                    "updatedAt": Timestamp()
+                ])
+            
+            // If project status is LOCKED, also update project planned start date
+            if let project = project, project.statusType == .LOCKED {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "plannedDate": startDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+                
+                // Post notification to refresh project
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            }
+            
+            // Log timeline change
+            if let currentUserUID = Auth.auth().currentUser?.uid {
+                let changeLog = PhaseTimelineChange(
+                    phaseId: phase.id,
+                    projectId: projectId,
+                    previousStartDate: phase.start.map { phaseDateFormatter.string(from: $0) },
+                    previousEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                    newStartDate: startDateStr,
+                    newEndDate: phase.end.map { phaseDateFormatter.string(from: $0) },
+                    changedBy: currentUserUID
+                )
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                
+                let changesRef = phaseRef.collection("changes").document()
+                try await changesRef.setData(from: changeLog)
+            }
+            
+            // Reload phases to reflect the change
+            await loadPhases()
+            
+            // Post notification to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+            
+            // Provide haptic feedback
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error starting phase: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
     }
     
     // MARK: - Complete Phase
@@ -2588,6 +2697,8 @@ private struct AllPhasesView: View {
     @State private var phaseToEdit: DashboardView.PhaseSummary? = nil
     @State private var showingCompletePhaseConfirmation = false
     @State private var phaseToComplete: DashboardView.PhaseSummary? = nil
+    @State private var showingStartNowConfirmation = false
+    @State private var phaseToStart: DashboardView.PhaseSummary? = nil
     
     private var phaseDateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -2596,6 +2707,17 @@ private struct AllPhasesView: View {
     }
     
     private var now: Date { Date() }
+    
+    private func isPhaseInFuture(_ phase: DashboardView.PhaseSummary) -> Bool {
+        let current = now
+        if let startDate = phase.start {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: current)
+            let phaseStart = calendar.startOfDay(for: startDate)
+            return phaseStart > today
+        }
+        return false
+    }
     
     private func isPhaseInProgress(_ phase: DashboardView.PhaseSummary) -> Bool {
         let current = now
@@ -2839,6 +2961,83 @@ private struct AllPhasesView: View {
         }
     }
     
+    // MARK: - Start Phase Now in AllPhasesView
+    private func startPhaseNowInAllPhasesView(phase: DashboardView.PhaseSummary, projectId: String, customerId: String) async {
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            // Format today's date as start date
+            let today = Date()
+            let startDateStr = dateFormatter.string(from: today)
+            
+            // Update phase start date to today
+            try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .document(phase.id)
+                .updateData([
+                    "startDate": startDateStr,
+                    "updatedAt": Timestamp()
+                ])
+            
+            // If project status is LOCKED, also update project planned start date
+            if let project = project, project.statusType == .LOCKED {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "plannedDate": startDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+                
+                // Post notification to refresh project
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            }
+            
+            // Log timeline change
+            if let currentUserUID = Auth.auth().currentUser?.uid {
+                let changeLog = PhaseTimelineChange(
+                    phaseId: phase.id,
+                    projectId: projectId,
+                    previousStartDate: phase.start.map { dateFormatter.string(from: $0) },
+                    previousEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                    newStartDate: startDateStr,
+                    newEndDate: phase.end.map { dateFormatter.string(from: $0) },
+                    changedBy: currentUserUID
+                )
+                
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phase.id)
+                
+                let changesRef = phaseRef.collection("changes").document()
+                try await changesRef.setData(from: changeLog)
+            }
+            
+            // Reload phases
+            loadPhaseEnabledStates()
+            loadPhaseBudgets()
+            loadPhaseDepartmentSpent()
+            loadPhaseExtensions()
+            loadPhaseAnonymousExpenses()
+            
+            // Post notification to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+            
+            // Call parent callback to reload phases
+            onPhaseAdded?()
+            
+            // Provide haptic feedback
+            await MainActor.run {
+                HapticManager.notification(.success)
+            }
+        } catch {
+            print("Error starting phase: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
+    }
+    
     // MARK: - Complete Phase in AllPhasesView
     private func completePhaseInAllPhasesView(phase: DashboardView.PhaseSummary, projectId: String, customerId: String) async {
         do {
@@ -3035,27 +3234,49 @@ private struct AllPhasesView: View {
                 
                 HStack{
                     Spacer()
-                    // 3-dot menu for Complete Phase (available for all roles, only for active phases)
-                    if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
-                        Menu {
-                            Button(role: .destructive) {
-                                HapticManager.selection()
-                                phaseToComplete = phase
-                                showingCompletePhaseConfirmation = true
-                            } label: {
-                                Label("Complete Phase", systemImage: "checkmark.circle.fill")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .frame(width: 24, height: 24)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.leading, role == .ADMIN ? 4 : 0)
-                        .padding(.vertical, 2)
+            // 3-dot menu for Complete Phase (available for all roles, only for active phases)
+            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+                Menu {
+                    Button(role: .destructive) {
+                        HapticManager.selection()
+                        phaseToComplete = phase
+                        showingCompletePhaseConfirmation = true
+                    } label: {
+                        Label("Complete Phase", systemImage: "checkmark.circle.fill")
                     }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, role == .ADMIN ? 4 : 0)
+                .padding(.vertical, 2)
+            }
+            
+            // 3-dot menu for Start Now (for future phases, available for all roles)
+            if isPhaseInFuture(phase) {
+                Menu {
+                    Button {
+                        HapticManager.selection()
+                        phaseToStart = phase
+                        showingStartNowConfirmation = true
+                    } label: {
+                        Label("Start Now", systemImage: "play.circle.fill")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, role == .ADMIN ? 4 : 0)
+                .padding(.vertical, 2)
+            }
                 }
                 
                 if role == .ADMIN {
@@ -3315,6 +3536,32 @@ private struct AllPhasesView: View {
             if let phase = phaseToComplete {
                 Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
             }
+        }
+        .alert("Start Phase Now", isPresented: $showingStartNowConfirmation) {
+            Button("Cancel", role: .cancel) {
+                phaseToStart = nil
+            }
+            Button("Confirm") {
+                if let phase = phaseToStart,
+                   let projectId = project?.id,
+                   let customerId = Auth.auth().currentUser?.uid {
+                    Task {
+                        await startPhaseNowInAllPhasesView(phase: phase, projectId: projectId, customerId: customerId)
+                    }
+                }
+                phaseToStart = nil
+            }
+        } message: {
+            if let phase = phaseToStart {
+                let message: String
+                if project?.statusType == .LOCKED {
+                    message = "The phase start date will be set to today (\(phaseDateFormatter.string(from: Date()))). The project planned start date will also be updated to today since the project is locked."
+                } else {
+                    message = "The phase start date will be set to today (\(phaseDateFormatter.string(from: Date())))."
+                }
+                return Text(message)
+            }
+            return Text("")
         }
 //        .sheet(isPresented: $showingDepartmentDetail) {
 //            if let department = selectedDepartment, let project = project, let projectId = project.id, !projectId.isEmpty {
