@@ -447,8 +447,8 @@ class AdminProjectDetailViewModel: ObservableObject {
                     // If planned date is today or in the past, set to ACTIVE
                     newStatus = ProjectStatus.ACTIVE.rawValue
                 } else {
-                    // If planned date is in the future, set to DRAFT
-                    newStatus = ProjectStatus.DRAFT.rawValue
+                    // If planned date is in the future, set to LOCKED
+                    newStatus = ProjectStatus.LOCKED.rawValue
                 }
                 
                 try await FirebasePathHelper.shared
@@ -687,7 +687,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     // MARK: - Delete Project
     
     var canDeleteProject: Bool {
-        project.statusType == .DRAFT && expensesCount == 0
+        project.statusType == .LOCKED && expensesCount == 0
     }
     
     func deleteProject() {

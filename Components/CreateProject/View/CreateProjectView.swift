@@ -390,7 +390,7 @@ struct CreateProjectView: View {
                     .background(Color(.tertiarySystemGroupedBackground))
                     .cornerRadius(DesignSystem.CornerRadius.field)
                     
-                    Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
+                    Text("Project will be in LOCKED status until this date, then automatically become ACTIVE")
                         .font(DesignSystem.Typography.caption1)
                         .foregroundColor(.secondary)
                         .padding(.top, 4)
@@ -702,7 +702,7 @@ struct CreateProjectView: View {
                     .background(Color(.tertiarySystemGroupedBackground))
                     .cornerRadius(DesignSystem.CornerRadius.field)
                     
-                    Text("Project will be in DRAFT status until this date, then automatically become ACTIVE")
+                    Text("Project will be in LOCKED status until this date, then automatically become ACTIVE")
                         .font(DesignSystem.Typography.caption1)
                         .foregroundColor(.secondary)
                         .padding(.top, 4)

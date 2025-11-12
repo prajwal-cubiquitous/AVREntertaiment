@@ -342,28 +342,12 @@ struct ProjectListView: View {
         }
         
         do {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "dd/MM/yyyy"
-            let calendar = Calendar.current
-            let today = calendar.startOfDay(for: Date())
-            
-            // Get planned date to determine if project should be LOCKED or ACTIVE
-            var newStatus: ProjectStatus
-            if let plannedDateStr = project.plannedDate,
-               let plannedDate = dateFormatter.date(from: plannedDateStr) {
-                let planned = calendar.startOfDay(for: plannedDate)
-                // If planned date is today or in the past, set to ACTIVE, otherwise LOCKED
-                newStatus = planned <= today ? .ACTIVE : .LOCKED
-            } else {
-                // No planned date, set to LOCKED (will be activated when phase starts)
-                newStatus = .LOCKED
-            }
-            
-            // Update project status
+            // When approver accepts, always set status to LOCKED
+            // The status check logic will automatically transition LOCKED to ACTIVE when planned date or phase start date arrives
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": newStatus.rawValue,
+                    "status": ProjectStatus.LOCKED.rawValue,
                     "updatedAt": Timestamp()
                 ])
             
@@ -388,11 +372,11 @@ struct ProjectListView: View {
         }
         
         do {
-            // Update project status to DRAFT so admin can edit and resubmit
+            // Update project status to LOCKED so admin can edit and resubmit
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": ProjectStatus.DRAFT.rawValue,
+                    "status": ProjectStatus.LOCKED.rawValue,
                     "rejectionReason": reason,
                     "rejectedBy": viewModel.phoneNumber,
                     "rejectedAt": Timestamp(),

@@ -1179,18 +1179,32 @@ class AddExpenseViewModel: ObservableObject {
                     .expensesCollection(customerId: customerId, projectId: projectId)
                     .addDocument(data: expenseData)
                 
-                // Check if project is DRAFT and has 0 expenses (this is the first expense)
+                // Check if project is LOCKED and has 0 expenses (this is the first expense)
                 // Check the expenses count before adding this expense
                 let expensesSnapshot = try await FirebasePathHelper.shared
                     .expensesCollection(customerId: customerId, projectId: projectId)
                     .getDocuments()
                 
-                // If project is DRAFT and this is the first expense (count == 1 after adding)
-                if project.statusType == .DRAFT && expensesSnapshot.documents.count == 1 {
-                    // Update project status to ACTIVE
-                    try await FirebasePathHelper.shared
-                        .projectDocument(customerId: customerId, projectId: projectId)
-                        .updateData(["status": ProjectStatus.ACTIVE.rawValue])
+                // If project is LOCKED and this is the first expense (count == 1 after adding)
+                // Note: LOCKED projects will become ACTIVE when planned date or phase start date arrives
+                // This check is kept for backward compatibility but LOCKED projects should transition via date checks
+                if project.statusType == .LOCKED && expensesSnapshot.documents.count == 1 {
+                    // Check if planned date has arrived - if so, activate
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "dd/MM/yyyy"
+                    let calendar = Calendar.current
+                    let today = calendar.startOfDay(for: Date())
+                    
+                    if let plannedDateStr = project.plannedDate,
+                       let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                        let planned = calendar.startOfDay(for: plannedDate)
+                        if planned <= today {
+                            // Update project status to ACTIVE
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData(["status": ProjectStatus.ACTIVE.rawValue])
+                        }
+                    }
                     
                     // Notify that project was updated
                     NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)

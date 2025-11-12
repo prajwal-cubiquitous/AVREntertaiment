@@ -153,7 +153,7 @@ class ProjectListViewModel: ObservableObject {
     
     // MARK: - Project Status Update Based on Planned Date
     
-    /// Checks all projects and updates status from DRAFT/LOCKED to ACTIVE if planned date or phase start date has arrived
+    /// Checks all projects and updates status from LOCKED to ACTIVE if planned date or phase start date has arrived
     func checkAndUpdateProjectStatuses() async {
         guard let customerId = customerId else {
             print("❌ Customer ID not found in checkAndUpdateProjectStatuses")
@@ -167,30 +167,6 @@ class ProjectListViewModel: ObservableObject {
         
         for project in projects {
             guard let projectId = project.id else { continue }
-            
-            // Check DRAFT projects with planned date
-            if project.statusType == .DRAFT,
-               let plannedDateStr = project.plannedDate,
-               let plannedDate = dateFormatter.date(from: plannedDateStr) {
-                let planned = calendar.startOfDay(for: plannedDate)
-                
-                // If planned date is today or in the past, update status to ACTIVE
-                if planned <= today {
-                    do {
-                        try await FirebasePathHelper.shared
-                            .projectDocument(customerId: customerId, projectId: projectId)
-                            .updateData([
-                                "status": ProjectStatus.ACTIVE.rawValue,
-                                "updatedAt": Timestamp()
-                            ])
-                        
-                        // Post notification to refresh project list
-                        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
-                    } catch {
-                        // Error updating project status
-                    }
-                }
-            }
             
             // Check LOCKED projects - transition to ACTIVE when planned date or earliest phase start date arrives
             if project.statusType == .LOCKED {
