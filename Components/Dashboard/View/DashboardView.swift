@@ -2142,7 +2142,7 @@ private struct AddDepartmentSheet: View {
         }
         
         if isDuplicate {
-            departmentNameError = "Department name already exists in this phase"
+            departmentNameError = "\"\(trimmedName)\" already exists in \"\(phaseName)\". Enter a unique department name."
         } else {
             departmentNameError = nil
         }
@@ -4335,7 +4335,7 @@ private struct AddPhaseSheet: View {
         }
         
         if isDuplicate {
-            phaseNameError = "Phase name must be unique"
+            phaseNameError = "\"\(trimmedName)\" already exists in this project. Enter a unique phase name."
         } else {
             phaseNameError = nil
         }
@@ -4427,7 +4427,7 @@ private struct AddPhaseSheet: View {
                                             Image(systemName: "exclamationmark.circle.fill")
                                                 .font(.caption2)
                                                 .foregroundColor(.red)
-                                            Text("Duplicate department name")
+                                            Text("\"\(dept.name.trimmingCharacters(in: .whitespacesAndNewlines))\" already exists in \"\(phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "this phase" : phaseName.trimmingCharacters(in: .whitespacesAndNewlines))\". Enter a unique department name.")
                                                 .font(.caption2)
                                                 .foregroundColor(.red)
                                         }
@@ -4503,7 +4503,7 @@ private struct AddPhaseSheet: View {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.caption2)
                                 .foregroundColor(.red)
-                            Text("Department names must be unique within this phase")
+                            Text("Department names must be unique within this phase. Enter unique department names.")
                                 .font(.caption)
                                 .foregroundColor(.red)
                         }
@@ -4625,7 +4625,13 @@ private struct AddPhaseSheet: View {
         
         // Check for duplicate department names
         if hasDuplicateDepartmentNames() {
-            errorMessage = "Department names must be unique within this phase. Please remove duplicate department names."
+            let duplicates = getDuplicateDepartmentNames()
+            let phaseNameDisplay = phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "this phase" : "\"\(phaseName.trimmingCharacters(in: .whitespacesAndNewlines))\""
+            if let firstDuplicate = duplicates.first {
+                errorMessage = "\"\(firstDuplicate)\" already exists in \(phaseNameDisplay). Enter a unique department name."
+            } else {
+                errorMessage = "Department names must be unique within this phase. Enter unique department names."
+            }
             return
         }
         
@@ -4633,7 +4639,13 @@ private struct AddPhaseSheet: View {
             if phaseNameError != nil {
                 errorMessage = phaseNameError
             } else if hasDuplicateDepartmentNames() {
-                errorMessage = "Department names must be unique within this phase."
+                let duplicates = getDuplicateDepartmentNames()
+                let phaseNameDisplay = phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "this phase" : "\"\(phaseName.trimmingCharacters(in: .whitespacesAndNewlines))\""
+                if let firstDuplicate = duplicates.first {
+                    errorMessage = "\"\(firstDuplicate)\" already exists in \(phaseNameDisplay). Enter a unique department name."
+                } else {
+                    errorMessage = "Department names must be unique within this phase. Enter unique department names."
+                }
             }
             return
         }

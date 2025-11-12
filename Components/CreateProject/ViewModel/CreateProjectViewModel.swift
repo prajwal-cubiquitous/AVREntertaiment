@@ -523,7 +523,7 @@ class CreateProjectViewModel: ObservableObject {
         }.count
         
         if duplicateCount > 0 {
-            return "Phase name must be unique"
+            return "\"\(trimmedName)\" already exists in this project. Enter a unique phase name."
         }
         
         return nil
@@ -592,7 +592,8 @@ class CreateProjectViewModel: ObservableObject {
         }.count
         
         if duplicateCount > 0 {
-            return "Department name already exists in this phase"
+            let phaseName = phase.phaseName.trimmingCharacters(in: .whitespaces)
+            return "\"\(trimmedName)\" already exists in \"\(phaseName)\". Enter a unique department name."
         }
         
         return nil
