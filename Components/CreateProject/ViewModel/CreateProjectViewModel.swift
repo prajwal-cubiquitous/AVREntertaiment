@@ -407,6 +407,15 @@ class CreateProjectViewModel: ObservableObject {
                 return false
             }
             
+            // Check for duplicate department names within the same phase (case-insensitive)
+            let departmentNames = phase.departments.map { $0.name.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            let lowercasedNames = departmentNames.map { $0.lowercased() }
+            let uniqueNames = Set(lowercasedNames)
+            if lowercasedNames.count != uniqueNames.count {
+                return false // Duplicate department names found
+            }
+            
             // Date validation: end date must be after start date (dates are now required)
             if phase.endDate <= phase.startDate {
                 return false
@@ -483,17 +492,19 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     func phaseNameError(for phaseId: UUID) -> String? {
-        guard shouldShowValidationErrors else { return nil }
         guard let phase = phases.first(where: { $0.id == phaseId }) else { return nil }
         
         let trimmedName = phase.phaseName.trimmingCharacters(in: .whitespaces)
         
-        // Check if phase name is empty
+        // Check if phase name is empty (only show after submit attempt)
         if trimmedName.isEmpty {
-            return "Phase name is required"
+            if shouldShowValidationErrors {
+                return "Phase name is required"
+            }
+            return nil
         }
         
-        // Check for duplicate phase names (case-insensitive)
+        // Check for duplicate phase names (case-insensitive) - show in real-time
         let duplicateCount = phases.filter { phaseItem in
             phaseItem.id != phaseId && // Exclude current phase
             phaseItem.phaseName.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
@@ -528,12 +539,29 @@ class CreateProjectViewModel: ObservableObject {
     }
     
     func departmentNameError(for phaseId: UUID, departmentId: UUID) -> String? {
-        guard shouldShowValidationErrors else { return nil }
         guard let phase = phases.first(where: { $0.id == phaseId }),
               let department = phase.departments.first(where: { $0.id == departmentId }) else { return nil }
-        if department.name.trimmingCharacters(in: .whitespaces).isEmpty {
-            return "Department name is required"
+        
+        let trimmedName = department.name.trimmingCharacters(in: .whitespaces)
+        
+        // Check if department name is empty (only show after submit attempt)
+        if trimmedName.isEmpty {
+            if shouldShowValidationErrors {
+                return "Department name is required"
+            }
+            return nil
         }
+        
+        // Check for duplicate department names within the same phase (case-insensitive) - show in real-time
+        let duplicateCount = phase.departments.filter { dept in
+            dept.id != departmentId && // Exclude current department
+            dept.name.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+        }.count
+        
+        if duplicateCount > 0 {
+            return "Department name already exists in this phase"
+        }
+        
         return nil
     }
     
@@ -607,9 +635,21 @@ class CreateProjectViewModel: ObservableObject {
                 return "phase_\(phase.id)_departments"
             }
             
-            // Check for empty department names
+            // Check for empty department names and duplicate department names
             for department in phase.departments {
-                if department.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                let trimmedName = department.name.trimmingCharacters(in: .whitespaces)
+                
+                if trimmedName.isEmpty {
+                    return "phase_\(phase.id)_dept_\(department.id)_name"
+                }
+                
+                // Check for duplicate department names within the same phase (case-insensitive)
+                let duplicateCount = phase.departments.filter { dept in
+                    dept.id != department.id && // Exclude current department
+                    dept.name.trimmingCharacters(in: .whitespaces).localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+                }.count
+                
+                if duplicateCount > 0 {
                     return "phase_\(phase.id)_dept_\(department.id)_name"
                 }
             }
