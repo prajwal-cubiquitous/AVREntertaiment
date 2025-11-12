@@ -800,7 +800,7 @@ struct DashboardView: View {
                         .font(.system(size: 40))
                         .foregroundColor(.secondary.opacity(0.6))
                         .symbolRenderingMode(.hierarchical)
-                    Text("No phases to show")
+                    Text("No Active phases to show")
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     
