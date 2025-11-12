@@ -1304,23 +1304,28 @@ struct DashboardView: View {
 
     private func isPhaseInProgress(_ phase: PhaseSummary) -> Bool {
         let current = now
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: current)
+        
         if let startDate = phase.start, let endDate = phase.end {
-                // both are non-nil
-                return startDate <= current && current <= endDate
-            } else if let startDate = phase.start {
-                // only startDate
-                return startDate <= current
-            } else if let endDate = phase.end {
-                // only endDate
-                return current <= endDate
-            } else {
-                // neither provided
-                return true
-            }
-//        }else{
-//            return false
-//        }
-
+            // both are non-nil - compare at start of day level
+            let phaseStart = calendar.startOfDay(for: startDate)
+            let phaseEnd = calendar.startOfDay(for: endDate)
+            // Phase is in progress if today is between start and end (inclusive)
+            return phaseStart <= today && today <= phaseEnd
+        } else if let startDate = phase.start {
+            // only startDate
+            let phaseStart = calendar.startOfDay(for: startDate)
+            return phaseStart <= today
+        } else if let endDate = phase.end {
+            // only endDate - compare at start of day level
+            let phaseEnd = calendar.startOfDay(for: endDate)
+            // Phase is in progress if today is on or before the end date
+            return today <= phaseEnd
+        } else {
+            // neither provided
+            return true
+        }
     }
 
     private func phaseTimelineText(_ phase: PhaseSummary) -> String {
@@ -1338,21 +1343,27 @@ struct DashboardView: View {
     
     private func daysRemaining(for phase: PhaseSummary) -> (text: String, color: Color)? {
         let current = now
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: current)
+        
         guard let endDate = phase.end else {
             // If no end date, check start date
             if let startDate = phase.start {
-                let daysSince = Calendar.current.dateComponents([.day], from: startDate, to: current).day ?? 0
+                let phaseStart = calendar.startOfDay(for: startDate)
+                let daysSince = calendar.dateComponents([.day], from: phaseStart, to: today).day ?? 0
                 return daysSince >= 0 ? ("\(daysSince) days passed", .secondary) : nil
             }
             return nil
         }
         
-        let daysRemaining = Calendar.current.dateComponents([.day], from: current, to: endDate).day ?? 0
+        // Compare at start of day level
+        let phaseEnd = calendar.startOfDay(for: endDate)
+        let daysRemaining = calendar.dateComponents([.day], from: today, to: phaseEnd).day ?? 0
         
         if daysRemaining < 0 {
             return ("\(abs(daysRemaining)) days overdue", Color.red)
         } else if daysRemaining == 0 {
-            return ("Ends today", Color.red)
+            return ("0 days remaining", Color.red)
         } else if daysRemaining < 5 {
             return ("\(daysRemaining) days remaining", Color.red)
         } else if daysRemaining < 15 {
@@ -2777,15 +2788,27 @@ private struct AllPhasesView: View {
     
     private func isPhaseInProgress(_ phase: DashboardView.PhaseSummary) -> Bool {
         let current = now
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: current)
+        
         switch (phase.start, phase.end) {
         case (nil, nil):
             return true
         case (let s?, nil):
-            return s <= current
+            // only startDate - compare at start of day level
+            let phaseStart = calendar.startOfDay(for: s)
+            return phaseStart <= today
         case (nil, let e?):
-            return current <= e
+            // only endDate - compare at start of day level
+            let phaseEnd = calendar.startOfDay(for: e)
+            // Phase is in progress if today is on or before the end date
+            return today <= phaseEnd
         case (let s?, let e?):
-            return s <= current && current <= e
+            // both are non-nil - compare at start of day level
+            let phaseStart = calendar.startOfDay(for: s)
+            let phaseEnd = calendar.startOfDay(for: e)
+            // Phase is in progress if today is between start and end (inclusive)
+            return phaseStart <= today && today <= phaseEnd
         }
     }
     
