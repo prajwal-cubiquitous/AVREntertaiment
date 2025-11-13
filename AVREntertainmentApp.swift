@@ -14,6 +14,11 @@ import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     let gcmMessageIDKey = "gcm.message_id"
+    
+    // Store FCM token and customer ID for cleanup
+    private var storedFCMToken: String?
+    private var storedCustomerId: String?
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
         FirebaseApp.configure()
         
@@ -34,7 +39,48 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
         
         application.registerForRemoteNotifications()
+        
+        // Store app launch flag for cleanup detection
+        UserDefaults.standard.set(true, forKey: "AppLaunched")
+        
         return true
+    }
+    
+    // Handle app termination - attempt to clean up FCM token
+    func applicationWillTerminate(_ application: UIApplication) {
+        cleanupFCMTokenOnTermination()
+    }
+    
+    // Handle app entering background - store current state for cleanup
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Store current FCM token and customer ID for potential cleanup
+        if let currentUser = Auth.auth().currentUser,
+           let email = currentUser.email, !email.isEmpty {
+            storedCustomerId = currentUser.uid
+            Task {
+                if let token = try? await Messaging.messaging().token() {
+                    storedFCMToken = token
+                    UserDefaults.standard.set(token, forKey: "LastFCMToken")
+                    UserDefaults.standard.set(currentUser.uid, forKey: "LastCustomerId")
+                }
+            }
+        }
+    }
+    
+    func cleanupFCMTokenOnTermination() {
+        // Try to clean up FCM token on app termination
+        // Note: This may not always execute due to iOS limitations, but we try
+        if let currentUser = Auth.auth().currentUser,
+           let email = currentUser.email, !email.isEmpty {
+            let customerId = currentUser.uid
+            let token = storedFCMToken ?? UserDefaults.standard.string(forKey: "LastFCMToken")
+            
+            if let token = token {
+                Task {
+                    await FirestoreManager.shared.removeToken(token, customerId: customerId)
+                }
+            }
+        }
     }
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         // Pass device token to auth
@@ -74,10 +120,24 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 struct AVREntertainmentApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject var navigationManager = NavigationManager()
+    @Environment(\.scenePhase) private var scenePhase
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(navigationManager)
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    // Handle app lifecycle changes
+                    if newPhase == .background {
+                        // App entered background - store state for cleanup
+                        delegate.applicationDidEnterBackground(UIApplication.shared)
+                    } else if newPhase == .inactive {
+                        // App is about to terminate - attempt cleanup
+                        if oldPhase == .background {
+                            delegate.cleanupFCMTokenOnTermination()
+                        }
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NavigateFromNotification"))) { notification in
                     if let userInfo = notification.userInfo,
                        let screen = userInfo["screen"] as? String {
@@ -116,7 +176,16 @@ extension AppDelegate: MessagingDelegate {
         print("FCM token received: \(fcmToken ?? "nil")")
         // Save to Firestore under current user
         if let token = fcmToken {
-            Task{
+            // Store token for cleanup
+            storedFCMToken = token
+            if let currentUser = Auth.auth().currentUser,
+               let email = currentUser.email, !email.isEmpty {
+                storedCustomerId = currentUser.uid
+                UserDefaults.standard.set(token, forKey: "LastFCMToken")
+                UserDefaults.standard.set(currentUser.uid, forKey: "LastCustomerId")
+            }
+            
+            Task {
                 await FirestoreManager.shared.saveToken(token: token)
             }
         }

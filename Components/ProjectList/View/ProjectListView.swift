@@ -569,17 +569,28 @@ struct ProjectListView: View {
                                 })
                             }
                         } else {
-                            NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
+                            // For USER role, disable navigation if project is IN_REVIEW or REVIEW_REJECTED
+                            if role == .USER && (project.statusType == .IN_REVIEW || project.statusType == .REVIEW_REJECTED) {
                                 ProjectCell(
                                     project: project,
                                     role: role,
                                     tempApproverStatus: projectTempStatuses[project.id ?? ""]
                                 )
+                                .opacity(0.6)
+                                .disabled(true)
+                            } else {
+                                NavigationLink(destination: ProjectDetailView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager).environmentObject(navigationManager)) {
+                                    ProjectCell(
+                                        project: project,
+                                        role: role,
+                                        tempApproverStatus: projectTempStatuses[project.id ?? ""]
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .simultaneousGesture(TapGesture().onEnded {
+                                    HapticManager.selection()
+                                })
                             }
-                            .buttonStyle(.plain)
-                            .simultaneousGesture(TapGesture().onEnded {
-                                HapticManager.selection()
-                            })
                         }
                     }
                 }
@@ -864,10 +875,14 @@ struct MenuSheetView: View {
                 HapticManager.selection()
             }
             Button("Sign Out", role: .destructive) {
-                FirestoreManager.shared.removeToken()
-                HapticManager.notification(.success)
-                dismiss()
-                NotificationCenter.default.post(name: NSNotification.Name("UserDidLogout"), object: nil)
+                Task {
+                    await FirestoreManager.shared.removeToken()
+                    await MainActor.run {
+                        HapticManager.notification(.success)
+                        dismiss()
+                        NotificationCenter.default.post(name: NSNotification.Name("UserDidLogout"), object: nil)
+                    }
+                }
             }
         } message: {
             Text("Are you sure you want to sign out of your account?")

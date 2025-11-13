@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseMessaging
 
 @MainActor
 class FirebaseAuthService: ObservableObject {
@@ -139,6 +140,18 @@ class FirebaseAuthService: ObservableObject {
         do {
             let result = try await auth.signIn(withEmail: email, password: password)
             // Admin user will be loaded automatically through auth state listener
+            
+            // Save FCM token to customers collection after successful login
+            Task {
+                do {
+                    let token = try await Messaging.messaging().token()
+                    print("📱 FCM token at admin login: \(token)")
+                    await FirestoreManager.shared.saveToken(token: token)
+                } catch {
+                    print("⚠️ Error fetching/saving FCM token after admin login: \(error.localizedDescription)")
+                }
+            }
+            
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -328,6 +341,11 @@ class FirebaseAuthService: ObservableObject {
     
     // MARK: - Sign Out
     func signOut() {
+        // Remove FCM token before signing out
+        Task {
+            await FirestoreManager.shared.removeToken()
+        }
+        
         do {
             try auth.signOut()
             resetAuthState()
