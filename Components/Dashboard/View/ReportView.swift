@@ -38,6 +38,7 @@ struct ReportView: View {
                                 print("error fetching department names")
                             }
                             Task {
+                                await viewModel.loadPhases(projectId: projectId)
                                 await viewModel.loadApprovedExpenses(projectId: projectId)
                                 await viewModel.loadDepartmentBudgets(projectId: projectId)
                             }
@@ -47,6 +48,23 @@ struct ReportView: View {
                         Task {
                             if let projectId = projectId {
                                 await viewModel.loadApprovedExpenses(projectId: projectId)
+                                await viewModel.loadDepartmentBudgets(projectId: projectId)
+                            }
+                        }
+                    }
+                    .onChange(of: viewModel.selectedPhase) {
+                        Task {
+                            if let projectId = projectId {
+                                await viewModel.loadApprovedExpenses(projectId: projectId)
+                                await viewModel.loadDepartmentBudgets(projectId: projectId)
+                            }
+                        }
+                    }
+                    .onChange(of: viewModel.selectedDateRange) {
+                        Task {
+                            if let projectId = projectId {
+                                await viewModel.loadApprovedExpenses(projectId: projectId)
+                                await viewModel.loadDepartmentBudgets(projectId: projectId)
                             }
                         }
                     }
@@ -95,24 +113,35 @@ struct ReportView: View {
                     HapticManager.selection()
                     viewModel.selectedDateRange = .thisMonth
                     viewModel.selectedDepartment = "All"
+                    viewModel.selectedPhase = nil
                 }
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.blue)
             }
             
-            HStack(spacing: DesignSystem.Spacing.medium) {
-                FilterCard(
-                    title: "Date Range",
-                    selection: $viewModel.selectedDateRange,
-                    options: ReportViewModel.DateRange.allCases,
-                    icon: "calendar"
-                )
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    FilterCard(
+                        title: "Date Range",
+                        selection: $viewModel.selectedDateRange,
+                        options: ReportViewModel.DateRange.allCases,
+                        icon: "calendar"
+                    )
+                    
+                    FilterCard(
+                        title: "Department",
+                        selection: $viewModel.selectedDepartment,
+                        options: viewModel.departmentNames,
+                        icon: "building.2"
+                    )
+                }
                 
-                FilterCard(
-                    title: "Department",
-                    selection: $viewModel.selectedDepartment,
-                    options: viewModel.departmentNames,
-                    icon: "building.2"
+                // Phase Filter
+                PhaseFilterCard(
+                    title: "Phase",
+                    selectedPhase: $viewModel.selectedPhase,
+                    phases: viewModel.phases,
+                    icon: "calendar.badge.clock"
                 )
             }
         }
@@ -330,6 +359,94 @@ struct FilterCard<T: Hashable>: View where T: CustomStringConvertible {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+            .background(Color(.tertiarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+        }
+    }
+}
+
+struct PhaseFilterCard: View {
+    let title: String
+    @Binding var selectedPhase: ReportViewModel.PhaseInfo?
+    let phases: [ReportViewModel.PhaseInfo]
+    let icon: String
+    
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }()
+    
+    var body: some View {
+        Menu {
+            Button {
+                HapticManager.selection()
+                selectedPhase = nil
+            } label: {
+                HStack {
+                    Text("All Phases")
+                    if selectedPhase == nil {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(.blue)
+                    }
+                }
+            }
+            
+            ForEach(phases) { phase in
+                Button {
+                    HapticManager.selection()
+                    selectedPhase = phase
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(phase.name)
+                            if let start = phase.start, let end = phase.end {
+                                Text("\(Self.dateFormatter.string(from: start)) - \(Self.dateFormatter.string(from: end))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        if selectedPhase?.id == phase.id {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                
+                HStack {
+                    Image(systemName: icon)
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selectedPhase?.name ?? "All Phases")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        
+                        if let phase = selectedPhase, let start = phase.start, let end = phase.end {
+                            Text("\(Self.dateFormatter.string(from: start)) - \(Self.dateFormatter.string(from: end))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                     
                     Spacer()
                     

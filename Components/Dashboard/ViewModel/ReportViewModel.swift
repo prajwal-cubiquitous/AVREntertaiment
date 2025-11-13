@@ -17,12 +17,23 @@ class ReportViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var departmentNames: [String] = []
+    @Published var phases: [PhaseInfo] = []
     
     // Filter properties
     @Published var selectedDateRange: DateRange = .thisMonth
     @Published var selectedDepartment: String = "All"
+    @Published var selectedPhase: PhaseInfo? = nil
     
     private let db = Firestore.firestore()
+    private var customerId: String?
+    private var projectId: String?
+    
+    // Date formatter for phase dates
+    private let phaseDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }()
     
     // MARK: - Date Range Enum
     enum DateRange: String, CaseIterable, CustomStringConvertible {
@@ -71,16 +82,24 @@ class ReportViewModel: ObservableObject {
         }
     }
     
-    func fetchDepartmentNames(from documentID: String) async throws{
-        let db = Firestore.firestore()
+    // MARK: - Initialization
+    func initialize(projectId: String, customerId: String) {
+        self.projectId = projectId
+        self.customerId = customerId
+    }
+    
+    func fetchDepartmentNames(from documentID: String) async throws {
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("Error: Could not fetch customer ID")
+            return
+        }
         
-        db.collection("projects_ios1").document(documentID).getDocument { snapshot, error in
-            if let error = error {
-                print("Error fetching document: \(error)")
-                return
-            }
+        do {
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: documentID)
+                .getDocument()
             
-            guard let data = snapshot?.data(),
+            guard let data = projectDoc.data(),
                   let departments = data["departments"] as? [String: Any] else {
                 print("Departments field missing or wrong type.")
                 return
@@ -90,51 +109,140 @@ class ReportViewModel: ObservableObject {
             keys.insert("All", at: 0) // Add "All" at the beginning
             
             // Check if there are any anonymous expenses (Other Expenses)
-            Task {
-                do {
-                    let expensesSnapshot = try await db.collection("projects_ios1").document(documentID)
-                        .collection("expenses")
-                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                        .getDocuments()
-                    
-                    let validDepartments = Set(departments.keys)
-                    var hasAnonymousExpenses = false
-                    
-                    for expenseDoc in expensesSnapshot.documents {
-                        if let expense = try? expenseDoc.data(as: Expense.self) {
-                            if !validDepartments.contains(expense.department) {
-                                hasAnonymousExpenses = true
-                                break
-                            }
-                        }
-                    }
-                    
-                    if hasAnonymousExpenses {
-                        keys.append("Other Expenses")
-                    }
-                    
-                    await MainActor.run {
-                        self.departmentNames = keys
-                    }
-                } catch {
-                    print("Error checking for anonymous expenses: \(error)")
-                    await MainActor.run {
-                        self.departmentNames = keys
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: documentID)
+                .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                .getDocuments()
+            
+            let validDepartments = Set(departments.keys)
+            var hasAnonymousExpenses = false
+            
+            for expenseDoc in expensesSnapshot.documents {
+                if let expense = try? expenseDoc.data(as: Expense.self) {
+                    if !validDepartments.contains(expense.department) {
+                        hasAnonymousExpenses = true
+                        break
                     }
                 }
             }
+            
+            if hasAnonymousExpenses {
+                keys.append("Other Expenses")
+            }
+            
+            await MainActor.run {
+                self.departmentNames = keys
+            }
+        } catch {
+            print("Error fetching department names: \(error)")
+        }
+    }
+    
+    // MARK: - Load Phases
+    func loadPhases(projectId: String) async {
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("Error: Could not fetch customer ID")
+            return
+        }
+        
+        do {
+            let snapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .order(by: "phaseNumber")
+                .getDocuments()
+            
+            var phasesList: [PhaseInfo] = []
+            
+            for doc in snapshot.documents {
+                if let phase = try? doc.data(as: Phase.self) {
+                    let startDate = phase.startDate.flatMap { phaseDateFormatter.date(from: $0) }
+                    let endDate = phase.endDate.flatMap { phaseDateFormatter.date(from: $0) }
+                    
+                    phasesList.append(PhaseInfo(
+                        id: doc.documentID,
+                        name: phase.phaseName,
+                        start: startDate,
+                        end: endDate,
+                        departments: phase.departments
+                    ))
+                }
+            }
+            
+            await MainActor.run {
+                self.phases = phasesList
+                // Add "All Phases" option
+                if !phasesList.isEmpty {
+                    // selectedPhase remains nil for "All Phases"
+                }
+            }
+        } catch {
+            print("Error loading phases: \(error)")
+        }
+    }
+    
+    // MARK: - Phase Info Model
+    struct PhaseInfo: Identifiable, Hashable, CustomStringConvertible {
+        let id: String
+        let name: String
+        let start: Date?
+        let end: Date?
+        let departments: [String: Double]
+        
+        var description: String {
+            return name
+        }
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(id)
+        }
+        
+        static func == (lhs: PhaseInfo, rhs: PhaseInfo) -> Bool {
+            lhs.id == rhs.id
         }
     }
     
     var filteredExpenses: [Expense] {
         let dateInterval = selectedDateRange.dateInterval
-        var filtered = expenses.filter { expense in
-            let expenseDate = expense.createdAt.dateValue()
+        var filtered = expenses
+        
+        // Filter by date range (using expense date, not createdAt)
+        filtered = filtered.filter { expense in
+            let expenseDateStr = expense.date
+            let expenseDate = phaseDateFormatter.date(from: expenseDateStr) ?? expense.createdAt.dateValue()
             return dateInterval.contains(expenseDate)
         }
         
+        // Filter by phase timeline
+        if let selectedPhase = selectedPhase {
+            filtered = filtered.filter { expense in
+                // Check if expense belongs to the selected phase
+                if let expensePhaseId = expense.phaseId {
+                    return expensePhaseId == selectedPhase.id
+                }
+                // If expense has no phaseId, check if expense date falls within phase timeline
+                if let phaseStart = selectedPhase.start, let phaseEnd = selectedPhase.end {
+                    let expenseDateStr = expense.date
+                    if let expenseDate = phaseDateFormatter.date(from: expenseDateStr) {
+                        let calendar = Calendar.current
+                        let startOfDay = calendar.startOfDay(for: phaseStart)
+                        let endOfDay = calendar.startOfDay(for: phaseEnd)
+                        let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                        return expenseStartOfDay >= startOfDay && expenseStartOfDay <= endOfDay
+                    }
+                }
+                return false
+            }
+        }
+        
+        // Filter by department
         if selectedDepartment != "All" {
-            filtered = filtered.filter { $0.department == selectedDepartment }
+            if selectedDepartment == "Other Expenses" {
+                // Filter for expenses not in valid departments
+                let validDepartments = Set(departmentNames.filter { $0 != "All" && $0 != "Other Expenses" })
+                filtered = filtered.filter { !validDepartments.contains($0.department) }
+            } else {
+                filtered = filtered.filter { $0.department == selectedDepartment }
+            }
         }
         
         return filtered
@@ -155,9 +263,15 @@ class ReportViewModel: ObservableObject {
     }
     
     func loadApprovedExpenses(projectId: String) async {
-        let db = Firestore.firestore()
-        let expenseCollectionRef = db.collection("projects_ios1").document(projectId).collection("expenses")
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("Error: Could not fetch customer ID")
+            return
+        }
+        
         do {
+            let expenseCollectionRef = FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
+            
             let snapshot: QuerySnapshot
             if selectedDepartment != "All" && selectedDepartment != "Other Expenses" {
                 snapshot = try await expenseCollectionRef
@@ -180,7 +294,10 @@ class ReportViewModel: ObservableObject {
             // Filter for "Other Expenses" if selected
             if selectedDepartment == "Other Expenses" {
                 // Get valid departments from project
-                let projectDoc = try await db.collection("projects_ios1").document(projectId).getDocument()
+                let projectDoc = try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .getDocument()
+                
                 guard let projectData = projectDoc.data(),
                       let departments = projectData["departments"] as? [String: Double] else {
                     await MainActor.run {
@@ -195,6 +312,28 @@ class ReportViewModel: ObservableObject {
                 }
             }
             
+            // Filter by phase if selected
+            if let selectedPhase = selectedPhase {
+                loadedExpenses = loadedExpenses.filter { expense in
+                    // Check if expense belongs to the selected phase
+                    if let expensePhaseId = expense.phaseId {
+                        return expensePhaseId == selectedPhase.id
+                    }
+                    // If expense has no phaseId, check if expense date falls within phase timeline
+                    if let phaseStart = selectedPhase.start, let phaseEnd = selectedPhase.end {
+                        let expenseDateStr = expense.date
+                        if let expenseDate = phaseDateFormatter.date(from: expenseDateStr) {
+                            let calendar = Calendar.current
+                            let startOfDay = calendar.startOfDay(for: phaseStart)
+                            let endOfDay = calendar.startOfDay(for: phaseEnd)
+                            let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                            return expenseStartOfDay >= startOfDay && expenseStartOfDay <= endOfDay
+                        }
+                    }
+                    return false
+                }
+            }
+            
             // Assign to your published expenses list on the main thread
             await MainActor.run {
                 self.expenses = loadedExpenses
@@ -205,10 +344,16 @@ class ReportViewModel: ObservableObject {
     }
     
     func loadDepartmentBudgets(projectId: String) async {
-        let db = Firestore.firestore()
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("Error: Could not fetch customer ID")
+            return
+        }
+        
         do {
             // Get the project document
-            let projectDoc = try await db.collection("projects_ios1").document(projectId).getDocument()
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
             
             guard let projectData = projectDoc.data(),
                   let departments = projectData["departments"] as? [String: Double] else {
@@ -220,22 +365,63 @@ class ReportViewModel: ObservableObject {
             var departmentBudgetDict: [String: (total: Double, approved: Double)] = [:]
             var anonymousExpenses: Double = 0
             
-            // Initialize with project department budgets
-            for (department, amount) in departments {
-                departmentBudgetDict[department] = (total: amount, approved: 0)
+            // If phase is selected, use phase budgets; otherwise use project budgets
+            if let selectedPhase = selectedPhase {
+                // Use phase-specific department budgets
+                for (department, amount) in selectedPhase.departments {
+                    departmentBudgetDict[department] = (total: amount, approved: 0)
+                }
+            } else {
+                // Initialize with project department budgets
+                for (department, amount) in departments {
+                    departmentBudgetDict[department] = (total: amount, approved: 0)
+                }
             }
             
-            // Get approved expenses for this project
-            let expensesSnapshot = try await db.collection("projects_ios1").document(projectId)
-                .collection("expenses")
+            // Get approved expenses for this project (filtered by phase if selected)
+            let expensesSnapshot = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                 .getDocuments()
             
             let validDepartments = Set(departments.keys)
+            let dateInterval = selectedDateRange.dateInterval
             
-            // Calculate approved amounts per department
+            // Calculate approved amounts per department (using filtered expenses)
             for expenseDoc in expensesSnapshot.documents {
                 if let expense = try? expenseDoc.data(as: Expense.self) {
+                    // Filter by date range
+                    let expenseDateStr = expense.date
+                    let expenseDate = phaseDateFormatter.date(from: expenseDateStr) ?? expense.createdAt.dateValue()
+                    guard dateInterval.contains(expenseDate) else { continue }
+                    
+                    // Filter by phase if selected
+                    if let selectedPhase = selectedPhase {
+                        if let expensePhaseId = expense.phaseId {
+                            guard expensePhaseId == selectedPhase.id else { continue }
+                        } else {
+                            // Check if expense date falls within phase timeline
+                            if let phaseStart = selectedPhase.start, let phaseEnd = selectedPhase.end {
+                                let calendar = Calendar.current
+                                let startOfDay = calendar.startOfDay(for: phaseStart)
+                                let endOfDay = calendar.startOfDay(for: phaseEnd)
+                                let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                                guard expenseStartOfDay >= startOfDay && expenseStartOfDay <= endOfDay else { continue }
+                            } else {
+                                continue
+                            }
+                        }
+                    }
+                    
+                    // Filter by department if selected
+                    if selectedDepartment != "All" {
+                        if selectedDepartment == "Other Expenses" {
+                            guard !validDepartments.contains(expense.department) else { continue }
+                        } else {
+                            guard expense.department == selectedDepartment else { continue }
+                        }
+                    }
+                    
                     let department = expense.department
                     
                     if validDepartments.contains(department) {
@@ -420,6 +606,28 @@ class ReportViewModel: ObservableObject {
             
             "Department Filter:".draw(at: CGPoint(x: leftMargin + 250, y: metaBoxY + 50), withAttributes: metaLabelAttributes)
             selectedDepartment.draw(at: CGPoint(x: leftMargin + 250, y: metaBoxY + 65), withAttributes: metaValueAttributes)
+            
+            // Phase information if selected
+            if let selectedPhase = selectedPhase {
+                let phaseInfoY = metaBoxY + 80
+                let extendedHeight: CGFloat = 40
+                // Extend metadata box
+                UIColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0).setFill()
+                UIBezierPath(roundedRect: CGRect(x: leftMargin, y: metaBoxY, width: contentWidth, height: metaBoxHeight + extendedHeight), cornerRadius: 8).fill()
+                
+                "Phase Filter:".draw(at: CGPoint(x: leftMargin + 15, y: phaseInfoY + 15), withAttributes: metaLabelAttributes)
+                selectedPhase.name.draw(at: CGPoint(x: leftMargin + 15, y: phaseInfoY + 35), withAttributes: metaValueAttributes)
+                
+                if let phaseStart = selectedPhase.start, let phaseEnd = selectedPhase.end {
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "dd/MM/yyyy"
+                    let phaseRange = "\(dateFormatter.string(from: phaseStart)) - \(dateFormatter.string(from: phaseEnd))"
+                    "Phase Timeline:".draw(at: CGPoint(x: leftMargin + 250, y: phaseInfoY + 15), withAttributes: metaLabelAttributes)
+                    phaseRange.draw(at: CGPoint(x: leftMargin + 250, y: phaseInfoY + 35), withAttributes: metaValueAttributes)
+                }
+                
+                yPosition += extendedHeight
+            }
             
             yPosition += metaBoxHeight + 30
             
@@ -613,8 +821,87 @@ class ReportViewModel: ObservableObject {
                 yPosition += CGFloat(departmentBudgets.count) * rowHeight + 30
             }
             
+            // MARK: - Detailed Expense Table
+            if !filteredExpenses.isEmpty && yPosition < 750 {
+                drawSectionHeader(title: "Detailed Expense List", yPosition: &yPosition, leftMargin: leftMargin, icon: "📋")
+                
+                let sortedExpenses = filteredExpenses.sorted { expense1, expense2 in
+                    let date1 = phaseDateFormatter.date(from: expense1.date) ?? expense1.createdAt.dateValue()
+                    let date2 = phaseDateFormatter.date(from: expense2.date) ?? expense2.createdAt.dateValue()
+                    return date1 < date2
+                }
+                
+                let expenseTableY = yPosition
+                let expenseRowHeight: CGFloat = 20
+                let expenseHeaderHeight: CGFloat = 25
+                
+                // Table header
+                UIColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 1.0).setFill()
+                UIBezierPath(rect: CGRect(x: leftMargin, y: expenseTableY, width: contentWidth, height: expenseHeaderHeight)).fill()
+                
+                let expenseHeaderAttributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 9),
+                    .foregroundColor: UIColor.white
+                ]
+                
+                "Date".draw(at: CGPoint(x: leftMargin + 5, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                "Phase".draw(at: CGPoint(x: leftMargin + 60, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                "Dept".draw(at: CGPoint(x: leftMargin + 120, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                "Amount".draw(at: CGPoint(x: leftMargin + 180, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                "Category".draw(at: CGPoint(x: leftMargin + 240, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                "Payment".draw(at: CGPoint(x: leftMargin + 320, y: expenseTableY + 8), withAttributes: expenseHeaderAttributes)
+                
+                yPosition += expenseHeaderHeight
+                
+                let expenseRowAttributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 8),
+                    .foregroundColor: UIColor.black
+                ]
+                
+                // Limit to 15 expenses to fit on page
+                let displayExpenses = Array(sortedExpenses.prefix(15))
+                for (index, expense) in displayExpenses.enumerated() {
+                    let rowY = yPosition + CGFloat(index) * expenseRowHeight
+                    
+                    // Alternating row background
+                    if index % 2 == 0 {
+                        UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0).setFill()
+                        UIBezierPath(rect: CGRect(x: leftMargin, y: rowY, width: contentWidth, height: expenseRowHeight)).fill()
+                    }
+                    
+                    let dateStr = expense.date
+                    let phaseStr = expense.phaseName ?? "N/A"
+                    let deptStr = expense.department.count > 8 ? String(expense.department.prefix(8)) + "..." : expense.department
+                    let amountStr = "₹\(Int(expense.amount).formatted())"
+                    let categoryStr = (expense.categories.first ?? "Other").count > 10 ? String((expense.categories.first ?? "Other").prefix(10)) + "..." : (expense.categories.first ?? "Other")
+                    let paymentStr = expense.modeOfPayment.rawValue.count > 8 ? String(expense.modeOfPayment.rawValue.prefix(8)) : expense.modeOfPayment.rawValue
+                    
+                    dateStr.draw(at: CGPoint(x: leftMargin + 5, y: rowY + 6), withAttributes: expenseRowAttributes)
+                    phaseStr.draw(at: CGPoint(x: leftMargin + 60, y: rowY + 6), withAttributes: expenseRowAttributes)
+                    deptStr.draw(at: CGPoint(x: leftMargin + 120, y: rowY + 6), withAttributes: expenseRowAttributes)
+                    amountStr.draw(at: CGPoint(x: leftMargin + 180, y: rowY + 6), withAttributes: expenseRowAttributes)
+                    categoryStr.draw(at: CGPoint(x: leftMargin + 240, y: rowY + 6), withAttributes: expenseRowAttributes)
+                    paymentStr.draw(at: CGPoint(x: leftMargin + 320, y: rowY + 6), withAttributes: expenseRowAttributes)
+                }
+                
+                yPosition += CGFloat(displayExpenses.count) * expenseRowHeight + 10
+                
+                if sortedExpenses.count > 15 {
+                    let moreText = "Note: Showing first 15 of \(sortedExpenses.count) expenses. See Excel export for complete list."
+                    let noteAttributes: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.italicSystemFont(ofSize: 8),
+                        .foregroundColor: UIColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0)
+                    ]
+                    moreText.draw(at: CGPoint(x: leftMargin, y: yPosition), withAttributes: noteAttributes)
+                    yPosition += 15
+                }
+            }
+            
             // MARK: - Footer Section
-            yPosition = 780 // Fixed footer position
+            yPosition = min(yPosition, 780) // Adjust footer position
+            if yPosition < 780 {
+                yPosition = 780
+            }
             drawSectionDivider(yPosition: &yPosition, leftMargin: leftMargin, rightMargin: rightMargin)
             
             let footerAttributes: [NSAttributedString.Key: Any] = [
@@ -775,7 +1062,18 @@ class ReportViewModel: ObservableObject {
         csvContent += "PROJECT FINANCIAL REPORT\n"
         csvContent += "Report Generated: \(Date().formatted(.dateTime.day().month().year().hour().minute()))\n"
         csvContent += "Filter Period: \(selectedDateRange.description)\n"
-        csvContent += "Department: \(selectedDepartment)\n\n"
+        csvContent += "Department: \(selectedDepartment)\n"
+        if let selectedPhase = selectedPhase {
+            csvContent += "Phase: \(selectedPhase.name)\n"
+            if let phaseStart = selectedPhase.start, let phaseEnd = selectedPhase.end {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                csvContent += "Phase Timeline: \(dateFormatter.string(from: phaseStart)) - \(dateFormatter.string(from: phaseEnd))\n"
+            }
+        } else {
+            csvContent += "Phase: All Phases\n"
+        }
+        csvContent += "\n"
         
         // MARK: - Executive Summary
         let totalExpenses = filteredExpenses.reduce(0) { $0 + $1.amount }
@@ -852,16 +1150,22 @@ class ReportViewModel: ObservableObject {
         
         // MARK: - Expense Details (Filterable Data)
         csvContent += "EXPENSE DETAILS\n"
-        csvContent += "Date,Department,Category,Amount,Description,Status\n"
+        csvContent += "Date,Phase,Department,Category,Amount,Mode of Payment,Description,Status,Submitted By\n"
         
-        let sortedExpenses = filteredExpenses.sorted { $0.createdAt.dateValue() < $1.createdAt.dateValue() }
+        let sortedExpenses = filteredExpenses.sorted { expense1, expense2 in
+            let date1 = phaseDateFormatter.date(from: expense1.date) ?? expense1.createdAt.dateValue()
+            let date2 = phaseDateFormatter.date(from: expense2.date) ?? expense2.createdAt.dateValue()
+            return date1 < date2
+        }
         
         for expense in sortedExpenses {
-            let dateString = expense.createdAt.dateValue().formatted(.dateTime.day().month().year())
+            let dateString = expense.date // Use expense date, not createdAt
+            let phaseName = expense.phaseName ?? "N/A"
             let category = expense.categories.first ?? "Other"
             let description = expense.description.replacingOccurrences(of: ",", with: ";") // Handle commas in description
+            let modeOfPayment = expense.modeOfPayment.rawValue
             
-            csvContent += "\(dateString),\(expense.department),\(category),\(String(format: "%.0f", expense.amount)),\(description),\(expense.status.rawValue)\n"
+            csvContent += "\(dateString),\(phaseName),\(expense.department),\(category),\(String(format: "%.2f", expense.amount)),\(modeOfPayment),\(description),\(expense.status.rawValue),\(expense.submittedBy)\n"
         }
         
         csvContent += "\n"
