@@ -310,11 +310,11 @@ extension ProjectStatus {
         case .INACTIVE: return .gray
         case .COMPLETED: return .blue
         case .HANDOVER: return .yellow
-        case .IN_REVIEW: return .purple
+        case .IN_REVIEW: return .cyan
         case .LOCKED: return .indigo
-        case .SUSPENDED: return .orange
+        case .SUSPENDED: return .orange            
         case .REVIEW_REJECTED: return .red
-        case .MAINTENANCE: return .orange
+        case .MAINTENANCE: return .purple
         case .ARCHIVE: return .gray
         }
     }

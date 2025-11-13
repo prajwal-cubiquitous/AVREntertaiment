@@ -943,7 +943,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     // MARK: - Delete Project
     
     var canDeleteProject: Bool {
-        project.statusType == .LOCKED && expensesCount == 0
+        (project.statusType == .LOCKED || project.statusType == .REVIEW_REJECTED || project.statusType == .IN_REVIEW || project.statusType == .ACTIVE) && expensesCount == 0
     }
     
     func deleteProject() {

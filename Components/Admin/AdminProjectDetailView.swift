@@ -163,7 +163,7 @@ struct AdminProjectDetailView: View {
                 title: "Location",
                 value: viewModel.location,
                 isEditing: $viewModel.isEditingLocation,
-                icon: "location.circle.fill",
+                icon: "Violet_Location", // 👈 your PNG asset name
                 onSave: viewModel.updateProjectLocation
             )
             
@@ -468,9 +468,20 @@ struct ModernEditableCard: View {
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.medium) {
             HStack {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(.blue.gradient)
+                if UIImage(systemName: icon) != nil {
+                    // SF Symbol
+                    Image(systemName: icon)
+                        .font(.title3)
+                        .foregroundStyle(.blue.gradient)
+                } else {
+                    // Custom asset image
+                    Image(icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .foregroundColor(.blue)
+                }
+
                 
                 Text(title)
                     .font(.headline.weight(.semibold))
