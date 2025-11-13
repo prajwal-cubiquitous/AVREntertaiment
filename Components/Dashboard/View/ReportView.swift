@@ -52,7 +52,26 @@ struct ReportView: View {
                             }
                         }
                     }
-                    .onChange(of: viewModel.selectedPhase) {
+                    .onChange(of: viewModel.selectedPhase) { _, newValue in
+                        // Reset department selection if it's not available in the new phase
+                        if let newPhase = newValue {
+                            let phaseDepartments = newPhase.departments.keys.map { deptKey in
+                                if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                    return String(deptKey[deptKey.index(after: underscoreIndex)...])
+                                } else {
+                                    return deptKey
+                                }
+                            }
+                            if viewModel.selectedDepartment != "All" && 
+                               viewModel.selectedDepartment != "Other Expenses" &&
+                               !phaseDepartments.contains(viewModel.selectedDepartment) {
+                                viewModel.selectedDepartment = "All"
+                            }
+                        } else {
+                            // Phase deselected, reset department to "All"
+                            viewModel.selectedDepartment = "All"
+                        }
+                        
                         Task {
                             if let projectId = projectId {
                                 await viewModel.loadApprovedExpenses(projectId: projectId)
@@ -131,9 +150,11 @@ struct ReportView: View {
                     FilterCard(
                         title: "Department",
                         selection: $viewModel.selectedDepartment,
-                        options: viewModel.departmentNames,
+                        options: viewModel.filteredDepartmentNames,
                         icon: "building.2"
                     )
+                    .disabled(viewModel.selectedPhase == nil && viewModel.phases.count > 0)
+                    .opacity(viewModel.selectedPhase == nil && viewModel.phases.count > 0 ? 0.6 : 1.0)
                 }
                 
                 // Phase Filter

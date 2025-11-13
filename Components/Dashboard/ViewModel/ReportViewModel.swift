@@ -170,9 +170,20 @@ class ReportViewModel: ObservableObject {
             
             await MainActor.run {
                 self.phases = phasesList
-                // Add "All Phases" option
-                if !phasesList.isEmpty {
-                    // selectedPhase remains nil for "All Phases"
+                // Reset department selection if current department is not in the newly selected phase
+                if let selectedPhase = self.selectedPhase {
+                    let phaseDepartments = selectedPhase.departments.keys.map { deptKey in
+                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                            return String(deptKey[deptKey.index(after: underscoreIndex)...])
+                        } else {
+                            return deptKey
+                        }
+                    }
+                    if self.selectedDepartment != "All" && 
+                       self.selectedDepartment != "Other Expenses" &&
+                       !phaseDepartments.contains(self.selectedDepartment) {
+                        self.selectedDepartment = "All"
+                    }
                 }
             }
         } catch {
@@ -199,6 +210,43 @@ class ReportViewModel: ObservableObject {
         static func == (lhs: PhaseInfo, rhs: PhaseInfo) -> Bool {
             lhs.id == rhs.id
         }
+    }
+    
+    // Computed property to get filtered department names based on selected phase
+    var filteredDepartmentNames: [String] {
+        var departments: [String] = []
+        
+        if let selectedPhase = selectedPhase {
+            // Extract department names from phase departments dictionary
+            // Handle both "phaseId_departmentName" and "departmentName" formats
+            for deptKey in selectedPhase.departments.keys {
+                let displayName: String
+                if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                    // New format: remove "phaseId_" prefix
+                    displayName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                } else {
+                    // Old format: use as is
+                    displayName = deptKey
+                }
+                departments.append(displayName)
+            }
+            
+            // Sort and add "All" at the beginning
+            departments = departments.sorted()
+            departments.insert("All", at: 0)
+            
+            // Check for "Other Expenses" in the phase's expenses
+            // This would require checking expenses, but for now we'll keep it simple
+            // and add "Other Expenses" if it exists in the original departmentNames
+            if departmentNames.contains("Other Expenses") {
+                departments.append("Other Expenses")
+            }
+        } else {
+            // No phase selected, show all departments
+            departments = departmentNames
+        }
+        
+        return departments
     }
     
     var filteredExpenses: [Expense] {
@@ -238,7 +286,7 @@ class ReportViewModel: ObservableObject {
         if selectedDepartment != "All" {
             if selectedDepartment == "Other Expenses" {
                 // Filter for expenses not in valid departments
-                let validDepartments = Set(departmentNames.filter { $0 != "All" && $0 != "Other Expenses" })
+                let validDepartments = Set(filteredDepartmentNames.filter { $0 != "All" && $0 != "Other Expenses" })
                 filtered = filtered.filter { !validDepartments.contains($0.department) }
             } else {
                 filtered = filtered.filter { $0.department == selectedDepartment }
