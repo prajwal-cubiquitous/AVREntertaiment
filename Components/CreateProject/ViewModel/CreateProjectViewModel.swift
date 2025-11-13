@@ -1015,6 +1015,22 @@ class CreateProjectViewModel: ObservableObject {
                 // Calculate handover date (highest end date among all phases)
                 let handoverDateStr = calculateHandoverDate()
                 
+                // Format planned date
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                let plannedDateStr = dateFormatter.string(from: plannedDate)
+                
+                // Calculate default maintenance date (1 month from handover date)
+                let maintenanceDateStr: String?
+                if let handoverDateStr = handoverDateStr,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    let calendar = Calendar.current
+                    let defaultMaintenanceDate = calendar.date(byAdding: .month, value: 1, to: handoverDate) ?? handoverDate
+                    maintenanceDateStr = dateFormatter.string(from: defaultMaintenanceDate)
+                } else {
+                    maintenanceDateStr = nil
+                }
+                
                 // Get customer ID from auth service
                 guard let customerId = authService?.currentCustomerId else {
                     throw NSError(domain: "CreateProjectError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Customer ID not found. Please log in again."])
@@ -1025,11 +1041,6 @@ class CreateProjectViewModel: ObservableObject {
                 let allTeamMembers = Set(selectedProjectTeamMembers.map { $0.phoneNumber })
                 let managerId = selectedProjectManager?.email ?? selectedProjectManager?.phoneNumber ?? ""
                 let managerIds = managerId.isEmpty ? [] : [managerId] // Store as array for backend compatibility
-                
-                // Format planned date
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "dd/MM/yyyy"
-                let plannedDateStr = dateFormatter.string(from: plannedDate)
                 
                 // Get project document reference
                 let docRef: DocumentReference
@@ -1056,6 +1067,11 @@ class CreateProjectViewModel: ObservableObject {
                     // Add handoverDate if calculated
                     if let handoverDateStr = handoverDateStr {
                         updateData["handoverDate"] = handoverDateStr
+                    }
+                    
+                    // Add maintenanceDate if calculated
+                    if let maintenanceDateStr = maintenanceDateStr {
+                        updateData["maintenanceDate"] = maintenanceDateStr
                     }
                     
                     try await docRef.updateData(updateData)
@@ -1085,6 +1101,7 @@ class CreateProjectViewModel: ObservableObject {
                         endDate: nil, // Removed from main project
                         plannedDate: plannedDateStr,
                         handoverDate: handoverDateStr, // Highest end date among all phases
+                        maintenanceDate: maintenanceDateStr, // Default: 1 month from handover date
                         teamMembers: Array(allTeamMembers),
                         managerIds: managerIds,
                         tempApproverID: nil,

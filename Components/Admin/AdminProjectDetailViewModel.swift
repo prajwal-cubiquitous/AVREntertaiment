@@ -14,6 +14,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var endDate: Date
     @Published var plannedDate: Date
     @Published var handoverDate: Date
+    @Published var maintenanceDate: Date
     @Published var teamMembers: [String]
     @Published var managerName: String? = nil // Single manager only
     @Published var tempApproverID: String?
@@ -31,6 +32,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var isEditingDates = false
     @Published var isEditingPlannedDate = false
     @Published var isEditingHandoverDate = false
+    @Published var isEditingMaintenanceDate = false
     @Published var isEditingTeam = false
     
     // Team Selection
@@ -92,11 +94,24 @@ class AdminProjectDetailViewModel: ObservableObject {
             self.plannedDate = Date()
         }
         
+        // Initialize handover date
+        let handoverDateValue: Date
         if let handoverDateStr = project.handoverDate,
            let handoverDate = dateFormatter.date(from: handoverDateStr) {
-            self.handoverDate = handoverDate
+            handoverDateValue = handoverDate
         } else {
-            self.handoverDate = Date().addingTimeInterval(86400 * 30)
+            handoverDateValue = Date().addingTimeInterval(86400 * 30)
+        }
+        self.handoverDate = handoverDateValue
+        
+        // Maintenance date defaults to 1 month from handover date
+        if let maintenanceDateStr = project.maintenanceDate,
+           let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+            self.maintenanceDate = maintenanceDate
+        } else {
+            // Default to 1 month from handover date
+            let defaultMaintenanceDate = Calendar.current.date(byAdding: .month, value: 1, to: handoverDateValue) ?? Date().addingTimeInterval(86400 * 60)
+            self.maintenanceDate = defaultMaintenanceDate
         }
         
         self.teamMembers = project.teamMembers
@@ -503,6 +518,26 @@ class AdminProjectDetailViewModel: ObservableObject {
                     ])
                 
                 handoverDate = newHandoverDate
+                
+                // If maintenance date is not set or is before new handover date, update it to 1 month from handover
+                let calendar = Calendar.current
+                let handover = calendar.startOfDay(for: newHandoverDate)
+                let maintenance = calendar.startOfDay(for: maintenanceDate)
+                
+                if maintenance <= handover {
+                    let newMaintenanceDate = calendar.date(byAdding: .month, value: 1, to: newHandoverDate) ?? newHandoverDate
+                    let newMaintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
+                    
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData([
+                            "maintenanceDate": newMaintenanceDateStr,
+                            "updatedAt": Timestamp()
+                        ])
+                    
+                    maintenanceDate = newMaintenanceDate
+                }
+                
                 isEditingHandoverDate = false
                 showSuccess = true
                 
@@ -513,6 +548,46 @@ class AdminProjectDetailViewModel: ObservableObject {
                 showError = true
             }
         }
+    }
+    
+    func updateProjectMaintenanceDate(_ newMaintenanceDate: Date) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                let maintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
+                
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "maintenanceDate": maintenanceDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+                
+                maintenanceDate = newMaintenanceDate
+                isEditingMaintenanceDate = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update maintenance date: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func setMaintenancePeriod(_ months: Int) {
+        let calendar = Calendar.current
+        let newMaintenanceDate = calendar.date(byAdding: .month, value: months, to: handoverDate) ?? handoverDate
+        updateProjectMaintenanceDate(newMaintenanceDate)
     }
     
     func updateProjectManager(_ manager: User) {

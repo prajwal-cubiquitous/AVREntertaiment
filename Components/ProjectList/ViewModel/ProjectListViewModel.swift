@@ -381,6 +381,76 @@ class ProjectListViewModel: ObservableObject {
                         // Error loading phases
                     }
                 }
+                
+                // Check if handover date has been crossed - transition to MAINTENANCE
+                if let handoverDateStr = project.handoverDate,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    let handover = calendar.startOfDay(for: handoverDate)
+                    if today > handover {
+                        // Handover date has passed - transition to MAINTENANCE
+                        do {
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData([
+                                    "status": ProjectStatus.MAINTENANCE.rawValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                            
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        } catch {
+                            print("Error updating project status to MAINTENANCE: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            }
+            
+            // Check MAINTENANCE projects - transition to COMPLETED when maintenance date is crossed
+            if project.statusType == .MAINTENANCE {
+                if let maintenanceDateStr = project.maintenanceDate,
+                   let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                    let maintenance = calendar.startOfDay(for: maintenanceDate)
+                    if today > maintenance {
+                        // Maintenance date has passed - transition to COMPLETED
+                        do {
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData([
+                                    "status": ProjectStatus.COMPLETED.rawValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                            
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        } catch {
+                            print("Error updating project status to COMPLETED: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            }
+            
+            // Check COMPLETED projects - transition to ARCHIVE 40 days after maintenance date
+            if project.statusType == .COMPLETED {
+                if let maintenanceDateStr = project.maintenanceDate,
+                   let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                    let maintenance = calendar.startOfDay(for: maintenanceDate)
+                    let archiveDate = calendar.date(byAdding: .day, value: 40, to: maintenance) ?? maintenance
+                    let archive = calendar.startOfDay(for: archiveDate)
+                    
+                    if today > archive {
+                        // 40 days have passed since maintenance date - transition to ARCHIVE
+                        do {
+                            try await FirebasePathHelper.shared
+                                .projectDocument(customerId: customerId, projectId: projectId)
+                                .updateData([
+                                    "status": ProjectStatus.ARCHIVE.rawValue,
+                                    "updatedAt": Timestamp()
+                                ])
+                            
+                            NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        } catch {
+                            print("Error updating project status to ARCHIVE: \(error.localizedDescription)")
+                        }
+                    }
+                }
             }
         }
     }

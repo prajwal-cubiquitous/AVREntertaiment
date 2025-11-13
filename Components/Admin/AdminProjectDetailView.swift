@@ -175,6 +175,17 @@ struct AdminProjectDetailView: View {
                 onSave: viewModel.updateProjectHandoverDate
             )
             
+            // Maintenance Date
+            MaintenanceDateCard(
+                title: "Maintenance Date",
+                handoverDate: viewModel.handoverDate,
+                maintenanceDate: viewModel.maintenanceDate,
+                isEditing: $viewModel.isEditingMaintenanceDate,
+                icon: "wrench.and.screwdriver.fill",
+                onSave: viewModel.updateProjectMaintenanceDate,
+                onSetPeriod: viewModel.setMaintenancePeriod
+            )
+            
             // Status
             ModernStatusCard(
                 title: "Project Status",
@@ -1642,5 +1653,222 @@ struct TeamMemberPreviewRow: View {
         .padding(.vertical, DesignSystem.Spacing.extraSmall)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+    }
+}
+
+// MARK: - Maintenance Date Card
+struct MaintenanceDateCard: View {
+    let title: String
+    let handoverDate: Date
+    let maintenanceDate: Date
+    @Binding var isEditing: Bool
+    let icon: String
+    let onSave: (Date) -> Void
+    let onSetPeriod: (Int) -> Void
+    
+    @State private var editedDate: Date = Date()
+    @State private var selectedPeriod: MaintenancePeriod? = nil
+    @State private var showCustomDatePicker = false
+    
+    enum MaintenancePeriod: Int, CaseIterable {
+        case oneMonth = 1
+        case twoMonths = 2
+        case threeMonths = 3
+        case sixMonths = 6
+        case twelveMonths = 12
+        case twentyFourMonths = 24
+        case custom = 0
+        
+        var displayName: String {
+            switch self {
+            case .oneMonth: return "1 Month"
+            case .twoMonths: return "2 Months"
+            case .threeMonths: return "3 Months"
+            case .sixMonths: return "6 Months"
+            case .twelveMonths: return "12 Months"
+            case .twentyFourMonths: return "24 Months"
+            case .custom: return "Custom Date"
+            }
+        }
+    }
+    
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: maintenanceDate)
+    }
+    
+    private var periodFromHandover: String {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.month, .day], from: handoverDate, to: maintenanceDate)
+        
+        if let months = components.month, months > 0 {
+            return "\(months) month\(months == 1 ? "" : "s") from handover"
+        } else if let days = components.day, days > 0 {
+            return "\(days) day\(days == 1 ? "" : "s") from handover"
+        } else {
+            return "Same as handover date"
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.orange.gradient)
+                
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Button {
+                    HapticManager.selection()
+                    if isEditing {
+                        if showCustomDatePicker {
+                            onSave(editedDate)
+                        } else if let period = selectedPeriod, period != .custom {
+                            onSetPeriod(period.rawValue)
+                        } else {
+                            onSave(editedDate)
+                        }
+                    }
+                    isEditing.toggle()
+                    if isEditing {
+                        editedDate = maintenanceDate
+                        // Determine current period
+                        let calendar = Calendar.current
+                        let components = calendar.dateComponents([.month], from: handoverDate, to: maintenanceDate)
+                        if let months = components.month, let period = MaintenancePeriod(rawValue: months) {
+                            selectedPeriod = period
+                        } else {
+                            selectedPeriod = .custom
+                            showCustomDatePicker = true
+                        }
+                    } else {
+                        selectedPeriod = nil
+                        showCustomDatePicker = false
+                    }
+                } label: {
+                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(isEditing ? .green : .orange)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+            
+            if isEditing {
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    // Period Selection Menu
+                    Menu {
+                        ForEach(MaintenancePeriod.allCases.filter { $0 != .custom }, id: \.self) { period in
+                            Button(action: {
+                                HapticManager.selection()
+                                selectedPeriod = period
+                                showCustomDatePicker = false
+                                if period != .custom {
+                                    let calendar = Calendar.current
+                                    editedDate = calendar.date(byAdding: .month, value: period.rawValue, to: handoverDate) ?? handoverDate
+                                }
+                            }) {
+                                HStack {
+                                    Text(period.displayName)
+                                    if selectedPeriod == period {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        Button(action: {
+                            HapticManager.selection()
+                            selectedPeriod = .custom
+                            showCustomDatePicker = true
+                        }) {
+                            HStack {
+                                Text(MaintenancePeriod.custom.displayName)
+                                if selectedPeriod == .custom {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(selectedPeriod?.displayName ?? "Select Period")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                            
+                            Spacer()
+                            
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                    }
+                    
+                    // Custom Date Picker (shown when custom is selected or when period doesn't match preset)
+                    if showCustomDatePicker || selectedPeriod == .custom {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Custom Date")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            
+                            DatePicker("", selection: $editedDate, in: handoverDate..., displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                                .padding()
+                                .background(Color(.tertiarySystemBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                        }
+                    }
+                    
+                    // Preview of selected date
+                    HStack {
+                        Image(systemName: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        
+                        Text("Will be set to: \(dateFormatter.string(from: editedDate))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.small)
+                }
+            } else {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dateFormatted)
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.primary)
+                        
+                        Text(periodFromHandover)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter
     }
 } 

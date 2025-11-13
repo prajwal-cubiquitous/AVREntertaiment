@@ -11,6 +11,8 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case COMPLETED
     case HANDOVER
     case REVIEW_REJECTED
+    case MAINTENANCE
+    case ARCHIVE
 }
 
 struct Project: Identifiable, Codable, Equatable, Hashable {
@@ -28,6 +30,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let endDate: String?
     let plannedDate: String? // Planned start date - project becomes ACTIVE when this date arrives
     let handoverDate: String? // Highest end date among all phases - automatically calculated
+    let maintenanceDate: String? // Maintenance period end date - project becomes COMPLETED when this date arrives
     let teamMembers: [String]
     let managerIds: [String] // Project approvers/managers
     var tempApproverID: String?
@@ -105,6 +108,7 @@ extension Project {
                 endDate: "",
                 plannedDate: nil,
                 handoverDate: nil,
+                maintenanceDate: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -124,6 +128,7 @@ extension Project {
                 endDate: "31/12/2024",
                 plannedDate: "01/06/2024",
                 handoverDate: "31/12/2024",
+                maintenanceDate: "31/01/2025",
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -143,6 +148,7 @@ extension Project {
                 endDate: "31/05/2024",
                 plannedDate: "01/01/2024",
                 handoverDate: "31/05/2024",
+                maintenanceDate: "30/06/2024",
                 teamMembers: ["user1", "user4"],
                 managerIds: ["manager2"],
                 tempApproverID: nil,
