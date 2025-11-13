@@ -487,7 +487,32 @@ class ProjectListViewModel: ObservableObject {
             
             guard let customerId = customerId else { return }
             
-            for project in projects {
+            // Clean phone number - remove +91 prefix if it exists
+            let cleanPhone = phoneNumber.hasPrefix("+91") ? String(phoneNumber.dropFirst(3)) : phoneNumber
+            
+            // Filter projects based on role
+            let projectsToCheck: [Project]
+            
+            switch role {
+            case .ADMIN:
+                // ADMIN sees all pending expenses from all projects
+                projectsToCheck = projects
+                
+            case .APPROVER:
+                // APPROVER only sees expenses from projects where they are a manager or temp approver
+                projectsToCheck = projects.filter { project in
+                    let isManager = project.managerIds.contains(cleanPhone)
+                    let isTempApprover = project.tempApproverID == cleanPhone
+                    return isManager || isTempApprover
+                }
+                
+            case .USER:
+                // USER doesn't see pending expense notifications (they can't approve)
+                projectsToCheck = []
+            }
+            
+            // Fetch pending expenses only from relevant projects
+            for project in projectsToCheck {
                 guard let projectId = project.id else { continue }
                 
                 let expensesSnapshot = try await FirebasePathHelper.shared

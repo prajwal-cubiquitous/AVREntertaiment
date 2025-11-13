@@ -52,7 +52,9 @@ struct ProjectListView: View {
                         
                         Spacer(minLength: 4)
                         
-                        if role != .ADMIN && !viewModel.projects.isEmpty {
+                        // Show notification bell only for APPROVER role (they can approve expenses)
+                        // ADMIN and USER don't need this notification bell
+                        if role == .APPROVER && !viewModel.projects.isEmpty {
                             Button {
                                 HapticManager.selection()
                                 viewModel.showingFullNotifications = true
