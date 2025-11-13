@@ -88,11 +88,18 @@ struct AdminProjectDetailView: View {
             // Refresh team members when project is updated
             Task {
                 await viewModel.fetchTeamMembers()
+                await viewModel.fetchHighestPhaseEndDate()
                 // Also update state manager
                 if let projectId = project.id,
                    let customerId = viewModel.customerId {
                     await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
                 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PhaseUpdated"))) { _ in
+            // Refresh highest phase end date when phases are updated
+            Task {
+                await viewModel.fetchHighestPhaseEndDate()
             }
         }
     }
@@ -167,11 +174,12 @@ struct AdminProjectDetailView: View {
             )
             
             // Handover Date
-            ModernEditableDateCard(
+            HandoverDateCard(
                 title: "Handover Date",
                 date: viewModel.handoverDate,
                 isEditing: $viewModel.isEditingHandoverDate,
                 icon: "calendar.badge.checkmark",
+                minimumDate: viewModel.highestPhaseEndDate,
                 onSave: viewModel.updateProjectHandoverDate
             )
             
@@ -1653,6 +1661,172 @@ struct TeamMemberPreviewRow: View {
         .padding(.vertical, DesignSystem.Spacing.extraSmall)
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.small))
+    }
+}
+
+// MARK: - Handover Date Card (with phase end date validation)
+struct HandoverDateCard: View {
+    let title: String
+    let date: Date
+    @Binding var isEditing: Bool
+    let icon: String
+    let minimumDate: Date?
+    let onSave: (Date) -> Void
+    
+    @State private var editedDate: Date = Date()
+    @State private var validationError: String? = nil
+    
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+    
+    private var isValidDate: Bool {
+        guard let minimumDate = minimumDate else { return true }
+        let calendar = Calendar.current
+        let edited = calendar.startOfDay(for: editedDate)
+        let minimum = calendar.startOfDay(for: minimumDate)
+        return edited >= minimum
+    }
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.blue.gradient)
+                
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Button {
+                    HapticManager.selection()
+                    if isEditing {
+                        if isValidDate {
+                            onSave(editedDate)
+                            validationError = nil
+                        } else {
+                            HapticManager.notification(.error)
+                            if let minimumDate = minimumDate {
+                                let formatter = DateFormatter()
+                                formatter.dateStyle = .medium
+                                validationError = "Handover date must be on or after \(formatter.string(from: minimumDate)) (highest phase end date)"
+                            }
+                        }
+                    }
+                    if isEditing && isValidDate {
+                        isEditing.toggle()
+                    } else if !isEditing {
+                        isEditing.toggle()
+                        editedDate = date
+                        validationError = nil
+                    }
+                } label: {
+                    Image(systemName: isEditing ? (isValidDate ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(isEditing ? (isValidDate ? .green : .red) : .blue)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+            
+            if isEditing {
+                VStack(spacing: DesignSystem.Spacing.small) {
+                    if let minimumDate = minimumDate {
+                        HStack {
+                            Image(systemName: "info.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.blue)
+                            Text("Must be on or after highest phase end date")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.small)
+                    }
+                    
+                    DatePicker("", selection: $editedDate, in: (minimumDate ?? Date())..., displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                        .padding()
+                        .background(Color(.tertiarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                        .onChange(of: editedDate) { oldValue, newValue in
+                            // Clear validation error when date changes
+                            if isValidDate {
+                                validationError = nil
+                            }
+                        }
+                    
+                    if let error = validationError {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                            Spacer()
+                        }
+                        .padding(.horizontal, DesignSystem.Spacing.small)
+                    }
+                }
+            } else {
+                HStack {
+                    Text(dateFormatted)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                    
+                    Spacer()
+                    
+                    if let statusInfo = statusInfo {
+                        HStack(spacing: 4) {
+                            Image(systemName: statusInfo.icon)
+                                .font(.caption)
+                            Text(statusInfo.text)
+                                .font(.caption)
+                        }
+                        .foregroundStyle(statusInfo.color)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(statusInfo.color.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+    
+    private var statusInfo: (text: String, icon: String, color: Color)? {
+        guard let minimumDate = minimumDate else { return nil }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let handover = calendar.startOfDay(for: date)
+        let minimum = calendar.startOfDay(for: minimumDate)
+        
+        if handover < minimum {
+            return ("Below minimum", "exclamationmark.triangle.fill", .orange)
+        } else if handover == minimum {
+            return ("At minimum", "checkmark.circle.fill", .green)
+        } else if handover < today {
+            return ("Past Date", "calendar.badge.exclamationmark", .orange)
+        } else if handover == today {
+            return ("Today", "calendar.badge.checkmark", .green)
+        } else {
+            let daysUntil = calendar.dateComponents([.day], from: today, to: handover).day ?? 0
+            return ("In \(daysUntil) days", "calendar.badge.clock", .blue)
+        }
     }
 }
 

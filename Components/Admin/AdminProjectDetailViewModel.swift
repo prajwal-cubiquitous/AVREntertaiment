@@ -35,6 +35,9 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var isEditingMaintenanceDate = false
     @Published var isEditingTeam = false
     
+    // Phase end date for handover date validation
+    @Published var highestPhaseEndDate: Date? = nil
+    
     // Team Selection
     @Published var approverSearchText = ""
     @Published var teamMemberSearchText = ""
@@ -122,6 +125,7 @@ class AdminProjectDetailViewModel: ObservableObject {
             await fetchTeamMembers()
             await fetchTempApprover()
             await checkExpensesCount()
+            await fetchHighestPhaseEndDate()
         }
     }
     
@@ -799,6 +803,39 @@ class AdminProjectDetailViewModel: ObservableObject {
             }
         } catch {
             print("Error checking expenses count: \(error)")
+        }
+    }
+    
+    // MARK: - Fetch Highest Phase End Date
+    
+    func fetchHighestPhaseEndDate() async {
+        guard let customerId = customerId, let projectId = project.id else { return }
+        
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            var highestEndDate: Date? = nil
+            
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self),
+                   let endDateStr = phase.endDate,
+                   let endDate = dateFormatter.date(from: endDateStr) {
+                    if highestEndDate == nil || endDate > highestEndDate! {
+                        highestEndDate = endDate
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                self.highestPhaseEndDate = highestEndDate
+            }
+        } catch {
+            print("Error fetching highest phase end date: \(error.localizedDescription)")
         }
     }
     
