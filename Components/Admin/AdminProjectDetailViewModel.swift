@@ -13,6 +13,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var startDate: Date
     @Published var endDate: Date
     @Published var plannedDate: Date
+    @Published var handoverDate: Date
     @Published var teamMembers: [String]
     @Published var managerName: String? = nil // Single manager only
     @Published var tempApproverID: String?
@@ -29,6 +30,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var isEditingLocation = false
     @Published var isEditingDates = false
     @Published var isEditingPlannedDate = false
+    @Published var isEditingHandoverDate = false
     @Published var isEditingTeam = false
     
     // Team Selection
@@ -88,6 +90,13 @@ class AdminProjectDetailViewModel: ObservableObject {
             self.plannedDate = plannedDate
         } else {
             self.plannedDate = Date()
+        }
+        
+        if let handoverDateStr = project.handoverDate,
+           let handoverDate = dateFormatter.date(from: handoverDateStr) {
+            self.handoverDate = handoverDate
+        } else {
+            self.handoverDate = Date().addingTimeInterval(86400 * 30)
         }
         
         self.teamMembers = project.teamMembers
@@ -467,6 +476,40 @@ class AdminProjectDetailViewModel: ObservableObject {
                 NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
             } catch {
                 errorMessage = "Failed to update planned date: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
+    func updateProjectHandoverDate(_ newHandoverDate: Date) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                let handoverDateStr = dateFormatter.string(from: newHandoverDate)
+                
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "handoverDate": handoverDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+                
+                handoverDate = newHandoverDate
+                isEditingHandoverDate = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update handover date: \(error.localizedDescription)"
                 showError = true
             }
         }

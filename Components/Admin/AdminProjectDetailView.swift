@@ -166,6 +166,15 @@ struct AdminProjectDetailView: View {
                 onSave: viewModel.updateProjectPlannedDate
             )
             
+            // Handover Date
+            ModernEditableDateCard(
+                title: "Handover Date",
+                date: viewModel.handoverDate,
+                isEditing: $viewModel.isEditingHandoverDate,
+                icon: "calendar.badge.checkmark",
+                onSave: viewModel.updateProjectHandoverDate
+            )
+            
             // Status
             ModernStatusCard(
                 title: "Project Status",

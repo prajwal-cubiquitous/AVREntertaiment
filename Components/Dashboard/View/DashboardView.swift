@@ -4747,6 +4747,9 @@ private struct AddPhaseSheet: View {
                 // Update project budget after adding phase
                 await updateProjectBudget(projectId: projectId, customerId: customerId)
                 
+                // Update handover date after adding phase
+                await updateHandoverDate(projectId: projectId, customerId: customerId)
+                
                 await MainActor.run {
                     isSaving = false
                     onSaved()
@@ -4788,6 +4791,43 @@ private struct AddPhaseSheet: View {
                 ])
         } catch {
             print("Error updating project budget: \(error.localizedDescription)")
+        }
+    }
+    
+    // Helper function to update handover date (highest end date among all phases)
+    private func updateHandoverDate(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            var highestEndDate: Date? = nil
+            
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self),
+                   let endDateStr = phase.endDate,
+                   let endDate = dateFormatter.date(from: endDateStr) {
+                    if highestEndDate == nil || endDate > highestEndDate! {
+                        highestEndDate = endDate
+                    }
+                }
+            }
+            
+            // Update handover date if we found at least one phase with an end date
+            if let highestDate = highestEndDate {
+                let handoverDateStr = dateFormatter.string(from: highestDate)
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "handoverDate": handoverDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+            }
+        } catch {
+            print("Error updating handover date: \(error.localizedDescription)")
         }
     }
 }
@@ -5063,6 +5103,9 @@ private struct EditPhaseSheet: View {
                 
                 // Note: Project budget doesn't change when editing phase name/dates, only when departments change
                 
+                // Update handover date after phase timeline is edited
+                await updateHandoverDate(projectId: projectId, customerId: customerId)
+                
                 await MainActor.run {
                     isSaving = false
                     onSaved()
@@ -5104,6 +5147,43 @@ private struct EditPhaseSheet: View {
                 ])
         } catch {
             print("Error updating project budget: \(error.localizedDescription)")
+        }
+    }
+    
+    // Helper function to update handover date (highest end date among all phases)
+    private func updateHandoverDate(projectId: String, customerId: String) async {
+        do {
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            var highestEndDate: Date? = nil
+            
+            for doc in phasesSnapshot.documents {
+                if let phase = try? doc.data(as: Phase.self),
+                   let endDateStr = phase.endDate,
+                   let endDate = dateFormatter.date(from: endDateStr) {
+                    if highestEndDate == nil || endDate > highestEndDate! {
+                        highestEndDate = endDate
+                    }
+                }
+            }
+            
+            // Update handover date if we found at least one phase with an end date
+            if let highestDate = highestEndDate {
+                let handoverDateStr = dateFormatter.string(from: highestDate)
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData([
+                        "handoverDate": handoverDateStr,
+                        "updatedAt": Timestamp()
+                    ])
+            }
+        } catch {
+            print("Error updating handover date: \(error.localizedDescription)")
         }
     }
 }

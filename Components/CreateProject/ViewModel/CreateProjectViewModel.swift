@@ -980,6 +980,21 @@ class CreateProjectViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Helper to Calculate Handover Date
+    private func calculateHandoverDate() -> String? {
+        guard !phases.isEmpty else { return nil }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        // Find the highest end date among all phases
+        let highestEndDate = phases.map { $0.endDate }.max()
+        
+        guard let highestDate = highestEndDate else { return nil }
+        
+        return dateFormatter.string(from: highestDate)
+    }
+    
     // MARK: - Firestore Saving Logic
     func saveProject() {
         Task {
@@ -996,6 +1011,9 @@ class CreateProjectViewModel: ObservableObject {
                 let totalBudget = phases.reduce(0) { total, phase in
                     total + phase.departments.compactMap { Double(removeFormatting(from: $0.amount)) }.reduce(0, +)
                 }
+                
+                // Calculate handover date (highest end date among all phases)
+                let handoverDateStr = calculateHandoverDate()
                 
                 // Get customer ID from auth service
                 guard let customerId = authService?.currentCustomerId else {
@@ -1020,7 +1038,7 @@ class CreateProjectViewModel: ObservableObject {
                     docRef = FirebasePathHelper.shared.projectDocument(customerId: customerId, projectId: projectId)
                     
                     // Update project data
-                    try await docRef.updateData([
+                    var updateData: [String: Any] = [
                         "name": projectName,
                         "description": projectDescription,
                         "client": client,
@@ -1033,7 +1051,14 @@ class CreateProjectViewModel: ObservableObject {
                         "managerIds": managerIds,
                         "Allow_Template_Overrides": allowTemplateOverrides,
                         "updatedAt": Timestamp()
-                    ])
+                    ]
+                    
+                    // Add handoverDate if calculated
+                    if let handoverDateStr = handoverDateStr {
+                        updateData["handoverDate"] = handoverDateStr
+                    }
+                    
+                    try await docRef.updateData(updateData)
                     
                     // Delete existing phases and create new ones
                     let existingPhasesSnapshot = try await docRef.collection("phases").getDocuments()
@@ -1059,6 +1084,7 @@ class CreateProjectViewModel: ObservableObject {
                         startDate: nil, // Removed from main project
                         endDate: nil, // Removed from main project
                         plannedDate: plannedDateStr,
+                        handoverDate: handoverDateStr, // Highest end date among all phases
                         teamMembers: Array(allTeamMembers),
                         managerIds: managerIds,
                         tempApproverID: nil,

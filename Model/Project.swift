@@ -27,6 +27,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let startDate: String?
     let endDate: String?
     let plannedDate: String? // Planned start date - project becomes ACTIVE when this date arrives
+    let handoverDate: String? // Highest end date among all phases - automatically calculated
     let teamMembers: [String]
     let managerIds: [String] // Project approvers/managers
     var tempApproverID: String?
@@ -103,6 +104,7 @@ extension Project {
                 startDate: "",
                 endDate: "",
                 plannedDate: nil,
+                handoverDate: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -121,6 +123,7 @@ extension Project {
                 startDate: "01/06/2024",
                 endDate: "31/12/2024",
                 plannedDate: "01/06/2024",
+                handoverDate: "31/12/2024",
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -139,6 +142,7 @@ extension Project {
                 startDate: "01/01/2024",
                 endDate: "31/05/2024",
                 plannedDate: "01/01/2024",
+                handoverDate: "31/05/2024",
                 teamMembers: ["user1", "user4"],
                 managerIds: ["manager2"],
                 tempApproverID: nil,
