@@ -226,6 +226,35 @@ struct ProjectListView: View {
                     }
                 }
             }
+            .onChange(of: navigationManager.activeRequestId) { newValue in
+                if let requestItem = newValue {
+                    let requestId = requestItem.id
+                    print("📝 Request navigation trigger detected for request ID: \(requestId)")
+                    
+                    Task {
+                        guard let customerId = authService.currentCustomerId else {
+                            print("⚠️ Customer ID not available for request navigation")
+                            navigationManager.setRequestId(nil)
+                            return
+                        }
+                        
+                        // Load request to get projectId
+                        let phaseRequestVM = PhaseRequestNotificationViewModel()
+                        if let (request, projectId) = await phaseRequestVM.loadRequestByIdWithProject(
+                            requestId: requestId,
+                            customerId: customerId
+                        ) {
+                            // Navigate to the project first
+                            navigationManager.setProjectId(projectId)
+                            // Keep requestId set so DashboardView can show it
+                            print("✅ Request loaded, navigating to project: \(projectId)")
+                        } else {
+                            print("⚠️ Request not found: \(requestId)")
+                            navigationManager.setRequestId(nil)
+                        }
+                    }
+                }
+            }
         }
         .sheet(isPresented: $isShowingCreateSheet) {
             CreateProjectView()

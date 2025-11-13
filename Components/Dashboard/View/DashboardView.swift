@@ -644,6 +644,16 @@ struct DashboardView: View {
                 handleExpenseChange(expenseItem.id)
             }
         }
+        .onChange(of: navigationManager.activePhaseId) { newValue in
+            if let phaseItem = newValue {
+                handlePhaseChange(phaseItem.id)
+            }
+        }
+        .onChange(of: navigationManager.activeRequestId) { newValue in
+            if let requestItem = newValue {
+                handleRequestChange(requestItem.id)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
             // Immediately update state when expense status changes
             if let userInfo = notification.userInfo,
@@ -689,6 +699,69 @@ struct DashboardView: View {
                 }
             } catch {
                 // Error fetching project
+            }
+        }
+    }
+    
+    func handlePhaseChange(_ phaseId: String?) {
+        // When phase notification is tapped, ensure we're in the correct project
+        // The phase will be visible in the All Phases section
+        // If we're already in the project, just reload phases
+        // The phase will be visible once phases are loaded
+        Task {
+            // Get project ID from navigation manager (should be set when notification is tapped)
+            if let projectId = navigationManager.activeProjectId?.id {
+                // If we're not in this project, navigation will happen automatically
+                // Just ensure phases are loaded
+                if project?.id == projectId {
+                    await loadPhases()
+                }
+            }
+            
+            // Clear the navigation after handling
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                navigationManager.setPhaseId(nil)
+            }
+        }
+    }
+    
+    func handleRequestChange(_ requestId: String?) {
+        guard let requestId = requestId,
+              let customerId = customerId else {
+            return
+        }
+        
+        Task {
+            // Load the specific request by ID from customer's requests collection
+            // This function will also extract projectId from the request data
+            if let (request, projectId) = await phaseRequestNotificationViewModel.loadRequestByIdWithProject(
+                requestId: requestId,
+                customerId: customerId
+            ) {
+                // If we're not in the correct project, we need to navigate to it first
+                if let currentProjectId = project?.id, currentProjectId != projectId {
+                    // Navigate to the correct project first
+                    navigationManager.setProjectId(projectId)
+                    // Wait a bit for project to load, then show request
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                }
+                
+                // Reload pending requests to ensure we have the latest data
+                await phaseRequestNotificationViewModel.loadPendingRequests(
+                    projectId: projectId,
+                    customerId: customerId
+                )
+                
+                await MainActor.run {
+                    selectedRequest = request
+                    showingRequestActionSheet = true
+                    // Clear the navigation after handling
+                    navigationManager.setRequestId(nil)
+                }
+            } else {
+                print("⚠️ Request not found: \(requestId)")
+                // Clear the navigation even if request not found
+                navigationManager.setRequestId(nil)
             }
         }
     }

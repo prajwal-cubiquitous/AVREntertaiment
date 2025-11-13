@@ -14,6 +14,8 @@ class NavigationManager: ObservableObject {
     @Published var activeProjectId: ProjectNavigationItem?
     @Published var activeChatId: ProjectNavigationItem?
     @Published var activeExpenseId: ProjectNavigationItem?
+    @Published var activePhaseId: ProjectNavigationItem?
+    @Published var activeRequestId: ProjectNavigationItem?
     
     init(){
     }
@@ -22,6 +24,8 @@ class NavigationManager: ObservableObject {
         activeProjectId = nil
         activeChatId = nil
         activeExpenseId = nil
+        activePhaseId = nil
+        activeRequestId = nil
     }
     
     func setProjectId(_ id: String?) {
@@ -34,5 +38,13 @@ class NavigationManager: ObservableObject {
     
     func setExpenseId(_ id: String?) {
         activeExpenseId = id.map { ProjectNavigationItem(id: $0) }
+    }
+    
+    func setPhaseId(_ id: String?) {
+        activePhaseId = id.map { ProjectNavigationItem(id: $0) }
+    }
+    
+    func setRequestId(_ id: String?) {
+        activeRequestId = id.map { ProjectNavigationItem(id: $0) }
     }
 }

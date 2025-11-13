@@ -163,6 +163,19 @@ struct AVREntertainmentApp: App {
                                  let projectId = userInfo["projectId"] as? String {
                             navigationManager.setProjectId(projectId)
                             navigationManager.setExpenseId(expenseId)
+                        } else if screen == "phase_detail",
+                                  let phaseId = userInfo["phaseId"] as? String,
+                                  let projectId = userInfo["projectId"] as? String {
+                            navigationManager.setProjectId(projectId)
+                            navigationManager.setPhaseId(phaseId)
+                        } else if screen == "request_detail",
+                                  let requestId = userInfo["requestId"] as? String,
+                                  let customerId = userInfo["customerId"] as? String {
+                            // For request detail, we need to find the project first
+                            // The request will be shown in the dashboard when project loads
+                            navigationManager.setRequestId(requestId)
+                            // Note: We'll need to load the request and find its project
+                            // This will be handled in DashboardView
                         }
                     }
                 }
@@ -273,7 +286,27 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
                         object: nil,
                         userInfo: ["screen": screen, "expenseId": expenseId,  "projectId": projectId]
                     )
-                    print("💬 Navigate to expense: \(expenseId)")
+                    print("💬 Navigate to expense chat: \(expenseId)")
+                }
+                
+            case "phase_detail":
+                if let phaseId = userInfo["phaseId"] as? String, let projectId = userInfo["projectId"] as? String {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("NavigateFromNotification"),
+                        object: nil,
+                        userInfo: ["screen": screen, "phaseId": phaseId, "projectId": projectId]
+                    )
+                    print("📋 Navigate to phase: \(phaseId) in project: \(projectId)")
+                }
+                
+            case "request_detail":
+                if let requestId = userInfo["requestId"] as? String, let customerId = userInfo["customerId"] as? String {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("NavigateFromNotification"),
+                        object: nil,
+                        userInfo: ["screen": screen, "requestId": requestId, "customerId": customerId]
+                    )
+                    print("📝 Navigate to request: \(requestId)")
                 }
                 
             default:
