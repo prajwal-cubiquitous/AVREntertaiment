@@ -194,11 +194,35 @@ struct ProjectListView: View {
             }
             .onChange(of: navigationManager.activeExpenseId) { newValue in
                 if let expenseItem = newValue {
-                    print("🧾 Expense navigation trigger detected for expense ID: \(expenseItem.id)")
-                    // Ensure projects are loaded so project resolution works
+                    let expenseId = expenseItem.id
+                    let isExpenseChat = navigationManager.expenseScreenType == .chat
+                    print("🧾 Expense navigation trigger detected for expense ID: \(expenseId), isChat: \(isExpenseChat)")
+                    
                     Task {
+                        guard let customerId = authService.currentCustomerId else {
+                            print("⚠️ Customer ID not available for expense navigation")
+                            navigationManager.setExpenseId(nil)
+                            return
+                        }
+                        
+                        // Ensure projects are loaded
                         if viewModel.projects.isEmpty {
                             await viewModel.fetchProjects()
+                        }
+                        
+                        // Get projectId from navigation manager
+                        guard let projectId = navigationManager.activeProjectId?.id else {
+                            print("⚠️ Project ID not available for expense navigation")
+                            navigationManager.setExpenseId(nil)
+                            return
+                        }
+                        
+                        // Navigate to the project first
+                        // DashboardView will handle showing the expense chat
+                        await MainActor.run {
+                            navigationManager.setProjectId(projectId)
+                            // Keep expenseId set so DashboardView can show it
+                            print("✅ Expense loaded, navigating to project: \(projectId)")
                         }
                     }
                 }

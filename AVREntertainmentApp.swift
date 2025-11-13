@@ -155,14 +155,14 @@ struct AVREntertainmentApp: App {
                                   let projectId = userInfo["projectId"] as? String {
                             // Ensure project is set first so expense destination can resolve it
                             navigationManager.setProjectId(projectId)
-                            navigationManager.setExpenseId(expenseId)
+                            navigationManager.setExpenseId(expenseId, screenType: .detail)
                         }else if screen == "project_detail1",
                                  let projectId = userInfo["projectId"] as? String {
                                   navigationManager.setProjectId(projectId)
                         }else if screen == "expense_chat",let expenseId = userInfo["expenseId"] as? String,
                                  let projectId = userInfo["projectId"] as? String {
                             navigationManager.setProjectId(projectId)
-                            navigationManager.setExpenseId(expenseId)
+                            navigationManager.setExpenseId(expenseId, screenType: .chat)
                         } else if screen == "phase_detail",
                                   let phaseId = userInfo["phaseId"] as? String,
                                   let projectId = userInfo["projectId"] as? String {

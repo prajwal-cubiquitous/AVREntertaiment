@@ -16,6 +16,12 @@ class NavigationManager: ObservableObject {
     @Published var activeExpenseId: ProjectNavigationItem?
     @Published var activePhaseId: ProjectNavigationItem?
     @Published var activeRequestId: ProjectNavigationItem?
+    @Published var expenseScreenType: ExpenseScreenType? = nil // Track if expense should show detail or chat
+    
+    enum ExpenseScreenType {
+        case detail
+        case chat
+    }
     
     init(){
     }
@@ -26,6 +32,7 @@ class NavigationManager: ObservableObject {
         activeExpenseId = nil
         activePhaseId = nil
         activeRequestId = nil
+        expenseScreenType = nil
     }
     
     func setProjectId(_ id: String?) {
@@ -36,8 +43,9 @@ class NavigationManager: ObservableObject {
         activeChatId = id.map { ProjectNavigationItem(id: $0) }
     }
     
-    func setExpenseId(_ id: String?) {
+    func setExpenseId(_ id: String?, screenType: ExpenseScreenType = .detail) {
         activeExpenseId = id.map { ProjectNavigationItem(id: $0) }
+        expenseScreenType = id != nil ? screenType : nil
     }
     
     func setPhaseId(_ id: String?) {

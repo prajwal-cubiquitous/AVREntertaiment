@@ -74,6 +74,8 @@ struct DashboardView: View {
     @State private var phaseToComplete: PhaseSummary? = nil
     @State private var showingStartNowConfirmation = false
     @State private var phaseToStart: PhaseSummary? = nil
+    @State private var showingExpenseChat = false
+    @State private var expenseForChat: Expense? = nil
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -508,6 +510,17 @@ struct DashboardView: View {
                 ProgressView("Loading project...")
             }
         }
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = expenseForChat {
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: phoneNumber,
+                    projectId: project?.id ?? "",
+                    role: role ?? .USER
+                )
+                .presentationDetents([.large])
+            }
+        }
         .sheet(isPresented: $showingRequestActionSheet) {
             if let request = selectedRequest, let projectId = project?.id {
                 PhaseRequestActionSheet(
@@ -641,7 +654,9 @@ struct DashboardView: View {
         }
         .onChange(of: navigationManager.activeExpenseId) { newValue in
             if let expenseItem = newValue {
-                handleExpenseChange(expenseItem.id)
+                // Check screen type to determine if we should show chat or detail
+                let showChat = navigationManager.expenseScreenType == .chat
+                handleExpenseChange(expenseItem.id, showChat: showChat)
             }
         }
         .onChange(of: navigationManager.activePhaseId) { newValue in
@@ -687,18 +702,70 @@ struct DashboardView: View {
     
     
 
-    func handleExpenseChange(_ expenseId: String?) {
+    func handleExpenseChange(_ expenseId: String?, showChat: Bool = false) {
+        guard let expenseId = expenseId else {
+            return
+        }
+        
+        // Get projectId - prefer the project parameter, fallback to navigationManager
+        let projectId = project?.id ?? navigationManager.activeProjectId?.id
+        
+        guard let projectId = projectId,
+              let customerId = customerId else {
+            // If projectId is not available yet, wait a bit and retry
+            if navigationManager.activeProjectId != nil {
+                Task {
+                    // Wait for project to be available (navigation might be in progress)
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                    // Retry
+                    handleExpenseChange(expenseId, showChat: showChat)
+                }
+            }
+            return
+        }
+        
         Task {
             do {
-                // Get the current project ID from navigation manager
-                if let projectId = navigationManager.activeProjectId?.id {
-                    if let project = try await viewModel.fetchProject(byId: projectId) {
-                        selectedProject = project
-                        showProjectDetail = true
+                // Load the expense by ID
+                let expenseDoc = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .document(expenseId)
+                    .getDocument()
+                
+                if expenseDoc.exists, var expense = try? expenseDoc.data(as: Expense.self) {
+                    expense.id = expenseDoc.documentID
+                    
+                    await MainActor.run {
+                        if showChat {
+                            // Show expense chat view
+                            expenseForChat = expense
+                            showingExpenseChat = true
+                            // Clear navigation after showing
+                            navigationManager.setExpenseId(nil)
+                        } else {
+                            // Show expense detail (existing behavior)
+                            // Load project and show detail
+                            Task {
+                                if let project = try? await viewModel.fetchProject(byId: projectId) {
+                                    await MainActor.run {
+                                        selectedProject = project
+                                        showProjectDetail = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    print("⚠️ Expense not found: \(expenseId)")
+                    await MainActor.run {
+                        navigationManager.setExpenseId(nil)
                     }
                 }
             } catch {
-                // Error fetching project
+                print("❌ Error loading expense: \(error)")
+                await MainActor.run {
+                    navigationManager.setExpenseId(nil)
+                }
             }
         }
     }
