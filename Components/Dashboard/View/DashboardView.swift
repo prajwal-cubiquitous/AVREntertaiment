@@ -80,8 +80,8 @@ struct DashboardView: View {
     let phoneNumber: String
     @State private var selectedProject: Project?
     
-    // Accept a single project as parameter
-    var project: Project?
+    // Accept a single project as parameter - made @State to allow updates from AdminProjectDetailView
+    @State var project: Project?
     
     // Customer ID for multi-tenant support
     private var customerId: String? {
@@ -132,7 +132,7 @@ struct DashboardView: View {
     }
     
     init(project: Project? = nil, role: UserRole? = nil, phoneNumber: String = "", customerId: String? = nil, stateManager: DashboardStateManager? = nil) {
-        self.project = project
+        self._project = State(initialValue: project)
         self.role = role
         self.phoneNumber = phoneNumber
         self._viewModel = StateObject(wrappedValue: DashboardViewModel(project: project, phoneNumber: phoneNumber, customerId: customerId))
@@ -689,11 +689,23 @@ struct DashboardView: View {
                 )
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
-            // Reload team members when project is updated
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { notification in
+            // Reload project data when updated from AdminProjectDetailView
             if let projectId = project?.id, let customerId = customerId {
                 Task {
+                    // Reload project from Firestore to get latest changes
+                    await reloadProjectFromFirestore(projectId: projectId, customerId: customerId)
+                    
+                    // Reload all related data
                     await stateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
+                    await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                    await loadPhases()
+                    await fetchTempApproverData()
+                    
+                    // Reload dashboard data
+                    await MainActor.run {
+                        viewModel.loadDashboardData()
+                    }
                 }
             }
         }
@@ -1516,6 +1528,38 @@ struct DashboardView: View {
     // MARK: - Refresh All Data
     /// Comprehensive refresh function that fetches all data from Firebase
     /// Follows Apple's refreshable pattern for pull-to-refresh
+    /// Reloads project from Firestore to get latest changes
+    /// This ensures DashboardView reflects changes made in AdminProjectDetailView
+    /// Follows Apple's best practices for data synchronization
+    private func reloadProjectFromFirestore(projectId: String, customerId: String) async {
+        do {
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            if projectDoc.exists, var updatedProject = try? projectDoc.data(as: Project.self) {
+                // Ensure the project ID is set (Firestore document ID)
+                updatedProject.id = projectDoc.documentID
+                
+                // Update the project property which will trigger onChange
+                await MainActor.run {
+                    // Create a new Project instance with updated data
+                    // This will trigger the onChange(of: project) handler
+                    self.project = updatedProject
+                    viewModel.updateProject(updatedProject)
+                    
+                    // Provide haptic feedback to indicate successful refresh
+                    HapticManager.impact(.light)
+                }
+            }
+        } catch {
+            print("❌ Error reloading project from Firestore: \(error.localizedDescription)")
+            await MainActor.run {
+                HapticManager.notification(.error)
+            }
+        }
+    }
+    
     /// Uses structured concurrency for parallel data loading as recommended by Apple
     private func refreshAllData() async {
         guard let projectId = project?.id, let customerId = customerId else {

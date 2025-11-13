@@ -32,6 +32,9 @@ struct AdminProjectDetailView: View {
             .padding(.horizontal)
             .padding(.top, DesignSystem.Spacing.small)
         }
+        .refreshable {
+            await viewModel.refreshAllData()
+        }
         .navigationTitle("Project Details")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))

@@ -839,6 +839,107 @@ class AdminProjectDetailViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Refresh All Data
+    
+    /// Refreshes all data from Firestore, following Apple's best practices for data synchronization
+    func refreshAllData() async {
+        guard let customerId = customerId, let projectId = project.id else {
+            return
+        }
+        
+        isLoading = true
+        
+        // Use structured concurrency to load all data in parallel for optimal performance
+        async let usersTask = fetchUsers()
+        async let teamMembersTask = fetchTeamMembers()
+        async let tempApproverTask = fetchTempApprover()
+        async let expensesCountTask = checkExpensesCount()
+        async let phaseEndDateTask = fetchHighestPhaseEndDate()
+        
+        // Wait for all tasks to complete
+        await usersTask
+        await teamMembersTask
+        await tempApproverTask
+        await expensesCountTask
+        await phaseEndDateTask
+        
+        // Reload project data from Firestore to get latest changes
+        do {
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            if projectDoc.exists, let updatedProject = try? projectDoc.data(as: Project.self) {
+                // Update local properties with latest project data
+                await MainActor.run {
+                    self.projectName = updatedProject.name
+                    self.projectDescription = updatedProject.description
+                    self.projectStatus = updatedProject.status
+                    self.client = updatedProject.client
+                    self.location = updatedProject.location
+                    self.teamMembers = updatedProject.teamMembers
+                    self.tempApproverID = updatedProject.tempApproverID
+                    
+                    // Update dates
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "dd/MM/yyyy"
+                    
+                    if let startDateStr = updatedProject.startDate,
+                       let startDate = dateFormatter.date(from: startDateStr) {
+                        self.startDate = startDate
+                    }
+                    
+                    if let endDateStr = updatedProject.endDate,
+                       let endDate = dateFormatter.date(from: endDateStr) {
+                        self.endDate = endDate
+                    }
+                    
+                    if let plannedDateStr = updatedProject.plannedDate,
+                       let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                        self.plannedDate = plannedDate
+                    }
+                    
+                    if let handoverDateStr = updatedProject.handoverDate,
+                       let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                        self.handoverDate = handoverDate
+                    }
+                    
+                    if let maintenanceDateStr = updatedProject.maintenanceDate,
+                       let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                        self.maintenanceDate = maintenanceDate
+                    }
+                    
+                    // Update manager selection if managerIds changed
+                    if let firstManagerId = updatedProject.managerIds.first {
+                        // Find matching approver
+                        if let manager = allApprovers.first(where: { approver in
+                            approver.phoneNumber == firstManagerId || approver.email == firstManagerId
+                        }) {
+                            self.selectedManager = manager
+                            self.managerName = manager.name
+                        }
+                    } else {
+                        self.selectedManager = nil
+                        self.managerName = nil
+                    }
+                    
+                    // Update team members selection
+                    selectedTeamMembers = Set(allUsers.filter { user in
+                        updatedProject.teamMembers.contains(user.phoneNumber)
+                    })
+                    
+                    self.isLoading = false
+                }
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "Failed to refresh project data: \(error.localizedDescription)"
+                self.showError = true
+                self.isLoading = false
+            }
+        }
+    }
+    
     // MARK: - Delete Project
     
     var canDeleteProject: Bool {
