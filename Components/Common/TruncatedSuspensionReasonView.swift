@@ -36,7 +36,6 @@ struct TruncatedSuspensionReasonView: View {
                     .font(DesignSystem.Typography.caption2)
                     .fontWeight(.bold)
                     .foregroundColor(.blue)
-                    .underline()
                     .onTapGesture {
                         HapticManager.selection()
                         showFullReason = true
