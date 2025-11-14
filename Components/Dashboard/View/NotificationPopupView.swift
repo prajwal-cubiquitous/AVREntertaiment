@@ -30,12 +30,10 @@ struct NotificationPopupView: View {
                 
                 // Popup content - positioned at top
                 VStack(spacing: 0) {
-                    if notificationViewModel.isLoading {
-                        loadingView
-                    } else if notificationViewModel.hasNotifications {
-                        notificationsContent
-                    } else {
+                    if notificationViewModel.savedNotifications.isEmpty {
                         emptyStateView
+                    } else {
+                        notificationsContent
                     }
                 }
                 .frame(maxWidth: 340)
@@ -54,14 +52,19 @@ struct NotificationPopupView: View {
             }
         }
         .onAppear {
-            Task {
-                if let projectId = project.id {
-                    await notificationViewModel.fetchProjectNotifications(
-                        projectId: projectId,
-                        currentUserPhone: phoneNumber,
-                        currentUserRole: role ?? .USER
-                    )
-                }
+            // Load notifications immediately from local storage (instant, no async needed)
+            if let projectId = project.id {
+                notificationViewModel.loadSavedNotifications(for: projectId)
+            } else {
+                notificationViewModel.loadSavedNotifications()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NotificationManagerUpdated"))) { _ in
+            // Reload notifications when NotificationManager updates (when notification is removed)
+            if let projectId = project.id {
+                notificationViewModel.loadSavedNotifications(for: projectId)
+            } else {
+                notificationViewModel.loadSavedNotifications()
             }
         }
     }
@@ -121,9 +124,20 @@ struct NotificationPopupView: View {
                                 message: notification.body,
                                 timeAgo: timeAgoString(from: notification.date)
                             ) {
+                                // Remove notification when clicked
+                                NotificationManager.shared.removeNotification(byId: notification.id)
+                                
                                 // Handle navigation when tapped
                                 let data = notification.data.mapValues { $0.value }
                                 NotificationManager.shared.handleNavigation(data: data)
+                                
+                                // Reload notifications to reflect removal
+                                if let projectId = project.id {
+                                    notificationViewModel.loadSavedNotifications(for: projectId)
+                                } else {
+                                    notificationViewModel.loadSavedNotifications()
+                                }
+                                
                                 isPresented = false
                             }
                             

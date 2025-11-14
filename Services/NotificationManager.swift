@@ -135,6 +135,14 @@ class NotificationManager: ObservableObject {
         NotificationCenter.default.post(name: NSNotification.Name("NotificationManagerUpdated"), object: nil)
     }
     
+    /// Removes a specific notification by ID
+    /// - Parameter notificationId: The ID of the notification to remove (String)
+    func removeNotification(byId notificationId: String) {
+        notifications.removeAll { $0.id == notificationId }
+        saveToUserDefaults()
+        NotificationCenter.default.post(name: NSNotification.Name("NotificationManagerUpdated"), object: nil)
+    }
+    
     // MARK: - Handle Navigation
     
     /// Handles navigation based on notification data

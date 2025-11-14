@@ -52,13 +52,15 @@ class NotificationViewModel: ObservableObject {
     // MARK: - Load Saved Notifications
     
     /// Loads saved notifications from NotificationManager for a specific project
+    /// This is synchronous and instant since it reads from UserDefaults
     func loadSavedNotifications(for projectId: String? = nil) {
+        // Load directly from NotificationManager (already sorted and cached)
         if let projectId = projectId {
             savedNotifications = NotificationManager.shared.getNotifications(for: projectId)
         } else {
             savedNotifications = NotificationManager.shared.getAllNotifications()
         }
-        // Sort by date (newest first)
+        // Ensure sorted by date (newest first) - though NotificationManager already does this
         savedNotifications.sort { $0.date > $1.date }
     }
     
