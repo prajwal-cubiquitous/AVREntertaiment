@@ -31,6 +31,9 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let plannedDate: String? // Planned start date - project becomes ACTIVE when this date arrives
     let handoverDate: String? // Highest end date among all phases - automatically calculated
     let maintenanceDate: String? // Maintenance period end date - project becomes COMPLETED when this date arrives
+    let isSuspended: Bool? // Whether the project is currently suspended
+    let suspendedDate: String? // Date until which the project is suspended
+    let suspensionReason: String? // Reason for suspension
     let teamMembers: [String]
     let managerIds: [String] // Project approvers/managers
     var tempApproverID: String?
@@ -109,6 +112,9 @@ extension Project {
                 plannedDate: nil,
                 handoverDate: nil,
                 maintenanceDate: nil,
+                isSuspended: nil,
+                suspendedDate: nil,
+                suspensionReason: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -129,6 +135,9 @@ extension Project {
                 plannedDate: "01/06/2024",
                 handoverDate: "31/12/2024",
                 maintenanceDate: "31/01/2025",
+                isSuspended: nil,
+                suspendedDate: nil,
+                suspensionReason: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -149,6 +158,9 @@ extension Project {
                 plannedDate: "01/01/2024",
                 handoverDate: "31/05/2024",
                 maintenanceDate: "30/06/2024",
+                isSuspended: nil,
+                suspendedDate: nil,
+                suspensionReason: nil,
                 teamMembers: ["user1", "user4"],
                 managerIds: ["manager2"],
                 tempApproverID: nil,

@@ -204,6 +204,18 @@ struct AdminProjectDetailView: View {
                 icon: "flag.fill",
                 onStatusChange: viewModel.updateProjectStatus
             )
+            
+            // Suspension
+            SuspensionCard(
+                isSuspended: $viewModel.isSuspended,
+                suspendedDate: $viewModel.suspendedDate,
+                suspensionReason: $viewModel.suspensionReason,
+                isEditing: $viewModel.isEditingSuspension,
+                icon: "pause.circle.fill",
+                onSave: { isSuspended, date, reason in
+                    viewModel.updateProjectSuspension(isSuspended: isSuspended, suspendedDate: date, suspensionReason: reason)
+                }
+            )
         }
     }
     
@@ -2058,5 +2070,198 @@ struct MaintenanceDateCard: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter
+    }
+}
+
+// MARK: - Suspension Card
+struct SuspensionCard: View {
+    @Binding var isSuspended: Bool
+    @Binding var suspendedDate: Date?
+    @Binding var suspensionReason: String
+    @Binding var isEditing: Bool
+    let icon: String
+    let onSave: (Bool, Date?, String) -> Void
+    
+    @State private var editedIsSuspended: Bool = false
+    @State private var editedSuspendedDate: Date = Date()
+    @State private var editedSuspensionReason: String = ""
+    
+    private let maxReasonLength = 100 // Character limit for display
+    
+    private var dateFormatted: String {
+        guard let date = suspendedDate else { return "Not set" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+    
+    private var truncatedReason: String {
+        if suspensionReason.isEmpty {
+            return "No reason provided"
+        }
+        if suspensionReason.count <= maxReasonLength {
+            return suspensionReason
+        }
+        return String(suspensionReason.prefix(maxReasonLength)) + "..."
+    }
+    
+    var body: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.red.gradient)
+                
+                Text("Project Suspension")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Button {
+                    HapticManager.selection()
+                    if isEditing {
+                        // Validate: if suspension is enabled, reason must be provided
+                        if editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            HapticManager.notification(.error)
+                            return
+                        }
+                        onSave(editedIsSuspended, editedIsSuspended ? editedSuspendedDate : nil, editedSuspensionReason)
+                    }
+                    isEditing.toggle()
+                    if isEditing {
+                        editedIsSuspended = isSuspended
+                        editedSuspendedDate = suspendedDate ?? Date()
+                        editedSuspensionReason = suspensionReason
+                    }
+                } label: {
+                    Image(systemName: isEditing ? (editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "exclamationmark.circle.fill" : "checkmark.circle.fill") : "pencil.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(isEditing ? (editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .orange : .green) : .red)
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
+            
+            if isEditing {
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    // Toggle for suspension
+                    HStack {
+                        Text("Enable Suspension")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $editedIsSuspended)
+                            .labelsHidden()
+                    }
+                    .padding()
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                    
+                    // Date picker (only shown when suspension is enabled)
+                    if editedIsSuspended {
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Suspended Until")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            
+                            DatePicker("", selection: $editedSuspendedDate, in: Date()..., displayedComponents: .date)
+                                .datePickerStyle(.compact)
+                                .labelsHidden()
+                                .padding()
+                                .background(Color(.tertiarySystemBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                            
+                            // Reason field
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                                HStack(spacing: 4) {
+                                    Text("Reason for Suspension")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                    
+                                    Text("*")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.red)
+                                }
+                                
+                                TextField("Enter reason (required)", text: $editedSuspensionReason, axis: .vertical)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .lineLimit(3...5)
+                                    .padding()
+                                    .background(editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended ? Color.red.opacity(0.1) : Color(.tertiarySystemBackground))
+                                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                            .stroke(editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended ? Color.red : Color.clear, lineWidth: 1)
+                                    )
+                                
+                                HStack {
+                                    Text("\(editedSuspensionReason.count) characters")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    
+                                    if editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended {
+                                        Spacer()
+                                        Text("Reason is required")
+                                            .font(.caption2)
+                                            .foregroundStyle(.red)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(isSuspended ? "Suspended" : "Not Suspended")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(.primary)
+                        
+                        if isSuspended {
+                            if let date = suspendedDate {
+                                Text("Until: \(dateFormatted)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if !suspensionReason.isEmpty {
+                                Text(truncatedReason)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        } else {
+                            Text("Project is active")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    if isSuspended {
+                        HStack(spacing: 4) {
+                            Image(systemName: "pause.circle.fill")
+                                .font(.caption)
+                            Text("SUSPENDED")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
     }
 } 

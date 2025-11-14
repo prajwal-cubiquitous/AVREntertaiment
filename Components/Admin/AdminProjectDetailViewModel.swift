@@ -15,6 +15,9 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var plannedDate: Date
     @Published var handoverDate: Date
     @Published var maintenanceDate: Date
+    @Published var isSuspended: Bool
+    @Published var suspendedDate: Date?
+    @Published var suspensionReason: String
     @Published var teamMembers: [String]
     @Published var managerName: String? = nil // Single manager only
     @Published var tempApproverID: String?
@@ -33,6 +36,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var isEditingPlannedDate = false
     @Published var isEditingHandoverDate = false
     @Published var isEditingMaintenanceDate = false
+    @Published var isEditingSuspension = false
     @Published var isEditingTeam = false
     
     // Phase end date for handover date validation
@@ -116,6 +120,16 @@ class AdminProjectDetailViewModel: ObservableObject {
             let defaultMaintenanceDate = Calendar.current.date(byAdding: .month, value: 1, to: handoverDateValue) ?? Date().addingTimeInterval(86400 * 60)
             self.maintenanceDate = defaultMaintenanceDate
         }
+        
+        // Initialize suspension properties
+        self.isSuspended = project.isSuspended ?? false
+        if let suspendedDateStr = project.suspendedDate,
+           let suspendedDate = dateFormatter.date(from: suspendedDateStr) {
+            self.suspendedDate = suspendedDate
+        } else {
+            self.suspendedDate = nil
+        }
+        self.suspensionReason = project.suspensionReason ?? ""
         
         self.teamMembers = project.teamMembers
         self.tempApproverID = project.tempApproverID
@@ -594,6 +608,90 @@ class AdminProjectDetailViewModel: ObservableObject {
         updateProjectMaintenanceDate(newMaintenanceDate)
     }
     
+    func updateProjectSuspension(isSuspended: Bool, suspendedDate: Date?, suspensionReason: String) {
+        Task {
+            guard let customerId = customerId, let projectId = project.id else {
+                errorMessage = "Customer ID or Project ID not found."
+                showError = true
+                return
+            }
+            
+            // Validate: if suspending, reason is mandatory
+            if isSuspended {
+                let trimmedReason = suspensionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedReason.isEmpty {
+                    errorMessage = "Suspension reason is required."
+                    showError = true
+                    return
+                }
+            }
+            
+            do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                var updateData: [String: Any] = [
+                    "isSuspended": isSuspended,
+                    "updatedAt": Timestamp()
+                ]
+                
+                if isSuspended {
+                    // Suspending the project
+                    // Always update status to SUSPENDED when suspending
+                    updateData["status"] = ProjectStatus.SUSPENDED.rawValue
+                    self.projectStatus = ProjectStatus.SUSPENDED.rawValue
+                    
+                    // Update suspended date if provided
+                    if let suspendedDate = suspendedDate {
+                        let suspendedDateStr = dateFormatter.string(from: suspendedDate)
+                        updateData["suspendedDate"] = suspendedDateStr
+                    }
+                    
+                    // Update suspension reason (mandatory when suspending)
+                    let reasonToStore = suspensionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updateData["suspensionReason"] = reasonToStore
+                } else {
+                    // Unsuspending the project - determine status using existing logic
+                    updateData["suspendedDate"] = NSNull()
+                    updateData["suspensionReason"] = NSNull()
+                    
+                    // Determine status based on planned date (same logic as updateProjectPlannedDate)
+                    let calendar = Calendar.current
+                    let today = calendar.startOfDay(for: Date())
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    
+                    let newStatus: String
+                    if planned <= today {
+                        // If planned date is today or in the past, set to ACTIVE
+                        newStatus = ProjectStatus.ACTIVE.rawValue
+                    } else {
+                        // If planned date is in the future, set to LOCKED
+                        newStatus = ProjectStatus.LOCKED.rawValue
+                    }
+                    
+                    updateData["status"] = newStatus
+                    self.projectStatus = newStatus
+                }
+                
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(updateData)
+                
+                self.isSuspended = isSuspended
+                self.suspendedDate = suspendedDate
+                self.suspensionReason = suspensionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.isEditingSuspension = false
+                showSuccess = true
+                
+                // Notify that project was updated
+                NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+            } catch {
+                errorMessage = "Failed to update project suspension: \(error.localizedDescription)"
+                showError = true
+            }
+        }
+    }
+    
     func updateProjectManager(_ manager: User) {
         Task {
             guard let customerId = customerId, let projectId = project.id else {
@@ -908,6 +1006,16 @@ class AdminProjectDetailViewModel: ObservableObject {
                        let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
                         self.maintenanceDate = maintenanceDate
                     }
+                    
+                    // Update suspension properties
+                    self.isSuspended = updatedProject.isSuspended ?? false
+                    if let suspendedDateStr = updatedProject.suspendedDate,
+                       let suspendedDate = dateFormatter.date(from: suspendedDateStr) {
+                        self.suspendedDate = suspendedDate
+                    } else {
+                        self.suspendedDate = nil
+                    }
+                    self.suspensionReason = updatedProject.suspensionReason ?? ""
                     
                     // Update manager selection if managerIds changed
                     if let firstManagerId = updatedProject.managerIds.first {

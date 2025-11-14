@@ -1102,6 +1102,9 @@ class CreateProjectViewModel: ObservableObject {
                         plannedDate: plannedDateStr,
                         handoverDate: handoverDateStr, // Highest end date among all phases
                         maintenanceDate: maintenanceDateStr, // Default: 1 month from handover date
+                        isSuspended: nil, // New projects are not suspended
+                        suspendedDate: nil, // No suspension date for new projects
+                        suspensionReason: nil, // No suspension reason for new projects
                         teamMembers: Array(allTeamMembers),
                         managerIds: managerIds,
                         tempApproverID: nil,
