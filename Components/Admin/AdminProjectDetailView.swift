@@ -2073,6 +2073,19 @@ struct MaintenanceDateCard: View {
     }
 }
 
+// MARK: - Suspension Reason Enum
+enum SuspensionReason: String, CaseIterable {
+    case paymentMilestoneDelay = "Payment Milestone Delay"
+    case siteAccessPermitHold = "Site Access/Permit Hold"
+    case designApprovalPending = "Design Approval Pending"
+    case vendorMaterialShortage = "Vendor/Material Shortage"
+    case safetyNonCompliance = "Safety Non-Compliance"
+    case regulatoryPending = "Regulatory Pending"
+    case resourceReallocation = "Resource Reallocation"
+    case weatherForceMajeure = "Weather/Force Majeure"
+    case other = "Other"
+}
+
 // MARK: - Suspension Card
 struct SuspensionCard: View {
     @Binding var isSuspended: Bool
@@ -2084,9 +2097,10 @@ struct SuspensionCard: View {
     
     @State private var editedIsSuspended: Bool = false
     @State private var editedSuspendedDate: Date = Date()
-    @State private var editedSuspensionReason: String = ""
+    @State private var selectedReason: SuspensionReason? = nil
+    @State private var customReasonNotes: String = ""
     
-    private let maxReasonLength = 100 // Character limit for display
+    private let maxReasonLength = 200 // Character limit for custom notes
     
     private var dateFormatted: String {
         guard let date = suspendedDate else { return "Not set" }
@@ -2103,6 +2117,38 @@ struct SuspensionCard: View {
             return suspensionReason
         }
         return String(suspensionReason.prefix(maxReasonLength)) + "..."
+    }
+    
+    // Get the final reason string to save
+    private func getFinalReason() -> String {
+        guard let selected = selectedReason else { return "" }
+        
+        if selected == .other {
+            return customReasonNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            return selected.rawValue
+        }
+    }
+    
+    // Parse existing reason to determine selected reason and custom notes
+    private func parseExistingReason() {
+        let trimmedReason = suspensionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if trimmedReason.isEmpty {
+            selectedReason = nil
+            customReasonNotes = ""
+            return
+        }
+        
+        // Check if the reason matches any enum case
+        if let matchedReason = SuspensionReason.allCases.first(where: { $0.rawValue == trimmedReason }) {
+            selectedReason = matchedReason
+            customReasonNotes = ""
+        } else {
+            // If it doesn't match, it's a custom "Other" reason
+            selectedReason = .other
+            customReasonNotes = trimmedReason
+        }
     }
     
     var body: some View {
@@ -2122,22 +2168,26 @@ struct SuspensionCard: View {
                     HapticManager.selection()
                     if isEditing {
                         // Validate: if suspension is enabled, reason must be provided
-                        if editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let finalReason = getFinalReason()
+                        if editedIsSuspended && finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             HapticManager.notification(.error)
                             return
                         }
-                        onSave(editedIsSuspended, editedIsSuspended ? editedSuspendedDate : nil, editedSuspensionReason)
+                        onSave(editedIsSuspended, editedIsSuspended ? editedSuspendedDate : nil, finalReason)
                     }
                     isEditing.toggle()
                     if isEditing {
                         editedIsSuspended = isSuspended
                         editedSuspendedDate = suspendedDate ?? Date()
-                        editedSuspensionReason = suspensionReason
+                        // Parse existing reason to determine selected reason
+                        parseExistingReason()
                     }
                 } label: {
-                    Image(systemName: isEditing ? (editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "exclamationmark.circle.fill" : "checkmark.circle.fill") : "pencil.circle.fill")
+                    let finalReason = getFinalReason()
+                    let isValid = !editedIsSuspended || !finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    Image(systemName: isEditing ? (isValid ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(isEditing ? (editedIsSuspended && editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .orange : .green) : .red)
+                        .foregroundStyle(isEditing ? (isValid ? .green : .orange) : .red)
                         .symbolRenderingMode(.hierarchical)
                 }
             }
@@ -2173,8 +2223,8 @@ struct SuspensionCard: View {
                                 .background(Color(.tertiarySystemBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
                             
-                            // Reason field
-                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                            // Reason picker
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                                 HStack(spacing: 4) {
                                     Text("Reason for Suspension")
                                         .font(.subheadline.weight(.medium))
@@ -2185,27 +2235,106 @@ struct SuspensionCard: View {
                                         .foregroundStyle(.red)
                                 }
                                 
-                                TextField("Enter reason (required)", text: $editedSuspensionReason, axis: .vertical)
-                                    .textFieldStyle(PlainTextFieldStyle())
-                                    .lineLimit(3...5)
+                                // Reason Picker
+                                Menu {
+                                    ForEach(SuspensionReason.allCases, id: \.self) { reason in
+                                        Button(action: {
+                                            HapticManager.selection()
+                                            selectedReason = reason
+                                            // Clear custom notes if not "Other"
+                                            if reason != .other {
+                                                customReasonNotes = ""
+                                            }
+                                        }) {
+                                            HStack {
+                                                Text(reason.rawValue)
+                                                if selectedReason == reason {
+                                                    Image(systemName: "checkmark")
+                                                        .foregroundStyle(.blue)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(selectedReason?.rawValue ?? "Select reason")
+                                            .font(.body)
+                                            .foregroundStyle(selectedReason == nil ? .secondary : .primary)
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                     .padding()
-                                    .background(editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended ? Color.red.opacity(0.1) : Color(.tertiarySystemBackground))
+                                    .background(selectedReason == nil && editedIsSuspended ? Color.red.opacity(0.1) : Color(.tertiarySystemBackground))
                                     .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
                                     .overlay(
                                         RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
-                                            .stroke(editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended ? Color.red : Color.clear, lineWidth: 1)
+                                            .stroke(selectedReason == nil && editedIsSuspended ? Color.red : Color.clear, lineWidth: 1)
                                     )
+                                }
                                 
-                                HStack {
-                                    Text("\(editedSuspensionReason.count) characters")
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                    
-                                    if editedSuspensionReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && editedIsSuspended {
-                                        Spacer()
-                                        Text("Reason is required")
-                                            .font(.caption2)
-                                            .foregroundStyle(.red)
+                                // Custom notes field (only shown when "Other" is selected)
+                                if selectedReason == .other {
+                                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                                        HStack(spacing: 4) {
+                                            Text("Suspension Notes")
+                                                .font(.subheadline.weight(.medium))
+                                                .foregroundStyle(.secondary)
+                                            
+                                            Text("*")
+                                                .font(.subheadline.weight(.medium))
+                                                .foregroundStyle(.red)
+                                        }
+                                        
+                                        TextField("Enter suspension notes (required)", text: $customReasonNotes, axis: .vertical)
+                                            .textFieldStyle(PlainTextFieldStyle())
+                                            .lineLimit(3...5)
+                                            .padding()
+                                            .background(customReasonNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.red.opacity(0.1) : Color(.tertiarySystemBackground))
+                                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                                    .stroke(customReasonNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.red : Color.clear, lineWidth: 1)
+                                            )
+                                        
+                                        HStack {
+                                            Text("\(customReasonNotes.count) characters")
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                            
+                                            if customReasonNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                                Spacer()
+                                                Text("Notes are required for 'Other'")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.red)
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Validation message
+                                if editedIsSuspended {
+                                    if selectedReason == nil {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.red)
+                                            Text("Reason is required")
+                                                .font(.caption2)
+                                                .foregroundStyle(.red)
+                                        }
+                                    } else if selectedReason == .other && customReasonNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.red)
+                                            Text("Suspension notes are required for 'Other'")
+                                                .font(.caption2)
+                                                .foregroundStyle(.red)
+                                        }
                                     }
                                 }
                             }
