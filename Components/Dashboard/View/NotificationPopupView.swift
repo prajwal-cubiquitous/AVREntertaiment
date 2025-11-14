@@ -15,10 +15,6 @@ struct NotificationPopupView: View {
     let phoneNumber: String
     @Binding var isPresented: Bool
     
-    @State private var showingPendingApprovals = false
-    @State private var showingChats = false
-    @State private var showingExpenseChat = false
-    @State private var selectedExpenseForChat: Expense?
     
     var body: some View {
         GeometryReader { geometry in
@@ -68,37 +64,6 @@ struct NotificationPopupView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showingPendingApprovals) {
-            NavigationStack {
-                PendingApprovalsView(role: role, project: project, phoneNumber: phoneNumber)
-            }
-        }
-        .sheet(isPresented: $showingChats) {
-            if role == .ADMIN {
-                ChatsView(
-                    project: project,
-                    currentUserRole: .ADMIN
-                )
-                .presentationDetents([.large])
-            } else {
-                ChatsView(
-                    project: project,
-                    currentUserPhone: phoneNumber,
-                    currentUserRole: role ?? .USER
-                )
-                .presentationDetents([.large])
-            }
-        }
-        .sheet(isPresented: $showingExpenseChat) {
-            if let expense = selectedExpenseForChat {
-                ExpenseChatView(
-                    expense: expense,
-                    userPhoneNumber: phoneNumber,
-                    projectId: project.id ?? "",
-                    role: role ?? .USER
-                )
-            }
-        }
     }
     
     // MARK: - Loading View
@@ -120,126 +85,58 @@ struct NotificationPopupView: View {
     private var notificationsContent: some View {
         VStack(spacing: 0) {
             // Header
-            VStack(spacing: 8) {
-                Text("Notifications")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.primary)
-                
-                Text("Today")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            Text("Notifications")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
             
             Divider()
             
-            // Notification Items
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    // Display saved FCM notifications first
-                    ForEach(notificationViewModel.savedNotifications.prefix(5)) { notification in
-                        NotificationPopupRowView(
-                            icon: iconForNotification(notification),
-                            iconColor: colorForNotification(notification),
-                            title: notification.title,
-                            message: notification.body,
-                            timeAgo: timeAgoString(from: notification.date)
-                        ) {
-                            // Handle navigation when tapped
-                            let data = notification.data.mapValues { $0.value }
-                            NotificationManager.shared.handleNavigation(data: data)
-                            isPresented = false
-                        }
-                        
-                        if notification.id != notificationViewModel.savedNotifications.prefix(5).last?.id {
-                            Divider()
-                                .padding(.leading, 56)
-                        }
-                    }
+            // Notification Items - Continuous list sorted by time
+            if notificationViewModel.savedNotifications.isEmpty {
+                // Empty state
+                VStack(spacing: 12) {
+                    Image(systemName: "bell.slash.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.secondary.opacity(0.6))
+                        .symbolRenderingMode(.hierarchical)
                     
-                    // Add divider if there are saved notifications and other notifications
-                    if !notificationViewModel.savedNotifications.isEmpty && 
-                       (notificationViewModel.pendingApprovalsCount > 0 || 
-                        notificationViewModel.unreadMessagesCount > 0 || 
-                        notificationViewModel.expenseChatUpdatesCount > 0) {
-                        Divider()
-                            .padding(.leading, 56)
-                    }
-                    
-                    if notificationViewModel.pendingApprovalsCount > 0 {
-                        NotificationPopupItemView(
-                            icon: "doc.text.magnifyingglass",
-                            iconColor: Color.orange,
-                            title: "\(notificationViewModel.pendingApprovalsCount) Pending Approval\(notificationViewModel.pendingApprovalsCount > 1 ? "s" : "")",
-                            subtitle: "Expense updates waiting for review",
-                            badgeColor: Color.orange
-                        ) {
-                            showingPendingApprovals = true
-                            isPresented = false
-                        }
-                    }
-                    
-                    if notificationViewModel.unreadMessagesCount > 0 {
-                        if notificationViewModel.pendingApprovalsCount > 0 || !notificationViewModel.savedNotifications.isEmpty {
-                            Divider()
-                                .padding(.leading, 56)
-                        }
-                        
-                        NotificationPopupItemView(
-                            icon: "bubble.left.and.bubble.right.fill",
-                            iconColor: Color.blue,
-                            title: "\(notificationViewModel.unreadMessagesCount) Unread Message\(notificationViewModel.unreadMessagesCount > 1 ? "s" : "")",
-                            subtitle: "New messages in your chats",
-                            badgeColor: Color.blue
-                        ) {
-                            showingChats = true
-                            isPresented = false
-                        }
-                    }
-                    
-                    if notificationViewModel.expenseChatUpdatesCount > 0 {
-                        if notificationViewModel.pendingApprovalsCount > 0 || 
-                           notificationViewModel.unreadMessagesCount > 0 || 
-                           !notificationViewModel.savedNotifications.isEmpty {
-                            Divider()
-                                .padding(.leading, 56)
-                        }
-                        
-                        NotificationPopupItemView(
-                            icon: "message.badge.fill",
-                            iconColor: Color.green,
-                            title: "\(notificationViewModel.expenseChatUpdatesCount) Expense Discussion\(notificationViewModel.expenseChatUpdatesCount > 1 ? "s" : "")",
-                            subtitle: "Recent updates on your expenses",
-                            badgeColor: Color.green
-                        ) {
-                            // Navigate to first expense with chat update
-                            Task {
-                                await openExpenseChat()
-                            }
-                            isPresented = false
-                        }
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-            .frame(maxHeight: 400)
-            
-            Divider()
-            
-            // View all button
-            if notificationViewModel.hasNotifications {
-                Button {
-                    showingPendingApprovals = true
-                    isPresented = false
-                } label: {
-                    Text("View all")
+                    Text("No Notifications")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+                        .foregroundColor(.secondary)
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        // Display all saved FCM notifications sorted by time (newest first)
+                        ForEach(Array(notificationViewModel.savedNotifications.enumerated()), id: \.element.id) { index, notification in
+                            NotificationPopupRowView(
+                                icon: iconForNotification(notification),
+                                iconColor: colorForNotification(notification),
+                                title: notification.title,
+                                message: notification.body,
+                                timeAgo: timeAgoString(from: notification.date)
+                            ) {
+                                // Handle navigation when tapped
+                                let data = notification.data.mapValues { $0.value }
+                                NotificationManager.shared.handleNavigation(data: data)
+                                isPresented = false
+                            }
+                            
+                            // Add divider between items (not after last item)
+                            if index < notificationViewModel.savedNotifications.count - 1 {
+                                Divider()
+                                    .padding(.leading, 56)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .frame(maxHeight: 400)
             }
         }
     }
@@ -316,63 +213,6 @@ struct NotificationPopupView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-    
-    private func openExpenseChat() async {
-        
-        var customerID: String {
-            get async throws {
-                try await FirebasePathHelper.shared.fetchEffectiveUserID()
-            }
-        }
-        
-        guard let projectId = project.id else { return }
-        
-        let db = Firestore.firestore()
-        
-        do {
-            // Fetch expenses with recent chat messages
-            let expensesSnapshot = try await db
-                .collection("customers")
-                .document(customerID)
-                .collection("projects")
-                .document(projectId)
-                .collection("expenses")
-                .getDocuments()
-            
-            for expenseDoc in expensesSnapshot.documents {
-                guard let expenseData = try? expenseDoc.data(as: Expense.self),
-                      expenseData.submittedBy == phoneNumber,
-                      expenseData.status != .approved else { continue }
-                
-                // Check for recent expense chat messages
-                let expenseChatSnapshot = try await db
-                    .collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .collection("expenses")
-                    .document(expenseDoc.documentID)
-                    .collection("expenseChats")
-                    .order(by: "timeStamp", descending: true)
-                    .limit(to: 1)
-                    .getDocuments()
-                
-                if let lastMessage = expenseChatSnapshot.documents.first,
-                   let messageData = try? lastMessage.data(as: ExpenseChat.self) {
-                    let last24Hours = Date().addingTimeInterval(-24 * 60 * 60)
-                    if messageData.timeStamp > last24Hours {
-                        await MainActor.run {
-                            selectedExpenseForChat = expenseData
-                            showingExpenseChat = true
-                        }
-                        return
-                    }
-                }
-            }
-        } catch {
-            print("Error fetching expense chat: \(error)")
-        }
     }
 }
 
