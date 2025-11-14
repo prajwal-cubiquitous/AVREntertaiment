@@ -76,6 +76,8 @@ struct DashboardView: View {
     @State private var phaseToStart: PhaseSummary? = nil
     @State private var showingExpenseChat = false
     @State private var expenseForChat: Expense? = nil
+    @StateObject private var notificationViewModel = NotificationViewModel()
+    @State private var showingNotifications = false
     let role: UserRole?
     let phoneNumber: String
     @State private var selectedProject: Project?
@@ -371,6 +373,27 @@ struct DashboardView: View {
             
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: DesignSystem.Spacing.medium) {
+                    // FCM Notifications Button (for APPROVER and ADMIN roles)
+                    if role == .APPROVER || role == .ADMIN {
+                        Button {
+                            HapticManager.selection()
+                            showingNotifications = true
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+                                    .font(.title3)
+                                    .foregroundColor(.primary)
+                                
+                                if notificationViewModel.hasNotifications {
+                                    Circle()
+                                        .fill(.red)
+                                        .frame(width: 10, height: 10)
+                                        .offset(x: 8, y: -8)
+                                }
+                            }
+                        }
+                    }
+                    
                     // Phase Request Notification Button (Admin only, before pencil)
                     if role == .ADMIN {
                         Button {
@@ -537,6 +560,17 @@ struct DashboardView: View {
                 .presentationDetents([.large])
             }
         }
+        .overlay {
+            if showingNotifications, let project = project {
+                NotificationPopupView(
+                    notificationViewModel: notificationViewModel,
+                    project: project,
+                    role: role,
+                    phoneNumber: phoneNumber,
+                    isPresented: $showingNotifications
+                )
+            }
+        }
         .sheet(isPresented: $showingRequestActionSheet) {
             if let request = selectedRequest, let projectId = project?.id {
                 PhaseRequestActionSheet(
@@ -657,6 +691,14 @@ struct DashboardView: View {
                     await phaseRequestNotificationViewModel.loadPendingRequests(
                         projectId: projectId,
                         customerId: customerId
+                    )
+                }
+                // Load FCM notifications for APPROVER and ADMIN
+                if (role == .APPROVER || role == .ADMIN), let projectId = project?.id {
+                    await notificationViewModel.fetchProjectNotifications(
+                        projectId: projectId,
+                        currentUserPhone: phoneNumber,
+                        currentUserRole: role ?? .USER
                     )
                 }
             }

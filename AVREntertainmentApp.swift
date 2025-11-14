@@ -269,6 +269,28 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
         
         print(userInfo)
         
+        // Save notification to NotificationManager
+        Task { @MainActor in
+            let title = notification.request.content.title
+            let body = notification.request.content.body
+            let projectId = userInfo["projectId"] as? String
+            
+            // Convert userInfo to [String: Any] for storage
+            var data: [String: Any] = [:]
+            for (key, value) in userInfo {
+                if let keyString = key as? String {
+                    data[keyString] = value
+                }
+            }
+            
+            NotificationManager.shared.saveNotification(
+                title: title,
+                body: body,
+                data: data,
+                projectId: projectId
+            )
+        }
+        
         // Change this to your preferred presentation option
         completionHandler([[.banner, .badge, .sound]])
     }
@@ -287,6 +309,31 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
         
         let userInfo = response.notification.request.content.userInfo
 //        print("Full Notification Payload: \(userInfo)")
+        
+        // Save notification to NotificationManager (when user taps notification)
+        Task { @MainActor in
+            let title = response.notification.request.content.title
+            let body = response.notification.request.content.body
+            let projectId = userInfo["projectId"] as? String
+            
+            // Convert userInfo to [String: Any] for storage
+            var data: [String: Any] = [:]
+            for (key, value) in userInfo {
+                if let keyString = key as? String {
+                    data[keyString] = value
+                }
+            }
+            
+            NotificationManager.shared.saveNotification(
+                title: title,
+                body: body,
+                data: data,
+                projectId: projectId
+            )
+            
+            // Handle navigation
+            NotificationManager.shared.handleNavigation(data: data)
+        }
         
         if let screen = userInfo["screen"] as? String {
             switch screen {

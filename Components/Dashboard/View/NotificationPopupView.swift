@@ -138,6 +138,36 @@ struct NotificationPopupView: View {
             // Notification Items
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    // Display saved FCM notifications first
+                    ForEach(notificationViewModel.savedNotifications.prefix(5)) { notification in
+                        NotificationPopupRowView(
+                            icon: iconForNotification(notification),
+                            iconColor: colorForNotification(notification),
+                            title: notification.title,
+                            message: notification.body,
+                            timeAgo: timeAgoString(from: notification.date)
+                        ) {
+                            // Handle navigation when tapped
+                            let data = notification.data.mapValues { $0.value }
+                            NotificationManager.shared.handleNavigation(data: data)
+                            isPresented = false
+                        }
+                        
+                        if notification.id != notificationViewModel.savedNotifications.prefix(5).last?.id {
+                            Divider()
+                                .padding(.leading, 56)
+                        }
+                    }
+                    
+                    // Add divider if there are saved notifications and other notifications
+                    if !notificationViewModel.savedNotifications.isEmpty && 
+                       (notificationViewModel.pendingApprovalsCount > 0 || 
+                        notificationViewModel.unreadMessagesCount > 0 || 
+                        notificationViewModel.expenseChatUpdatesCount > 0) {
+                        Divider()
+                            .padding(.leading, 56)
+                    }
+                    
                     if notificationViewModel.pendingApprovalsCount > 0 {
                         NotificationPopupItemView(
                             icon: "doc.text.magnifyingglass",
@@ -152,7 +182,7 @@ struct NotificationPopupView: View {
                     }
                     
                     if notificationViewModel.unreadMessagesCount > 0 {
-                        if notificationViewModel.pendingApprovalsCount > 0 {
+                        if notificationViewModel.pendingApprovalsCount > 0 || !notificationViewModel.savedNotifications.isEmpty {
                             Divider()
                                 .padding(.leading, 56)
                         }
@@ -170,7 +200,9 @@ struct NotificationPopupView: View {
                     }
                     
                     if notificationViewModel.expenseChatUpdatesCount > 0 {
-                        if notificationViewModel.pendingApprovalsCount > 0 || notificationViewModel.unreadMessagesCount > 0 {
+                        if notificationViewModel.pendingApprovalsCount > 0 || 
+                           notificationViewModel.unreadMessagesCount > 0 || 
+                           !notificationViewModel.savedNotifications.isEmpty {
                             Divider()
                                 .padding(.leading, 56)
                         }
@@ -192,7 +224,7 @@ struct NotificationPopupView: View {
                 }
                 .padding(.vertical, 8)
             }
-            .frame(maxHeight: 280)
+            .frame(maxHeight: 400)
             
             Divider()
             
@@ -241,6 +273,50 @@ struct NotificationPopupView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func iconForNotification(_ notification: AppNotification) -> String {
+        // Determine icon based on notification data
+        if let screen = notification.data["screen"]?.value as? String {
+            switch screen {
+            case "chat_detail":
+                return "bubble.left.and.bubble.right.fill"
+            case "expense_detail", "expense_chat":
+                return "doc.text.fill"
+            case "phase_detail":
+                return "folder.fill"
+            case "request_detail":
+                return "doc.badge.plus"
+            default:
+                return "bell.fill"
+            }
+        }
+        return "bell.fill"
+    }
+    
+    private func colorForNotification(_ notification: AppNotification) -> Color {
+        // Determine color based on notification data
+        if let screen = notification.data["screen"]?.value as? String {
+            switch screen {
+            case "chat_detail":
+                return .blue
+            case "expense_detail", "expense_chat":
+                return .green
+            case "phase_detail":
+                return .purple
+            case "request_detail":
+                return .orange
+            default:
+                return .gray
+            }
+        }
+        return .gray
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
     
     private func openExpenseChat() async {
         
@@ -308,44 +384,51 @@ struct NotificationPopupRowView: View {
     let title: String
     let message: String
     let timeAgo: String
+    let action: (() -> Void)?
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Icon
-            Circle()
-                .fill(iconColor.opacity(0.15))
-                .frame(width: 28, height: 28)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(iconColor)
-                )
-            
-            // Content
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    Spacer()
-                    
-                    Text(timeAgo)
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(.secondary)
-                }
+        Button(action: {
+            action?()
+            HapticManager.selection()
+        }) {
+            HStack(alignment: .top, spacing: 12) {
+                // Icon
+                Circle()
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Image(systemName: icon)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(iconColor)
+                    )
                 
-                Text(message)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                // Content
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Text(timeAgo)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text(message)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 }
 

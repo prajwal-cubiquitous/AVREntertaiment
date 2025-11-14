@@ -16,18 +16,50 @@ class NotificationViewModel: ObservableObject {
     @Published var expenseChatUpdatesCount: Int = 0
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var savedNotifications: [AppNotification] = [] // Saved FCM notifications
     
     private let db = Firestore.firestore()
     private var listeners: [ListenerRegistration] = []
+    private var notificationObserver: NSObjectProtocol?
+    
+    init() {
+        // Observe NotificationManager for updates
+        notificationObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("NotificationManagerUpdated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.loadSavedNotifications()
+        }
+        
+        // Load saved notifications on init
+        loadSavedNotifications()
+    }
     
     deinit {
         listeners.forEach { $0.remove() }
+        if let observer = notificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     var customerID: String {
         get async throws {
             try await FirebasePathHelper.shared.fetchEffectiveUserID()
         }
+    }
+    
+    // MARK: - Load Saved Notifications
+    
+    /// Loads saved notifications from NotificationManager for a specific project
+    func loadSavedNotifications(for projectId: String? = nil) {
+        if let projectId = projectId {
+            savedNotifications = NotificationManager.shared.getNotifications(for: projectId)
+        } else {
+            savedNotifications = NotificationManager.shared.getAllNotifications()
+        }
+        // Sort by date (newest first)
+        savedNotifications.sort { $0.date > $1.date }
     }
     
     // MARK: - Fetch Notifications for Dashboard
@@ -78,6 +110,9 @@ class NotificationViewModel: ObservableObject {
             pendingApprovalsCount = await fetchPendingApprovalsCount(projectId: projectId, currentUserRole: currentUserRole)
             unreadMessagesCount = await fetchUnreadMessagesCount(projectId: projectId, currentUserPhone: currentUserPhone)
             expenseChatUpdatesCount = await fetchExpenseChatUpdatesCount(projectId: projectId, currentUserPhone: currentUserPhone)
+            
+            // Load saved notifications for this project
+            loadSavedNotifications(for: projectId)
         } catch {
             errorMessage = "Failed to load notifications: \(error.localizedDescription)"
         }
@@ -203,11 +238,16 @@ class NotificationViewModel: ObservableObject {
     // MARK: - Computed Properties
     
     var totalNotifications: Int {
-        pendingApprovalsCount + unreadMessagesCount + expenseChatUpdatesCount
+        pendingApprovalsCount + unreadMessagesCount + expenseChatUpdatesCount + savedNotifications.count
     }
     
     var hasNotifications: Bool {
         totalNotifications > 0
+    }
+    
+    /// Returns all notifications (saved + counts) for display
+    var allNotifications: [AppNotification] {
+        return savedNotifications
     }
 }
 
