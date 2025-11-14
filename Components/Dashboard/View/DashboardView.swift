@@ -363,10 +363,7 @@ struct DashboardView: View {
                     
                     // Show suspension reason if project is suspended
                     if project?.isSuspended == true, let reason = project?.suspensionReason, !reason.isEmpty {
-                        Text(reason)
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                            .lineLimit(1)
+                        TruncatedSuspensionReasonView(reason: reason)
                             .padding(.top, 2)
                     }
                 }
@@ -912,11 +909,7 @@ struct DashboardView: View {
                                     .font(.caption2)
                                     .foregroundColor(.orange)
                                 
-                                Text(reason)
-                                    .font(DesignSystem.Typography.caption2)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
+                                TruncatedSuspensionReasonView(reason: reason)
                             }
                             .padding(.horizontal, DesignSystem.Spacing.small)
                             .padding(.vertical, DesignSystem.Spacing.extraSmall)

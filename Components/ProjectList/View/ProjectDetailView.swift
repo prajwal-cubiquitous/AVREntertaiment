@@ -1723,11 +1723,7 @@ private struct ProjectHeaderView: View {
                                         .font(.caption2)
                                         .foregroundColor(.orange)
                                     
-                                    Text(reason)
-                                        .font(DesignSystem.Typography.caption2)
-                                        .foregroundColor(.secondary)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.trailing)
+                                    TruncatedSuspensionReasonView(reason: reason)
                                 }
                                 .padding(.horizontal, DesignSystem.Spacing.small)
                                 .padding(.vertical, DesignSystem.Spacing.extraSmall)

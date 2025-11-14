@@ -159,10 +159,7 @@ struct ProjectCell: View {
                             .font(.caption2)
                             .foregroundColor(.orange)
                         
-                        Text(reason)
-                            .font(DesignSystem.Typography.caption2)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
+                        TruncatedSuspensionReasonView(reason: reason)
                     }
                     .padding(.top, DesignSystem.Spacing.extraSmall)
                 }
