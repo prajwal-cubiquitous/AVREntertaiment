@@ -32,16 +32,18 @@ struct DepartmentBudgetDetailView: View {
     let role: UserRole?
     let phoneNumber: String
     let phaseId: String?
+    let projectStatus: ProjectStatus?
     @ObservedObject var stateManager: DashboardStateManager
     @StateObject private var viewModel: DepartmentBudgetDetailViewModel
     @Environment(\.dismiss) private var dismiss
     
-    init(department: String, projectId: String, role: UserRole?, phoneNumber: String, phaseId: String? = nil, stateManager: DashboardStateManager) {
+    init(department: String, projectId: String, role: UserRole?, phoneNumber: String, phaseId: String? = nil, projectStatus: ProjectStatus? = nil, stateManager: DashboardStateManager) {
         self.department = department
         self.projectId = projectId
         self.role = role
         self.phoneNumber = phoneNumber
         self.phaseId = phaseId
+        self.projectStatus = projectStatus
         self.stateManager = stateManager
         self._viewModel = StateObject(wrappedValue: DepartmentBudgetDetailViewModel(phaseId: phaseId, stateManager: stateManager))
     }
@@ -153,8 +155,8 @@ struct DepartmentBudgetDetailView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    // Hide edit/delete options for "Other" department (anonymous expenses)
-                    if role == .ADMIN && department != "Other" {
+                    // Hide edit/delete options for "Other" department (anonymous expenses) or when project is archived
+                    if role == .ADMIN && department != "Other" && projectStatus != .ARCHIVE {
                         Menu {
                             Button(role: .none) {
                                 showingEditBudget = true

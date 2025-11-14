@@ -220,9 +220,9 @@ struct DashboardView: View {
                                         icon: "plus.circle.fill",
                                         title: "Add Expense",
                                         color: Color.green,
-                                        isDisabled: project?.isSuspended == true
+                                        isDisabled: project?.isSuspended == true || project?.statusType == .ARCHIVE
                                     ) {
-                                        if project?.isSuspended != true {
+                                        if project?.isSuspended != true && project?.statusType != .ARCHIVE {
                                             showingAddExpense = true
                                             showingActionMenu = false
                                             HapticManager.selection()
@@ -410,8 +410,8 @@ struct DashboardView: View {
                         }
                     }
                     
-                    // Edit Button
-                    if let project = project, role == .ADMIN{
+                    // Edit Button (hidden when project is archived)
+                    if let project = project, role == .ADMIN, project.statusType != .ARCHIVE {
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
                                 .font(.title3)
@@ -504,6 +504,7 @@ struct DashboardView: View {
                     role: role,
                     phoneNumber: phoneNumber,
                     phaseId: selectedPhaseIdForDetail,
+                    projectStatus: project.statusType,
                     stateManager: stateManager
                 )
                 .presentationDetents([.large])
@@ -1137,57 +1138,64 @@ struct DashboardView: View {
                                         HStack{
                                             Spacer()
                                             
-                                            // 3-dot menu for Complete Phase (available for all roles)
-                                            Menu {
-                                                Button(role: .destructive) {
-                                                    HapticManager.selection()
-                                                    phaseToComplete = phase
-                                                    showingCompletePhaseConfirmation = true
+                                            // 3-dot menu for Complete Phase (available for all roles, hidden when archived)
+                                            if project?.statusType != .ARCHIVE {
+                                                Menu {
+                                                    Button(role: .destructive) {
+                                                        HapticManager.selection()
+                                                        phaseToComplete = phase
+                                                        showingCompletePhaseConfirmation = true
+                                                    } label: {
+                                                        Label("Complete Phase", systemImage: "checkmark.circle.fill")
+                                                    }
                                                 } label: {
-                                                    Label("Complete Phase", systemImage: "checkmark.circle.fill")
+                                                    Image(systemName: "ellipsis")
+                                                        .font(.system(size: 16, weight: .medium))
+                                                        .foregroundColor(.secondary)
+                                                        .frame(width: 24, height: 24)
+                                                        .contentShape(Rectangle())
                                                 }
-                                            } label: {
-                                                Image(systemName: "ellipsis")
-                                                    .font(.system(size: 16, weight: .medium))
-                                                    .foregroundColor(.secondary)
-                                                    .frame(width: 24, height: 24)
-                                                    .contentShape(Rectangle())
+                                                .buttonStyle(.plain)
+                                                .padding(.leading, role == .ADMIN ? 4 : 0)
+                                                .padding(.vertical, 2)
                                             }
-                                            .buttonStyle(.plain)
-                                            .padding(.leading, role == .ADMIN ? 4 : 0)
-                                            .padding(.vertical, 2)
                                         }
 
                                         
                                             if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && !isPhaseCompleted(phase) {
                                                 if role == .ADMIN{
                                                     HStack{
-                                                    // Enable toggle (not shown for completed phases)
-                                                    Toggle("", isOn: Binding(
-                                                        get: { phaseEnabledMap[phase.id] ?? true },
-                                                        set: { newValue in
-                                                            phaseEnabledMap[phase.id] = newValue
-                                                            updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
-                                                        }
-                                                    ))
-                                                    .labelsHidden()
-                                                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                                                    .scaleEffect(0.85)
-                                                    .padding(.leading, 6)
-                                                        Spacer()
-                                                    Button {
-                                                        HapticManager.selection()
-                                                        phaseForDepartmentAdd = phase
-                                                        showingAddDepartment = true
-                                                    } label: {
-                                                        Image(systemName: "plus.circle.fill")
-                                                            .font(.system(size: 16, weight: .medium))
-                                                            .foregroundColor(.accentColor)
-                                                            .accessibilityLabel("Add department to this phase")
+                                                    // Enable toggle (not shown for completed phases or archived projects)
+                                                    if project?.statusType != .ARCHIVE {
+                                                        Toggle("", isOn: Binding(
+                                                            get: { phaseEnabledMap[phase.id] ?? true },
+                                                            set: { newValue in
+                                                                phaseEnabledMap[phase.id] = newValue
+                                                                updatePhaseEnabled(phaseId: phase.id, enabled: newValue)
+                                                            }
+                                                        ))
+                                                        .labelsHidden()
+                                                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                                                        .scaleEffect(0.85)
+                                                        .padding(.leading, 6)
                                                     }
-                                                    .buttonStyle(.plain)
-                                                    .padding(.leading, 2)
-                                                    .padding(.vertical, 2)
+                                                        Spacer()
+                                                    // Hide Add Department button when project is archived
+                                                    if project?.statusType != .ARCHIVE {
+                                                        Button {
+                                                            HapticManager.selection()
+                                                            phaseForDepartmentAdd = phase
+                                                            showingAddDepartment = true
+                                                        } label: {
+                                                            Image(systemName: "plus.circle.fill")
+                                                                .font(.system(size: 16, weight: .medium))
+                                                                .foregroundColor(.accentColor)
+                                                                .accessibilityLabel("Add department to this phase")
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                        .padding(.leading, 2)
+                                                        .padding(.vertical, 2)
+                                                    }
                                                 }
                                             }
                                         }
@@ -3466,7 +3474,8 @@ private struct AllPhasesView: View {
                                 }
                             }
                             
-                            if role == .ADMIN {
+                            // Hide Edit Phase button when project is archived
+                            if role == .ADMIN && project?.statusType != .ARCHIVE {
                                 Button {
                                     HapticManager.selection()
                                     phaseToEdit = phase
@@ -3579,8 +3588,8 @@ private struct AllPhasesView: View {
                 
                 HStack{
                     Spacer()
-            // 3-dot menu for Complete Phase (available for all roles, only for active phases)
-            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) {
+            // 3-dot menu for Complete Phase (available for all roles, only for active phases, hidden when archived)
+            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && project?.statusType != .ARCHIVE {
                 Menu {
                     Button(role: .destructive) {
                         HapticManager.selection()
@@ -3601,8 +3610,8 @@ private struct AllPhasesView: View {
                 .padding(.vertical, 2)
             }
             
-            // 3-dot menu for Start Now (for future phases, available for all roles)
-            if isPhaseInFuture(phase) {
+            // 3-dot menu for Start Now (for future phases, available for all roles, hidden when archived)
+            if isPhaseInFuture(phase) && project?.statusType != .ARCHIVE {
                 Menu {
                     Button {
                         HapticManager.selection()
@@ -3626,39 +3635,44 @@ private struct AllPhasesView: View {
                 
                 if role == .ADMIN && !isPhaseCompleted(phase) {
                     HStack{
-                    // Enable toggle (not shown for completed phases)
-                    Toggle("", isOn: Binding(
-                        get: { phaseEnabledMap[phase.id] ?? false },
-                        set: { newValue in
-                            phaseEnabledMap[phase.id] = newValue
-                            if let projectId = project?.id,
-                               let customerId = Auth.auth().currentUser?.uid {
-                                FirebasePathHelper.shared
-                                    .phasesCollection(customerId: customerId, projectId: projectId)
-                                    .document(phase.id)
-                                    .updateData([
-                                        "isEnabled": newValue,
-                                        "updatedAt": Timestamp()
-                                    ])
+                    // Enable toggle (not shown for completed phases or archived projects)
+                    if project?.statusType != .ARCHIVE {
+                        Toggle("", isOn: Binding(
+                            get: { phaseEnabledMap[phase.id] ?? false },
+                            set: { newValue in
+                                phaseEnabledMap[phase.id] = newValue
+                                if let projectId = project?.id,
+                                   let customerId = Auth.auth().currentUser?.uid {
+                                    FirebasePathHelper.shared
+                                        .phasesCollection(customerId: customerId, projectId: projectId)
+                                        .document(phase.id)
+                                        .updateData([
+                                            "isEnabled": newValue,
+                                            "updatedAt": Timestamp()
+                                        ])
+                                }
                             }
-                        }
-                    ))
-                    .labelsHidden()
-                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
-                    .scaleEffect(0.85)
-                    Spacer()
-                    Button {
-                        HapticManager.selection()
-                        phaseForDepartmentAdd = phase
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.accentColor)
-                            .accessibilityLabel("Add department to this phase")
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                        .scaleEffect(0.85)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.leading, 6)
-                    .padding(.vertical, 2)
+                    Spacer()
+                    // Hide Add Department button when project is archived
+                    if project?.statusType != .ARCHIVE {
+                        Button {
+                            HapticManager.selection()
+                            phaseForDepartmentAdd = phase
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.accentColor)
+                                .accessibilityLabel("Add department to this phase")
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, 6)
+                        .padding(.vertical, 2)
+                    }
                 }
             }
             }
@@ -3776,7 +3790,7 @@ private struct AllPhasesView: View {
         .navigationTitle("All Phases")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            if role == .ADMIN {
+            if role == .ADMIN && project?.statusType != .ARCHIVE {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         HapticManager.selection()
@@ -3832,6 +3846,7 @@ private struct AllPhasesView: View {
                     role: role,
                     phoneNumber: phoneNumber,
                     phaseId: selection.phaseId,
+                    projectStatus: project.statusType,
                     stateManager: stateManager
                 )
                 .presentationDetents([.large])

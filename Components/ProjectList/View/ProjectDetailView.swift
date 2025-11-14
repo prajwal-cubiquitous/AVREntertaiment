@@ -275,27 +275,33 @@ struct ProjectDetailView: View {
     
     /// A prominent button at the bottom of the screen.
     private var addExpenseButton: some View {
-        Button(action: {
-            if project.isSuspended == true {
-                HapticManager.notification(.error)
-                return
+        Group {
+            let isDisabled = project.isSuspended == true || project.statusType == .ARCHIVE
+            let buttonText = project.isSuspended == true ? "Project Suspended" : (project.statusType == .ARCHIVE ? "Project Archived" : "Add New Expense")
+            let buttonIcon = project.isSuspended == true ? "pause.circle.fill" : (project.statusType == .ARCHIVE ? "archivebox.fill" : "plus")
+            
+            Button(action: {
+                if isDisabled {
+                    HapticManager.notification(.error)
+                    return
+                }
+                HapticManager.impact(.medium)
+                showingAddExpense = true
+            }) {
+                Label(buttonText, systemImage: buttonIcon)
+                    .font(DesignSystem.Typography.headline)
             }
-            HapticManager.impact(.medium)
-            showingAddExpense = true
-        }) {
-            Label(project.isSuspended == true ? "Project Suspended" : "Add New Expense", systemImage: project.isSuspended == true ? "pause.circle.fill" : "plus")
-                .font(DesignSystem.Typography.headline)
-        }
-        .primaryButton()
-        .disabled(project.isSuspended == true)
-        .opacity(project.isSuspended == true ? 0.6 : 1.0)
-        .padding(DesignSystem.Spacing.medium)
-        .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.extraLarge)
-        )
-        .sheet(isPresented: $showingAddExpense) {
-            AddExpenseView(project: project)
+            .primaryButton()
+            .disabled(isDisabled)
+            .opacity(isDisabled ? 0.6 : 1.0)
+            .padding(DesignSystem.Spacing.medium)
+            .background(
+                .ultraThinMaterial,
+                in: RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.extraLarge)
+            )
+            .sheet(isPresented: $showingAddExpense) {
+                AddExpenseView(project: project)
+            }
         }
         .sheet(isPresented: $showingChats) {
             if role == .ADMIN {

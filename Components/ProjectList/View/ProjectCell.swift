@@ -101,8 +101,8 @@ struct ProjectCell: View {
                         .buttonStyle(.plain)
                     }
                     
-                    // Edit button for Admin role
-                    if role == .ADMIN {
+                    // Edit button for Admin role (hidden when project is archived)
+                    if role == .ADMIN && project.statusType != .ARCHIVE {
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
                                 .font(.title3)
