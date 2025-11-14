@@ -85,7 +85,7 @@ struct ProjectListView: View {
                                     viewModel.updateStatusFilter(nil)
                                 }
                                 Divider()
-                                ForEach([ProjectStatus.ACTIVE, .INACTIVE, .COMPLETED], id: \.self) { status in
+                                ForEach([ProjectStatus.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .REVIEW_REJECTED, .ARCHIVE], id: \.self) { status in
                                     Button(status.displayText) {
                                         viewModel.updateStatusFilter(status)
                                     }

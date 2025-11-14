@@ -561,13 +561,42 @@ class ProjectListViewModel: ObservableObject {
     
     // Computed property for filtered projects
     var filteredProjects: [Project] {
-        guard phoneNumber == "admin@avr.com" else {
+        guard phoneNumber == "admin@avr.com" || role == .ADMIN else {
             return projects
         }
+        
+        // Filter by status if a filter is selected
+        let filtered: [Project]
         if let filter = selectedStatusFilter {
-            return projects.filter { $0.statusType == filter }
+            filtered = projects.filter { $0.statusType == filter }
+        } else {
+            filtered = projects
         }
-        return projects
+        
+        // Sort projects by status order when showing all projects (no filter)
+        // Order: IN_REVIEW, ACTIVE, MAINTENANCE, COMPLETED, REVIEW_REJECTED, ARCHIVE
+        if selectedStatusFilter == nil {
+            let statusOrder: [ProjectStatus] = [.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .REVIEW_REJECTED, .ARCHIVE]
+            
+            return filtered.sorted { project1, project2 in
+                let status1 = project1.statusType
+                let status2 = project2.statusType
+                
+                // Get index of status in the order array, or use a high number if not found
+                let index1 = statusOrder.firstIndex(of: status1) ?? Int.max
+                let index2 = statusOrder.firstIndex(of: status2) ?? Int.max
+                
+                // If same status, sort by creation date (newest first)
+                if index1 == index2 {
+                    return project1.createdAt.dateValue() > project2.createdAt.dateValue()
+                }
+                
+                return index1 < index2
+            }
+        }
+        
+        // When filtered, sort by creation date (newest first)
+        return filtered.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
     }
     
     func fetchPendingExpenses() async {
