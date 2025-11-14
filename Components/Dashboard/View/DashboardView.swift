@@ -410,8 +410,8 @@ struct DashboardView: View {
                         }
                     }
                     
-                    // Edit Button (hidden when project is archived)
-                    if let project = project, role == .ADMIN, project.statusType != .ARCHIVE {
+                    // Edit Button (always visible for ADMIN, but editing is restricted inside AdminProjectDetailView for archived projects)
+                    if let project = project, role == .ADMIN {
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
                                 .font(.title3)

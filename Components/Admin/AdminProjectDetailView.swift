@@ -129,13 +129,16 @@ struct AdminProjectDetailView: View {
     
     // MARK: - Basic Info Section
     private var basicInfoSection: some View {
-        VStack(spacing: DesignSystem.Spacing.medium) {
+        let isArchived = viewModel.projectStatus == ProjectStatus.ARCHIVE.rawValue
+        
+        return VStack(spacing: DesignSystem.Spacing.medium) {
             // Project Name
             ModernEditableCard(
                 title: "Project Name",
                 value: viewModel.projectName,
                 isEditing: $viewModel.isEditingName,
                 icon: "textformat",
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectName
             )
             
@@ -146,6 +149,7 @@ struct AdminProjectDetailView: View {
                 isEditing: $viewModel.isEditingDescription,
                 icon: "doc.text",
                 isMultiline: true,
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectDescription
             )
             
@@ -155,6 +159,7 @@ struct AdminProjectDetailView: View {
                 value: viewModel.client,
                 isEditing: $viewModel.isEditingClient,
                 icon: "person.2.fill",
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectClient
             )
             
@@ -164,6 +169,7 @@ struct AdminProjectDetailView: View {
                 value: viewModel.location,
                 isEditing: $viewModel.isEditingLocation,
                 icon: "Violet_Location", // 👈 your PNG asset name
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectLocation
             )
             
@@ -173,6 +179,7 @@ struct AdminProjectDetailView: View {
                 date: viewModel.plannedDate,
                 isEditing: $viewModel.isEditingPlannedDate,
                 icon: "calendar.badge.clock",
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectPlannedDate
             )
             
@@ -183,6 +190,7 @@ struct AdminProjectDetailView: View {
                 isEditing: $viewModel.isEditingHandoverDate,
                 icon: "calendar.badge.checkmark",
                 minimumDate: viewModel.highestPhaseEndDate,
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectHandoverDate
             )
             
@@ -193,11 +201,12 @@ struct AdminProjectDetailView: View {
                 maintenanceDate: viewModel.maintenanceDate,
                 isEditing: $viewModel.isEditingMaintenanceDate,
                 icon: "wrench.and.screwdriver.fill",
+                isEditable: !isArchived,
                 onSave: viewModel.updateProjectMaintenanceDate,
                 onSetPeriod: viewModel.setMaintenancePeriod
             )
             
-            // Status
+            // Status (always editable, even when archived)
             ModernStatusCard(
                 title: "Project Status",
                 status: viewModel.projectStatus,
@@ -212,6 +221,7 @@ struct AdminProjectDetailView: View {
                 suspensionReason: $viewModel.suspensionReason,
                 isEditing: $viewModel.isEditingSuspension,
                 icon: "pause.circle.fill",
+                isEditable: !isArchived,
                 onSave: { isSuspended, date, reason in
                     viewModel.updateProjectSuspension(isSuspended: isSuspended, suspendedDate: date, suspensionReason: reason)
                 }
@@ -261,7 +271,9 @@ struct AdminProjectDetailView: View {
     
     // MARK: - Team Section
     private var teamSection: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+        let isArchived = viewModel.projectStatus == ProjectStatus.ARCHIVE.rawValue
+        
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
             // Header
             HStack {
                 Image(systemName: "person.3.fill")
@@ -297,23 +309,43 @@ struct AdminProjectDetailView: View {
                 }
                 .padding(.bottom, DesignSystem.Spacing.small)
                 
-                SingleSelectionPicker(
-                    selectedUser: Binding(
-                        get: { pendingManagerChange ?? viewModel.selectedManager },
-                        set: { newValue in
-                            pendingManagerChange = newValue
+                // Show display-only view when archived, picker when not archived
+                if isArchived {
+                    // Display-only view for archived projects
+                    HStack {
+                        if let manager = viewModel.selectedManager {
+                            Text("\(manager.name) - \(manager.phoneNumber)")
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                        } else {
+                            Text("No manager assigned")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
                         }
-                    ),
-                    users: viewModel.allApprovers.filter { $0.isActive },
-                    placeholder: "Select project manager"
-                )
+                        Spacer()
+                    }
+                    .padding()
+                    .background(Color(.tertiarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                } else {
+                    SingleSelectionPicker(
+                        selectedUser: Binding(
+                            get: { pendingManagerChange ?? viewModel.selectedManager },
+                            set: { newValue in
+                                pendingManagerChange = newValue
+                            }
+                        ),
+                        users: viewModel.allApprovers.filter { $0.isActive },
+                        placeholder: "Select project manager"
+                    )
+                }
                 
-                // Save button (only show when there's a pending change)
+                // Save button (only show when there's a pending change and not archived)
                 let currentManagerId = viewModel.selectedManager?.phoneNumber
                 let pendingManagerId = pendingManagerChange?.phoneNumber
                 let hasPendingChange = currentManagerId != pendingManagerId
                 
-                if hasPendingChange {
+                if hasPendingChange && !isArchived {
                     Button(action: {
                         HapticManager.selection()
                         if let manager = pendingManagerChange {
@@ -403,30 +435,32 @@ struct AdminProjectDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             }
             
-            // View All Users Button
-            Button(action: {
-                HapticManager.selection()
-                showingTeamMembersDetail = true
-            }) {
-                HStack {
-                    Image(systemName: "person.3.fill")
-                        .font(.subheadline.weight(.medium))
-                    
-                    Text("View All Team Members")
-                        .font(.subheadline.weight(.medium))
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            // View All Users Button (hidden when archived)
+            if !isArchived {
+                Button(action: {
+                    HapticManager.selection()
+                    showingTeamMembersDetail = true
+                }) {
+                    HStack {
+                        Image(systemName: "person.3.fill")
+                            .font(.subheadline.weight(.medium))
+                        
+                        Text("View All Team Members")
+                            .font(.subheadline.weight(.medium))
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .foregroundStyle(.blue)
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
                 }
-                .foregroundStyle(.blue)
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             
             // Temporary Approver Display
             if let tempApprover = viewModel.tempApprover {
@@ -473,6 +507,7 @@ struct ModernEditableCard: View {
     @Binding var isEditing: Bool
     let icon: String
     var isMultiline: Bool = false
+    var isEditable: Bool = true
     let onSave: (String) -> Void
     
     @State private var editedValue: String = ""
@@ -501,20 +536,23 @@ struct ModernEditableCard: View {
                 
                 Spacer()
                 
-                Button {
-                    HapticManager.selection()
-                    if isEditing {
-                        onSave(editedValue)
+                // Only show edit button if editable
+                if isEditable {
+                    Button {
+                        HapticManager.selection()
+                        if isEditing {
+                            onSave(editedValue)
+                        }
+                        isEditing.toggle()
+                        if isEditing {
+                            editedValue = value
+                        }
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(isEditing ? .green : .blue)
+                            .symbolRenderingMode(.hierarchical)
                     }
-                    isEditing.toggle()
-                    if isEditing {
-                        editedValue = value
-                    }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(isEditing ? .green : .blue)
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
             
@@ -554,6 +592,7 @@ struct ModernEditableDateCard: View {
     let date: Date
     @Binding var isEditing: Bool
     let icon: String
+    var isEditable: Bool = true
     let onSave: (Date) -> Void
     
     @State private var editedDate: Date = Date()
@@ -571,20 +610,23 @@ struct ModernEditableDateCard: View {
                 
                 Spacer()
                 
-                Button {
-                    HapticManager.selection()
-                    if isEditing {
-                        onSave(editedDate)
+                // Only show edit button if editable
+                if isEditable {
+                    Button {
+                        HapticManager.selection()
+                        if isEditing {
+                            onSave(editedDate)
+                        }
+                        isEditing.toggle()
+                        if isEditing {
+                            editedDate = date
+                        }
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(isEditing ? .green : .blue)
+                            .symbolRenderingMode(.hierarchical)
                     }
-                    isEditing.toggle()
-                    if isEditing {
-                        editedDate = date
-                    }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(isEditing ? .green : .blue)
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
             
@@ -1697,6 +1739,7 @@ struct HandoverDateCard: View {
     @Binding var isEditing: Bool
     let icon: String
     let minimumDate: Date?
+    var isEditable: Bool = true
     let onSave: (Date) -> Void
     
     @State private var editedDate: Date = Date()
@@ -1729,33 +1772,36 @@ struct HandoverDateCard: View {
                 
                 Spacer()
                 
-                Button {
-                    HapticManager.selection()
-                    if isEditing {
-                        if isValidDate {
-                            onSave(editedDate)
-                            validationError = nil
-                        } else {
-                            HapticManager.notification(.error)
-                            if let minimumDate = minimumDate {
-                                let formatter = DateFormatter()
-                                formatter.dateStyle = .medium
-                                validationError = "Handover date must be on or after \(formatter.string(from: minimumDate)) (highest phase end date)"
+                // Only show edit button if editable
+                if isEditable {
+                    Button {
+                        HapticManager.selection()
+                        if isEditing {
+                            if isValidDate {
+                                onSave(editedDate)
+                                validationError = nil
+                            } else {
+                                HapticManager.notification(.error)
+                                if let minimumDate = minimumDate {
+                                    let formatter = DateFormatter()
+                                    formatter.dateStyle = .medium
+                                    validationError = "Handover date must be on or after \(formatter.string(from: minimumDate)) (highest phase end date)"
+                                }
                             }
                         }
+                        if isEditing && isValidDate {
+                            isEditing.toggle()
+                        } else if !isEditing {
+                            isEditing.toggle()
+                            editedDate = date
+                            validationError = nil
+                        }
+                    } label: {
+                        Image(systemName: isEditing ? (isValidDate ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(isEditing ? (isValidDate ? .green : .red) : .blue)
+                            .symbolRenderingMode(.hierarchical)
                     }
-                    if isEditing && isValidDate {
-                        isEditing.toggle()
-                    } else if !isEditing {
-                        isEditing.toggle()
-                        editedDate = date
-                        validationError = nil
-                    }
-                } label: {
-                    Image(systemName: isEditing ? (isValidDate ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(isEditing ? (isValidDate ? .green : .red) : .blue)
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
             
@@ -1863,6 +1909,7 @@ struct MaintenanceDateCard: View {
     let maintenanceDate: Date
     @Binding var isEditing: Bool
     let icon: String
+    var isEditable: Bool = true
     let onSave: (Date) -> Void
     let onSetPeriod: (Int) -> Void
     
@@ -1924,38 +1971,41 @@ struct MaintenanceDateCard: View {
                 
                 Spacer()
                 
-                Button {
-                    HapticManager.selection()
-                    if isEditing {
-                        if showCustomDatePicker {
-                            onSave(editedDate)
-                        } else if let period = selectedPeriod, period != .custom {
-                            onSetPeriod(period.rawValue)
-                        } else {
-                            onSave(editedDate)
+                // Only show edit button if editable
+                if isEditable {
+                    Button {
+                        HapticManager.selection()
+                        if isEditing {
+                            if showCustomDatePicker {
+                                onSave(editedDate)
+                            } else if let period = selectedPeriod, period != .custom {
+                                onSetPeriod(period.rawValue)
+                            } else {
+                                onSave(editedDate)
+                            }
                         }
-                    }
-                    isEditing.toggle()
-                    if isEditing {
-                        editedDate = maintenanceDate
-                        // Determine current period
-                        let calendar = Calendar.current
-                        let components = calendar.dateComponents([.month], from: handoverDate, to: maintenanceDate)
-                        if let months = components.month, let period = MaintenancePeriod(rawValue: months) {
-                            selectedPeriod = period
+                        isEditing.toggle()
+                        if isEditing {
+                            editedDate = maintenanceDate
+                            // Determine current period
+                            let calendar = Calendar.current
+                            let components = calendar.dateComponents([.month], from: handoverDate, to: maintenanceDate)
+                            if let months = components.month, let period = MaintenancePeriod(rawValue: months) {
+                                selectedPeriod = period
+                            } else {
+                                selectedPeriod = .custom
+                                showCustomDatePicker = true
+                            }
                         } else {
-                            selectedPeriod = .custom
-                            showCustomDatePicker = true
+                            selectedPeriod = nil
+                            showCustomDatePicker = false
                         }
-                    } else {
-                        selectedPeriod = nil
-                        showCustomDatePicker = false
+                    } label: {
+                        Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(isEditing ? .green : .orange)
+                            .symbolRenderingMode(.hierarchical)
                     }
-                } label: {
-                    Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(isEditing ? .green : .orange)
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
             
@@ -2093,6 +2143,7 @@ struct SuspensionCard: View {
     @Binding var suspensionReason: String
     @Binding var isEditing: Bool
     let icon: String
+    var isEditable: Bool = true
     let onSave: (Bool, Date?, String) -> Void
     
     @State private var editedIsSuspended: Bool = false
@@ -2164,31 +2215,34 @@ struct SuspensionCard: View {
                 
                 Spacer()
                 
-                Button {
-                    HapticManager.selection()
-                    if isEditing {
-                        // Validate: if suspension is enabled, reason must be provided
-                        let finalReason = getFinalReason()
-                        if editedIsSuspended && finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            HapticManager.notification(.error)
-                            return
+                // Only show edit button if editable
+                if isEditable {
+                    Button {
+                        HapticManager.selection()
+                        if isEditing {
+                            // Validate: if suspension is enabled, reason must be provided
+                            let finalReason = getFinalReason()
+                            if editedIsSuspended && finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                HapticManager.notification(.error)
+                                return
+                            }
+                            onSave(editedIsSuspended, editedIsSuspended ? editedSuspendedDate : nil, finalReason)
                         }
-                        onSave(editedIsSuspended, editedIsSuspended ? editedSuspendedDate : nil, finalReason)
+                        isEditing.toggle()
+                        if isEditing {
+                            editedIsSuspended = isSuspended
+                            editedSuspendedDate = suspendedDate ?? Date()
+                            // Parse existing reason to determine selected reason
+                            parseExistingReason()
+                        }
+                    } label: {
+                        let finalReason = getFinalReason()
+                        let isValid = !editedIsSuspended || !finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        Image(systemName: isEditing ? (isValid ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(isEditing ? (isValid ? .green : .orange) : .red)
+                            .symbolRenderingMode(.hierarchical)
                     }
-                    isEditing.toggle()
-                    if isEditing {
-                        editedIsSuspended = isSuspended
-                        editedSuspendedDate = suspendedDate ?? Date()
-                        // Parse existing reason to determine selected reason
-                        parseExistingReason()
-                    }
-                } label: {
-                    let finalReason = getFinalReason()
-                    let isValid = !editedIsSuspended || !finalReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    Image(systemName: isEditing ? (isValid ? "checkmark.circle.fill" : "exclamationmark.circle.fill") : "pencil.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(isEditing ? (isValid ? .green : .orange) : .red)
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
             
