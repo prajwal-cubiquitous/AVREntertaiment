@@ -1694,7 +1694,45 @@ private struct ProjectHeaderView: View {
                 Spacer()
                 
                 VStack(alignment: .trailing, spacing: DesignSystem.Spacing.small) {
-                    StatusViewDetial(status: project.statusType)
+                    // Show suspended status if project is suspended, otherwise show normal status
+                    if project.isSuspended == true {
+                        VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 8, height: 8)
+                                Text("SUSPENDED")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(Color.red.darker(by: 10))
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.red.opacity(0.15))
+                            .clipShape(Capsule())
+                            
+                            // Show suspension reason if available
+                            if let reason = project.suspensionReason, !reason.isEmpty {
+                                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
+                                    
+                                    Text(reason)
+                                        .font(DesignSystem.Typography.caption2)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.trailing)
+                                }
+                                .padding(.horizontal, DesignSystem.Spacing.small)
+                                .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                                .background(Color.orange.opacity(0.1))
+                                .cornerRadius(DesignSystem.CornerRadius.small)
+                                .frame(maxWidth: 200, alignment: .trailing)
+                            }
+                        }
+                    } else {
+                        StatusViewDetial(status: project.statusType)
+                    }
                     
                     Spacer()
                     // Project Manager Section

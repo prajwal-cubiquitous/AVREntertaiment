@@ -196,6 +196,7 @@ struct ProjectListView: View {
                 if let expenseItem = newValue {
                     let expenseId = expenseItem.id
                     let isExpenseChat = navigationManager.expenseScreenType == .chat
+                    let screenType = navigationManager.expenseScreenType ?? .detail
                     print("🧾 Expense navigation trigger detected for expense ID: \(expenseId), isChat: \(isExpenseChat)")
                     
                     Task {
@@ -212,17 +213,19 @@ struct ProjectListView: View {
                         
                         // Get projectId from navigation manager
                         guard let projectId = navigationManager.activeProjectId?.id else {
-                            print("⚠️ Project ID not available for expense navigation")
-                            navigationManager.setExpenseId(nil)
+                            print("⚠️ Project ID not available for expense navigation - will wait for project to be set")
+                            // Don't clear expenseId - wait for project to be set first
+                            // The project navigation will happen first, then expense will be handled
                             return
                         }
                         
                         // Navigate to the project first
                         // DashboardView will handle showing the expense chat
                         await MainActor.run {
+                            // Ensure project is set and expenseId is preserved with correct screen type
                             navigationManager.setProjectId(projectId)
-                            // Keep expenseId set so DashboardView can show it
-                            print("✅ Expense loaded, navigating to project: \(projectId)")
+                            navigationManager.setExpenseId(expenseId, screenType: screenType)
+                            print("✅ Expense navigation: project \(projectId), expense \(expenseId), screenType: \(screenType)")
                         }
                     }
                 }
@@ -241,6 +244,16 @@ struct ProjectListView: View {
                             if let project = viewModel.project(for: id) {
                                 print("✅ Project found for navigation: \(project.name)")
                                 // Navigation will be handled by navigationDestination
+                                
+                                // If there's a pending expense navigation, ensure it's processed after project loads
+                                if let expenseId = navigationManager.activeExpenseId?.id {
+                                    let screenType = navigationManager.expenseScreenType ?? .detail
+                                    print("🔄 Project loaded, ensuring expense navigation is set: \(expenseId), screenType: \(screenType)")
+                                    // Re-set expenseId to trigger navigation in DashboardView
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        navigationManager.setExpenseId(expenseId, screenType: screenType)
+                                    }
+                                }
                             } else {
                                 print("⚠️ Project not found yet for ID: \(id)")
                                 // Clear the navigation if project not found
@@ -284,11 +297,20 @@ struct ProjectListView: View {
             CreateProjectView()
         }
         .onAppear {
+            
+            navigationManager.markProjectListLoaded()
+
             viewModel.fetchProjects()
             if role == .APPROVER {
                 loadTempApproverStatuses()
             }
             loadBusinessName()
+            
+            // Mark ProjectListView as ready for navigation
+            // Add delay to ensure navigation stack is fully set up
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                navigationManager.markProjectListLoaded()
+            }
             
             // Check and automatically unsuspend projects where suspendedDate has passed
             // Wait a bit for projects to load from the listener, then check
@@ -331,6 +353,12 @@ struct ProjectListView: View {
         .onChange(of: scenePhase) { oldPhase, newPhase in
             // Check project statuses when app becomes active
             if newPhase == .active && oldPhase != .active {
+                // Mark ProjectListView as ready when app becomes active
+                // This ensures navigation works when returning from background
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    navigationManager.markProjectListLoaded()
+                }
+                
                 Task {
                     // First check and unsuspend expired projects
                     await viewModel.checkAndUnsuspendExpiredProjects()

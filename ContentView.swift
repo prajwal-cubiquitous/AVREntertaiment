@@ -1,23 +1,20 @@
-//
-//  ContentView.swift
-//  AVREntertainment
-//
-//  Created by Prajwal S S Reddy on 6/25/25.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     @StateObject private var authService = FirebaseAuthService()
     @State private var isLoading = true
     @EnvironmentObject var navigationManager: NavigationManager
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
         Group {
             if isLoading {
                 SplashView()
                     .onAppear {
-                        // Simulate loading time for smooth UX
+                        // Mark root immediately when splash appears
+                        navigationManager.markRootLoaded()
+
+                        // Simulated loading animation
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                             withAnimation(DesignSystem.Animation.standardSpring) {
                                 isLoading = false
@@ -26,20 +23,30 @@ struct ContentView: View {
                     }
             } else {
                 mainContent
+                    .onAppear {
+                        // Mark root loaded again when main content becomes visible
+                        navigationManager.markRootLoaded()
+                    }
             }
         }
         .animation(DesignSystem.Animation.standardSpring, value: isLoading)
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserDidLogout"))) { _ in
             authService.signOut()
         }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active, !isLoading, authService.isAuthenticated {
+                navigationManager.markRootLoaded()
+            }
+        }
     }
     
+    // MAIN CONTENT ROUTER
     private var mainContent: some View {
         Group {
             if authService.isAuthenticated {
-                // Route based on user role
+                
                 if authService.isAdmin {
-                    // ADMIN: Email-based login, goes to AdminMainView
+                    
                     AdminMainView()
                         .environmentObject(authService)
                         .environmentObject(navigationManager)
@@ -47,61 +54,54 @@ struct ContentView: View {
                             insertion: .move(edge: .trailing).combined(with: .opacity),
                             removal: .move(edge: .leading).combined(with: .opacity)
                         ))
-                        .onAppear(){
-                            print("isUser \(authService.isUser)")
-                            print("isapprover \(authService.isApprover)")
-                            print("isadmin \(authService.isAdmin)")
-                            print("isautehnticated \(authService.isAuthenticated)")
+                        .onAppear {
+                            navigationManager.markRootLoaded()
                         }
-
-                }else if authService.isUser || authService.isApprover{
-                    // USER: OTP-based login, goes to ProjectListView
+                    
+                } else if authService.isUser || authService.isApprover {
+                    
                     if let currentUser = authService.currentUser {
+                        
                         ProjectListView(
                             phoneNumber: currentUser.phoneNumber,
                             role: currentUser.role,
                             customerId: authService.currentCustomerId
                         )
-                            .environmentObject(authService)
-                            .environmentObject(navigationManager)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .trailing).combined(with: .opacity),
-                                removal: .move(edge: .leading).combined(with: .opacity)
-                            ))
+                        .environmentObject(authService)
+                        .environmentObject(navigationManager)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
+                        .onAppear {
+                            navigationManager.markProjectListLoaded()
+                        }
+                        
                     } else {
                         AuthenticationView()
                             .environmentObject(authService)
                     }
+                    
                 } else {
-                    // Fallback to authentication if role is unclear
+                    
                     AuthenticationView()
                         .environmentObject(authService)
                         .transition(.asymmetric(
                             insertion: .move(edge: .leading).combined(with: .opacity),
                             removal: .move(edge: .trailing).combined(with: .opacity)
                         ))
-                        .onAppear(){
-                            print("isUser \(authService.isUser)")
-                            print("isapprover \(authService.isApprover)")
-                            print("isadmin \(authService.isAdmin)")
-                            print("isautehnticated \(authService.isAuthenticated)")
-                        }
                 }
+                
             } else {
-                // Not authenticated, show login
+                
                 AuthenticationView()
                     .environmentObject(authService)
                     .transition(.asymmetric(
                         insertion: .move(edge: .leading).combined(with: .opacity),
                         removal: .move(edge: .trailing).combined(with: .opacity)
                     ))
-                    .onAppear(){
-                        print("isUser \(authService.isUser)")
-                        print("isapprover \(authService.isApprover)")
-                        print("isadmin \(authService.isAdmin)")
-                        print("isautehnticated \(authService.isAuthenticated)")
-                    }
             }
+            
         }
         .animation(DesignSystem.Animation.standardSpring, value: authService.isAuthenticated)
         .animation(DesignSystem.Animation.standardSpring, value: authService.isAdmin)
@@ -110,11 +110,11 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Splash View
+
+// MARK: - Splash View (unchanged)
 private struct SplashView: View {
     var body: some View {
         ZStack {
-            // Background gradient (purple → blue)
             LinearGradient(
                 gradient: Gradient(colors: [
                     Color(red: 0.44, green: 0.37, blue: 1.0),
@@ -126,16 +126,14 @@ private struct SplashView: View {
             .ignoresSafeArea()
             
             VStack(spacing: 24) {
-                // Logo
                 Image("TracuraLogo")
                     .resizable()
                     .scaledToFit()
                     .frame(height: 130)
                     .shadow(radius: 8)
                 
-                // Title
                 Text("TRACURA")
-                    .font(.system(size: 54, weight: .bold, design: .default))
+                    .font(.system(size: 54, weight: .bold))
                     .kerning(2)
                     .foregroundStyle(
                         LinearGradient(
@@ -147,18 +145,12 @@ private struct SplashView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .shadow(color: Color.black.opacity(0.2), radius: 4, x: 0, y: 2)
                 
-                // Tagline
                 Text("Track. Approve. Control.")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.9))
-                    .padding(.top, 8)
             }
-            // Center vertically with spacing
-            .frame(maxHeight: .infinity)
             
-            // ProgressView fixed at bottom
             VStack {
                 Spacer()
                 ProgressView()
@@ -168,8 +160,4 @@ private struct SplashView: View {
             }
         }
     }
-}
-
-#Preview {
-    SplashView()
 }

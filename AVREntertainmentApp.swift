@@ -131,51 +131,99 @@ struct AVREntertainmentApp: App {
                     if newPhase == .background {
                         // App entered background - store state for cleanup
                         delegate.applicationDidEnterBackground(UIApplication.shared)
+                        // Don't reset flags - keep them so navigation works when returning
                     } else if newPhase == .inactive {
                         // App is about to terminate - attempt cleanup
                         if oldPhase == .background {
                             delegate.cleanupFCMTokenOnTermination()
                         }
                     }
+                    // Note: Views will mark themselves ready when becoming active via their own onChange handlers
                 }
-                .onReceive(NotificationCenter.default.publisher(for: Notification.Name("NavigateFromNotification"))) { notification in
+                .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateFromNotification"))) { (notification: Notification) in
                     if let userInfo = notification.userInfo,
                        let screen = userInfo["screen"] as? String {
                         
-                        if screen == "project_detail",
-                           let projectId = userInfo["projectId"] as? String {
-                            navigationManager.setProjectId(projectId)
-                        } else if screen == "chat_detail",
-                                  let chatId = userInfo["chatId"] as? String , let projectId = userInfo["projectId"] as? String{
-                            // Ensure project is set first so chat destination can resolve it
-                            navigationManager.setProjectId(projectId)
-                            navigationManager.setChatId(chatId)
-                        } else if (screen == "expert_detail" || screen == "expense_detail"),
-                                  let expenseId = userInfo["expenseId"] as? String,
-                                  let projectId = userInfo["projectId"] as? String {
-                            // Ensure project is set first so expense destination can resolve it
-                            navigationManager.setProjectId(projectId)
-                            navigationManager.setExpenseId(expenseId, screenType: .detail)
-                        }else if screen == "project_detail1",
-                                 let projectId = userInfo["projectId"] as? String {
-                                  navigationManager.setProjectId(projectId)
-                        }else if screen == "expense_chat",let expenseId = userInfo["expenseId"] as? String,
-                                 let projectId = userInfo["projectId"] as? String {
-                            navigationManager.setProjectId(projectId)
-                            navigationManager.setExpenseId(expenseId, screenType: .chat)
-                        } else if screen == "phase_detail",
-                                  let phaseId = userInfo["phaseId"] as? String,
-                                  let projectId = userInfo["projectId"] as? String {
-                            navigationManager.setProjectId(projectId)
-                            navigationManager.setPhaseId(phaseId)
-                        } else if screen == "request_detail",
-                                  let requestId = userInfo["requestId"] as? String,
-                                  let customerId = userInfo["customerId"] as? String {
-                            // For request detail, we need to find the project first
-                            // The request will be shown in the dashboard when project loads
-                            navigationManager.setRequestId(requestId)
-                            // Note: We'll need to load the request and find its project
-                            // This will be handled in DashboardView
+                        let projectId = userInfo["projectId"] as? String
+                        let chatId = userInfo["chatId"] as? String
+                        let expenseId = userInfo["expenseId"] as? String
+                        let phaseId = userInfo["phaseId"] as? String
+                        let requestId = userInfo["requestId"] as? String
+                        let customerId = userInfo["customerId"] as? String
+                        
+                        // Determine expense screen type
+                        let expenseScreenType: NavigationManager.ExpenseScreenType? = {
+                            if screen == "expense_chat" {
+                                return .chat
+                            } else if screen == "expense_detail" || screen == "expert_detail" {
+                                return .detail
+                            }
+                            return nil
+                        }()
+                        
+                        // Check if app and views are ready
+                        if navigationManager.readyState == .projectListLoaded || navigationManager.readyState == .fullyReady {
+                            // Views are ready, navigate immediately
+                            print("✅ Views ready, navigating immediately to: \(screen)")
+                            if screen == "project_detail" || screen == "project_detail1" {
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                }
+                            } else if screen == "chat_detail" {
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                }
+                                if let chatId = chatId {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        navigationManager.setChatId(chatId)
+                                    }
+                                }
+                            } else if screen == "expense_detail" || screen == "expert_detail" {
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                }
+                                if let expenseId = expenseId {
+                                    // Delay expense navigation to ensure project is fully loaded and DashboardView is ready
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                        navigationManager.setExpenseId(expenseId, screenType: .detail)
+                                    }
+                                }
+                            } else if screen == "expense_chat" {
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                }
+                                if let expenseId = expenseId {
+                                    // Delay expense chat navigation to ensure project is fully loaded and DashboardView is ready
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                        navigationManager.setExpenseId(expenseId, screenType: .chat)
+                                    }
+                                }
+                            } else if screen == "phase_detail" {
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                }
+                                if let phaseId = phaseId {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        navigationManager.setPhaseId(phaseId)
+                                    }
+                                }
+                            } else if screen == "request_detail" {
+                                if let requestId = requestId {
+                                    navigationManager.setRequestId(requestId)
+                                }
+                            }
+                        } else {
+                            // Views not ready, store for later
+                            print("⏳ Views not ready, storing navigation intent: \(screen)")
+                            navigationManager.storePendingNavigation(
+                                screen: screen,
+                                projectId: projectId,
+                                chatId: chatId,
+                                expenseId: expenseId,
+                                phaseId: phaseId,
+                                requestId: requestId,
+                                expenseScreenType: expenseScreenType
+                            )
                         }
                     }
                 }

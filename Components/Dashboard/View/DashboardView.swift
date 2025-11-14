@@ -360,6 +360,15 @@ struct DashboardView: View {
                     Text(project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? ""))
                         .font(.caption)
                         .foregroundColor(project?.isSuspended == true ? .red : .secondary)
+                    
+                    // Show suspension reason if project is suspended
+                    if project?.isSuspended == true, let reason = project?.suspensionReason, !reason.isEmpty {
+                        Text(reason)
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .lineLimit(1)
+                            .padding(.top, 2)
+                    }
                 }
             }
             
@@ -887,12 +896,34 @@ struct DashboardView: View {
                         endDate: tempApproverEndDate
                     )
                 } else {
-                    ProjectStatsCard(
-                        title: "Project Status",
-                        value: project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? "N/A"),
-                        icon: project?.isSuspended == true ? "pause.circle.fill" : "circle.fill",
-                        color: project?.isSuspended == true ? .red : (project?.statusType == .ACTIVE ? .green : .orange)
-                    )
+                    VStack(spacing: DesignSystem.Spacing.small) {
+                        ProjectStatsCard(
+                            title: "Project Status",
+                            value: project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? "N/A"),
+                            icon: project?.isSuspended == true ? "pause.circle.fill" : "circle.fill",
+                            color: project?.isSuspended == true ? .red : (project?.statusType == .ACTIVE ? .green : .orange)
+                        )
+                        
+                        // Show suspension reason if project is suspended
+                        if project?.isSuspended == true, let reason = project?.suspensionReason, !reason.isEmpty {
+                            HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                                
+                                Text(reason)
+                                    .font(DesignSystem.Typography.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(.horizontal, DesignSystem.Spacing.small)
+                            .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(DesignSystem.CornerRadius.small)
+                        }
+                    }
                 }
                 
                 TotalBudgetCard(viewModel: viewModel, stateManager: stateManager)
