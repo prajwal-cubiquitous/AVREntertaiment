@@ -77,7 +77,7 @@ struct ProjectCell: View {
                 HStack(spacing: DesignSystem.Spacing.small) {
                     // Show Suspended status if project is suspended, otherwise show normal status
                     if project.isSuspended == true {
-                        SuspendedStatusView(reason: project.suspensionReason)
+                        SuspendedStatusView(suspendedDate: project.suspendedDate)
                     } else {
                         StatusView(status: project.statusType)
                     }
@@ -240,28 +240,58 @@ struct StatusView: View {
     }
 }
 
-// A reusable view for the Suspended status tag with reason
+// A reusable view for the Suspended status tag with suspended date
 struct SuspendedStatusView: View {
-    let reason: String?
+    let suspendedDate: String?
+    
+    private var formattedDate: String {
+        guard let dateStr = suspendedDate, !dateStr.isEmpty else {
+            return "No date set"
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        guard let date = dateFormatter.date(from: dateStr) else {
+            return dateStr // Return original if parsing fails
+        }
+        
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .none
+        
+        return displayFormatter.string(from: date)
+    }
     
     var body: some View {
-        HStack(spacing: DesignSystem.Spacing.extraSmall) {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 8, height: 8)
-                .shadow(color: Color.red.opacity(0.3), radius: 2, x: 0, y: 1)
+        VStack(alignment: .trailing, spacing: 3) {
+            HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: Color.red.opacity(0.3), radius: 2, x: 0, y: 1)
+                
+                Text("SUSPENDED")
+                    .font(DesignSystem.Typography.caption1)
+                    .fontWeight(.semibold)
+            }
             
-            Text("SUSPENDED")
-                .font(DesignSystem.Typography.caption1)
-                .fontWeight(.semibold)
+            // Show suspended date if available
+            if let dateStr = suspendedDate, !dateStr.isEmpty {
+                Text(formattedDate)
+                    .font(DesignSystem.Typography.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.orange)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, DesignSystem.Spacing.small)
         .padding(.vertical, DesignSystem.Spacing.extraSmall)
         .background(
-            Capsule()
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.red.opacity(0.12))
                 .overlay(
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.red.opacity(0.3), lineWidth: 0.5)
                 )
         )
