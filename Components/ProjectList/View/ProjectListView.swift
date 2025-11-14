@@ -289,6 +289,14 @@ struct ProjectListView: View {
                 loadTempApproverStatuses()
             }
             loadBusinessName()
+            
+            // Check and automatically unsuspend projects where suspendedDate has passed
+            // Wait a bit for projects to load from the listener, then check
+            Task {
+                // Small delay to ensure projects are loaded from listener
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                await viewModel.checkAndUnsuspendExpiredProjects()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectUpdated"))) { _ in
             // Reload state manager when project is updated
@@ -324,6 +332,9 @@ struct ProjectListView: View {
             // Check project statuses when app becomes active
             if newPhase == .active && oldPhase != .active {
                 Task {
+                    // First check and unsuspend expired projects
+                    await viewModel.checkAndUnsuspendExpiredProjects()
+                    // Then check and update project statuses
                     await viewModel.checkAndUpdateProjectStatuses()
                 }
             }

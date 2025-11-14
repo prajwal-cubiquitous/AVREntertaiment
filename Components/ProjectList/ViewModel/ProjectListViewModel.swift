@@ -153,6 +153,95 @@ class ProjectListViewModel: ObservableObject {
     
     // MARK: - Project Status Update Based on Planned Date
     
+    /// Checks all suspended projects and automatically unsuspends them if suspendedDate is yesterday or earlier
+    func checkAndUnsuspendExpiredProjects() async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in checkAndUnsuspendExpiredProjects")
+            return
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+        
+        for project in projects {
+            // Only check projects that are currently suspended
+            guard let projectId = project.id,
+                  project.isSuspended == true,
+                  let suspendedDateStr = project.suspendedDate else {
+                continue
+            }
+            
+            // Parse the suspended date
+            guard let suspendedDate = dateFormatter.date(from: suspendedDateStr) else {
+                print("⚠️ Could not parse suspendedDate: \(suspendedDateStr) for project: \(projectId)")
+                continue
+            }
+            
+            let suspended = calendar.startOfDay(for: suspendedDate)
+            
+            // Check if suspended date is yesterday or earlier
+            if suspended <= yesterday {
+                do {
+                    // Get the project's planned date to determine the new status
+                    let projectDoc = try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .getDocument()
+                    
+                    guard let projectData = projectDoc.data(),
+                          let plannedDateStr = projectData["plannedDate"] as? String else {
+                        // If no planned date, default to LOCKED
+                        try await FirebasePathHelper.shared
+                            .projectDocument(customerId: customerId, projectId: projectId)
+                            .updateData([
+                                "isSuspended": false,
+                                "suspendedDate": NSNull(),
+                                "suspensionReason": NSNull(),
+                                "status": ProjectStatus.LOCKED.rawValue,
+                                "updatedAt": Timestamp()
+                            ])
+                        
+                        NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                        continue
+                    }
+                    
+                    // Determine new status based on planned date (same logic as updateProjectSuspension)
+                    let plannedDate = dateFormatter.date(from: plannedDateStr) ?? Date()
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    
+                    let newStatus: String
+                    if planned <= today {
+                        // If planned date is today or in the past, set to ACTIVE
+                        newStatus = ProjectStatus.ACTIVE.rawValue
+                    } else {
+                        // If planned date is in the future, set to LOCKED
+                        newStatus = ProjectStatus.LOCKED.rawValue
+                    }
+                    
+                    // Update project to unsuspend it
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData([
+                            "isSuspended": false,
+                            "suspendedDate": NSNull(),
+                            "suspensionReason": NSNull(),
+                            "status": newStatus,
+                            "updatedAt": Timestamp()
+                        ])
+                    
+                    print("✅ Automatically unsuspended project: \(projectId) - suspension date (\(suspendedDateStr)) has passed")
+                    
+                    // Post notification to refresh project list
+                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                } catch {
+                    print("❌ Error unsuspending project \(projectId): \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
     /// Checks all projects and updates status from LOCKED to ACTIVE/SUSPENDED based on planned date and phase timelines
     func checkAndUpdateProjectStatuses() async {
         guard let customerId = customerId else {
