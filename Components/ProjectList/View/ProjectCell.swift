@@ -75,7 +75,12 @@ struct ProjectCell: View {
                 Spacer(minLength: DesignSystem.Spacing.small)
                 
                 HStack(spacing: DesignSystem.Spacing.small) {
-                    StatusView(status: project.statusType)
+                    // Show Suspended status if project is suspended, otherwise show normal status
+                    if project.isSuspended == true {
+                        SuspendedStatusView(reason: project.suspensionReason)
+                    } else {
+                        StatusView(status: project.statusType)
+                    }
                     
                     // Temp Approver Status Indicator
                     if let tempStatus = tempApproverStatus {
@@ -140,11 +145,26 @@ struct ProjectCell: View {
                     
                     Spacer()
                     
-                    if project.endDate != nil && project.statusType == .ACTIVE {
+                    if project.endDate != nil && project.statusType == .ACTIVE && project.isSuspended != true {
                         Text(daysRemainingText)
                             .font(DesignSystem.Typography.caption2)
                             .foregroundColor(getDaysRemainingColor())
                     }
+                }
+                
+                // Show suspension reason if project is suspended
+                if project.isSuspended == true, let reason = project.suspensionReason, !reason.isEmpty {
+                    HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                        
+                        Text(reason)
+                            .font(DesignSystem.Typography.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                    }
+                    .padding(.top, DesignSystem.Spacing.extraSmall)
                 }
             }
         }
@@ -217,6 +237,35 @@ struct StatusView: View {
                 )
         )
         .foregroundColor(status.color.darker(by: 20))
+    }
+}
+
+// A reusable view for the Suspended status tag with reason
+struct SuspendedStatusView: View {
+    let reason: String?
+    
+    var body: some View {
+        HStack(spacing: DesignSystem.Spacing.extraSmall) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+                .shadow(color: Color.red.opacity(0.3), radius: 2, x: 0, y: 1)
+            
+            Text("SUSPENDED")
+                .font(DesignSystem.Typography.caption1)
+                .fontWeight(.semibold)
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small)
+        .padding(.vertical, DesignSystem.Spacing.extraSmall)
+        .background(
+            Capsule()
+                .fill(Color.red.opacity(0.12))
+                .overlay(
+                    Capsule()
+                        .stroke(Color.red.opacity(0.3), lineWidth: 0.5)
+                )
+        )
+        .foregroundColor(Color.red.darker(by: 20))
     }
 }
 

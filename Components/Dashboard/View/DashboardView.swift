@@ -216,10 +216,19 @@ struct DashboardView: View {
                                         HapticManager.selection()
                                     }
                                     
-                                    ActionMenuButton(icon: "plus.circle.fill", title: "Add Expense", color: Color.green) {
-                                        showingAddExpense = true
-                                        showingActionMenu = false
-                                        HapticManager.selection()
+                                    ActionMenuButton(
+                                        icon: "plus.circle.fill",
+                                        title: "Add Expense",
+                                        color: Color.green,
+                                        isDisabled: project?.isSuspended == true
+                                    ) {
+                                        if project?.isSuspended != true {
+                                            showingAddExpense = true
+                                            showingActionMenu = false
+                                            HapticManager.selection()
+                                        } else {
+                                            HapticManager.notification(.error)
+                                        }
                                     }
                                     
                                     if role == .ADMIN {
@@ -348,9 +357,9 @@ struct DashboardView: View {
                         lineLimit: 1
                     )
                     
-                    Text(project?.statusType.rawValue ?? "")
+                    Text(project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? ""))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(project?.isSuspended == true ? .red : .secondary)
                 }
             }
             
@@ -880,9 +889,9 @@ struct DashboardView: View {
                 } else {
                     ProjectStatsCard(
                         title: "Project Status",
-                        value: project?.statusType.rawValue ?? "N/A",
-                        icon: "circle.fill",
-                        color: project?.statusType == .ACTIVE ? .green : .orange
+                        value: project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? "N/A"),
+                        icon: project?.isSuspended == true ? "pause.circle.fill" : "circle.fill",
+                        color: project?.isSuspended == true ? .red : (project?.statusType == .ACTIVE ? .green : .orange)
                     )
                 }
                 
@@ -4061,6 +4070,7 @@ struct ActionMenuButton: View {
     let icon: String
     let title: String
     let color: Color
+    var isDisabled: Bool = false
     let action: () -> Void
     
     var body: some View {
@@ -4069,9 +4079,9 @@ struct ActionMenuButton: View {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(color.gradient)
+                        .fill(isDisabled ? Color.gray.gradient : color.gradient)
                         .frame(width: 40, height: 40)
-                        .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .shadow(color: (isDisabled ? Color.gray : color).opacity(0.3), radius: 4, x: 0, y: 2)
                     
                     Image(systemName: icon)
                         .font(.system(size: 16, weight: .semibold))
@@ -4082,7 +4092,7 @@ struct ActionMenuButton: View {
                 // Title
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.primary)
+                    .foregroundColor(isDisabled ? .secondary : .primary)
                 
                 Spacer()
             }
@@ -4097,8 +4107,10 @@ struct ActionMenuButton: View {
                     )
             )
             .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
+            .opacity(isDisabled ? 0.5 : 1.0)
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
         .frame(width: 200)
     }
 }

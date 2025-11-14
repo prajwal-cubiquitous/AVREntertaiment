@@ -276,13 +276,19 @@ struct ProjectDetailView: View {
     /// A prominent button at the bottom of the screen.
     private var addExpenseButton: some View {
         Button(action: {
+            if project.isSuspended == true {
+                HapticManager.notification(.error)
+                return
+            }
             HapticManager.impact(.medium)
             showingAddExpense = true
         }) {
-            Label("Add New Expense", systemImage: "plus")
+            Label(project.isSuspended == true ? "Project Suspended" : "Add New Expense", systemImage: project.isSuspended == true ? "pause.circle.fill" : "plus")
                 .font(DesignSystem.Typography.headline)
         }
         .primaryButton()
+        .disabled(project.isSuspended == true)
+        .opacity(project.isSuspended == true ? 0.6 : 1.0)
         .padding(DesignSystem.Spacing.medium)
         .background(
             .ultraThinMaterial,
