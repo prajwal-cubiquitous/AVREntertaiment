@@ -59,6 +59,9 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var expensesCount: Int = 0
     @Published var showDeleteConfirmation = false
     @Published var isDeleting = false
+    @Published var showStatusChangeConfirmation = false
+    @Published var pendingStatusChange: ProjectStatus?
+    @Published var statusChangeMessage: String = ""
     
     let project: Project
     private let db = Firestore.firestore()
@@ -408,6 +411,66 @@ class AdminProjectDetailViewModel: ObservableObject {
     }
     
     func updateProjectStatus(_ newStatus: ProjectStatus) {
+        // Check if dates will change and prepare confirmation message
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        var dateChanges: [String] = []
+        
+        // Check which dates will change based on new status
+        switch newStatus {
+        case .ACTIVE:
+            let planned = calendar.startOfDay(for: plannedDate)
+            if planned > today {
+                dateChanges.append("Planned Date")
+            }
+            
+        case .MAINTENANCE:
+            let handover = calendar.startOfDay(for: handoverDate)
+            if handover > today {
+                dateChanges.append("Handover Date")
+            }
+            
+        case .COMPLETED:
+            let handover = calendar.startOfDay(for: handoverDate)
+            if handover > today {
+                dateChanges.append("Handover Date")
+            }
+            let maintenance = calendar.startOfDay(for: maintenanceDate)
+            if maintenance > today {
+                dateChanges.append("Maintenance Date")
+            }
+            
+        default:
+            break
+        }
+        
+        // If dates will change, show confirmation alert
+        if !dateChanges.isEmpty {
+            let dateList = dateChanges.joined(separator: " and ")
+            statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to today's date. Do you want to continue?"
+            pendingStatusChange = newStatus
+            showStatusChangeConfirmation = true
+        } else {
+            // No date changes, proceed directly
+            performStatusUpdate(newStatus)
+        }
+    }
+    
+    func confirmStatusChange() {
+        guard let newStatus = pendingStatusChange else { return }
+        performStatusUpdate(newStatus)
+        pendingStatusChange = nil
+        showStatusChangeConfirmation = false
+    }
+    
+    func cancelStatusChange() {
+        pendingStatusChange = nil
+        showStatusChangeConfirmation = false
+        statusChangeMessage = ""
+    }
+    
+    private func performStatusUpdate(_ newStatus: ProjectStatus) {
         Task {
             guard let customerId = customerId, let projectId = project.id else {
                 errorMessage = "Customer ID or Project ID not found."
@@ -416,11 +479,74 @@ class AdminProjectDetailViewModel: ObservableObject {
             }
             
             do {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "dd/MM/yyyy"
+                
+                let calendar = Calendar.current
+                let today = calendar.startOfDay(for: Date())
+                
+                var updateData: [String: Any] = [
+                    "status": newStatus.rawValue,
+                    "updatedAt": Timestamp()
+                ]
+                
+                var updatedPlannedDate = plannedDate
+                var updatedHandoverDate = handoverDate
+                var updatedMaintenanceDate = maintenanceDate
+                
+                // Adjust dates based on new status
+                switch newStatus {
+                case .ACTIVE:
+                    // If plannedDate > current date, set plannedDate = current date
+                    let planned = calendar.startOfDay(for: plannedDate)
+                    if planned > today {
+                        updatedPlannedDate = today
+                        updateData["plannedDate"] = dateFormatter.string(from: today)
+                    }
+                    
+                case .MAINTENANCE:
+                    // If handoverDate > current date, set handoverDate = current date
+                    let handover = calendar.startOfDay(for: handoverDate)
+                    if handover > today {
+                        updatedHandoverDate = today
+                        updateData["handoverDate"] = dateFormatter.string(from: today)
+                    }
+                    
+                case .COMPLETED:
+                    // If handoverDate > current date, set handoverDate = current date
+                    let handover = calendar.startOfDay(for: handoverDate)
+                    if handover > today {
+                        updatedHandoverDate = today
+                        updateData["handoverDate"] = dateFormatter.string(from: today)
+                    }
+                    
+                    // If maintenanceDate > current date, set maintenanceDate = current date
+                    let maintenance = calendar.startOfDay(for: maintenanceDate)
+                    if maintenance > today {
+                        updatedMaintenanceDate = today
+                        updateData["maintenanceDate"] = dateFormatter.string(from: today)
+                    }
+                    
+                default:
+                    break
+                }
+                
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
-                    .updateData(["status": newStatus.rawValue])
+                    .updateData(updateData)
                 
+                // Update local state
                 projectStatus = newStatus.rawValue
+                if updatedPlannedDate != plannedDate {
+                    plannedDate = updatedPlannedDate
+                }
+                if updatedHandoverDate != handoverDate {
+                    handoverDate = updatedHandoverDate
+                }
+                if updatedMaintenanceDate != maintenanceDate {
+                    maintenanceDate = updatedMaintenanceDate
+                }
+                
                 showSuccess = true
                 
                 // Notify that project was updated

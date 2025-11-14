@@ -75,6 +75,16 @@ struct AdminProjectDetailView: View {
         } message: {
             Text("Are you sure you want to delete this project? This action cannot be undone.")
         }
+        .alert("Confirm Status Change", isPresented: $viewModel.showStatusChangeConfirmation) {
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelStatusChange()
+            }
+            Button("Confirm", role: .none) {
+                viewModel.confirmStatusChange()
+            }
+        } message: {
+            Text(viewModel.statusChangeMessage)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ProjectDeleted"))) { _ in
             dismiss()
         }
