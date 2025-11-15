@@ -956,7 +956,13 @@ struct DashboardView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: DesignSystem.Spacing.medium) {
-                if let tempApproverName = tempApproverName {
+                // Show suspended status card if project is suspended (priority over temp approver)
+                if project?.isSuspended == true {
+                    SuspendedProjectStatsCard(
+                        suspendedDate: project?.suspendedDate,
+                        suspensionReason: project?.suspensionReason
+                    )
+                } else if let tempApproverName = tempApproverName {
                     TempApproverStatsCard(
                         approverName: tempApproverName,
                         phoneNumber: tempApproverPhoneNumber ?? "",
@@ -964,30 +970,12 @@ struct DashboardView: View {
                         endDate: tempApproverEndDate
                     )
                 } else {
-                    VStack(spacing: DesignSystem.Spacing.small) {
-                        ProjectStatsCard(
-                            title: "Project Status",
-                            value: project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? "N/A"),
-                            icon: project?.isSuspended == true ? "pause.circle.fill" : "circle.fill",
-                            color: project?.isSuspended == true ? .red : (project?.statusType == .ACTIVE ? .green : .orange)
-                        )
-                        
-                        // Show suspension reason if project is suspended
-                        if project?.isSuspended == true, let reason = project?.suspensionReason, !reason.isEmpty {
-                            HStack(spacing: DesignSystem.Spacing.extraSmall) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.caption2)
-                                    .foregroundColor(.orange)
-                                
-                                TruncatedSuspensionReasonView(reason: reason)
-                            }
-                            .padding(.horizontal, DesignSystem.Spacing.small)
-                            .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(DesignSystem.CornerRadius.small)
-                        }
-                    }
+                    ProjectStatsCard(
+                        title: "Project Status",
+                        value: project?.statusType.rawValue ?? "N/A",
+                        icon: "circle.fill",
+                        color: project?.statusType == .ACTIVE ? .green : .orange
+                    )
                 }
                 
                 TotalBudgetCard(viewModel: viewModel, stateManager: stateManager)
@@ -4034,6 +4022,97 @@ struct ProjectStatsCard: View {
         .padding(DesignSystem.Spacing.medium)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 100)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+}
+
+// MARK: - Suspended Project Stats Card
+struct SuspendedProjectStatsCard: View {
+    let suspendedDate: String?
+    let suspensionReason: String?
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }
+    
+    private var displayDate: String? {
+        guard let suspendedDate = suspendedDate else { return nil }
+        // If it's already in the correct format, return as is
+        if let _ = dateFormatter.date(from: suspendedDate) {
+            return suspendedDate
+        }
+        // Otherwise try to parse and format
+        return suspendedDate
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Top row: Icon and Status
+            HStack(spacing: 6) {
+                Image(systemName: "pause.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.red)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Spacer()
+                
+                // Status badge
+                Text("SUSPENDED")
+                    .font(.system(size: 10))
+                    .fontWeight(.semibold)
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.red.opacity(0.15))
+                    .cornerRadius(4)
+            }
+            
+            // Content
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Project Status")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.primary)
+                
+                Text("SUSPENDED")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.red)
+                    .lineLimit(1)
+                
+                // Suspended date
+                if let date = displayDate {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                        Text("Since: \(date)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                // Suspension reason - using TruncatedSuspensionReasonView for better handling
+                if let reason = suspensionReason, !reason.isEmpty {
+                    HStack(alignment: .top, spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(.orange)
+                            .padding(.top, 1)
+                        
+                        TruncatedSuspensionReasonView(reason: reason)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: 100)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
