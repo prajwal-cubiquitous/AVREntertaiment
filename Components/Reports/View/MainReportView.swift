@@ -696,7 +696,7 @@ struct MainReportView: View {
             }
             
             content()
-                .frame(height: 160)
+                .frame(minHeight: 200, maxHeight: 300)
                 .accessibilityElement(children: .contain)
         }
         .padding(DesignSystem.Spacing.medium)
@@ -749,14 +749,14 @@ struct MainReportView: View {
                     .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax)
                     .chartYAxis {
-                        AxisMarks(position: .leading) { value in
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                 .foregroundStyle(.quaternary)
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text(formatChartValue(v))
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.primary)
                                 }
                             }
                         }
@@ -764,7 +764,8 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 50)
+                    .frame(width: 60)
+                    .padding(.trailing, 4)
 
                     // -----------------------------
                     // SCROLLABLE CHART
@@ -822,12 +823,16 @@ struct MainReportView: View {
                             .chartYAxis(.hidden)
                             .chartYScale(domain: 0...yAxisMax)
                             .chartXAxis {
-                                AxisMarks() { value in
+                                AxisMarks(values: .automatic(desiredCount: 6)) { value in
                                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                         .foregroundStyle(.quaternary)
-                                    AxisValueLabel()
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
+                                    AxisValueLabel {
+                                        if let month = value.as(String.self) {
+                                            Text(month)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
                                 }
                             }
                             .chartPlotStyle { plot in
@@ -835,10 +840,11 @@ struct MainReportView: View {
                             }
                             .frame(
                                 width: max(CGFloat(viewModel.costTrendData.count) * 60,
-                                           geometry.size.width - 50),
+                                           geometry.size.width - 60),
                                 height: geometry.size.height
                             )
-                            .padding(.bottom, 25)
+                            .padding(.bottom, 35)
+                            .padding(.top, 10)
                             
                             // Tooltip overlay
                             if let selectedMonth = selectedCostTrendMonth,
@@ -872,12 +878,12 @@ struct MainReportView: View {
                                     }
                                     .position(
                                         x: xPosition,
-                                        y: 10
+                                        y: 20
                                     )
                                 }
                                 .frame(
                                     width: max(CGFloat(viewModel.costTrendData.count) * 60,
-                                               geometry.size.width - 50),
+                                               geometry.size.width - 60),
                                     height: geometry.size.height
                                 )
                             }
@@ -886,7 +892,8 @@ struct MainReportView: View {
                 }
             }
         }
-        .frame(height: 160) // Match the chart card height
+        .frame(minHeight: 200, maxHeight: 250)
+        .padding(.vertical, 8)
     }
     
     // Helper function to format chart axis values
@@ -945,14 +952,14 @@ struct MainReportView: View {
                     .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax, type: .linear)
                     .chartYAxis {
-                        AxisMarks(position: .leading) { value in
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                 .foregroundStyle(.quaternary)
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text(formatChartValue(v))
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.primary)
                                 }
                             }
                         }
@@ -960,8 +967,9 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 50)
+                    .frame(width: 60)
                     .frame(height: geometry.size.height)
+                    .padding(.trailing, 4)
                     
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
@@ -1002,20 +1010,21 @@ struct MainReportView: View {
                                 "Budget": Color.blue,
                                 "Actual": Color.green
                             ])
-                            .chartLegend(position: .bottom)
+                            .chartLegend(position: .bottom, alignment: .center)
                             .chartPlotStyle { plot in
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50))
-                            .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60))
+                            .padding(.bottom, 40) // Add padding to prevent scroll indicator from covering labels
+                            .padding(.top, 10)
                             
                             // Tooltip overlay
                             if let selectedStage = selectedStageForTooltip,
                                let selectedData = viewModel.stageBudgetData.first(where: { $0.stage == selectedStage }),
                                let stageIndex = viewModel.stageBudgetData.firstIndex(where: { $0.stage == selectedStage }) {
                                 GeometryReader { tooltipGeometry in
-                                    let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50)
+                                    let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60)
                                     let dataCount = CGFloat(viewModel.stageBudgetData.count)
                                     let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
                                     
@@ -1049,11 +1058,11 @@ struct MainReportView: View {
                                     }
                                     .position(
                                         x: xPosition,
-                                        y: 10
+                                        y: 20
                                     )
                                 }
                                 .frame(
-                                    width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50),
+                                    width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60),
                                     height: geometry.size.height
                                 )
                             }
@@ -1073,7 +1082,7 @@ struct MainReportView: View {
     }
     
     private var stageBudgetXAxis: some AxisContent {
-        AxisMarks(values: .automatic) { value in
+        AxisMarks(values: .automatic(desiredCount: 10)) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                 .foregroundStyle(.quaternary)
             AxisValueLabel {
@@ -1085,6 +1094,7 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
+                    .font(.system(size: 11, weight: .medium))
                 }
             }
         }
@@ -1258,20 +1268,21 @@ struct MainReportView: View {
                                 "Budget": Color.blue,
                                 "Actual": Color.green
                             ])
-                            .chartLegend(position: .bottom)
+                            .chartLegend(position: .bottom, alignment: .center)
                             .chartPlotStyle { plot in
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50))
-                            .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60))
+                            .padding(.bottom, 40) // Add padding to prevent scroll indicator from covering labels
+                            .padding(.top, 10)
                             
                             // Tooltip overlay
                             if let selectedProject = selectedProjectForTooltip,
                                let selectedData = viewModel.projectWiseData.first(where: { $0.project == selectedProject }),
                                let projectIndex = viewModel.projectWiseData.firstIndex(where: { $0.project == selectedProject }) {
                                 GeometryReader { tooltipGeometry in
-                                    let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50)
+                                    let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60)
                                     let dataCount = CGFloat(viewModel.projectWiseData.count)
                                     let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
                                     
@@ -1305,11 +1316,11 @@ struct MainReportView: View {
                                     }
                                     .position(
                                         x: xPosition,
-                                        y: 10
+                                        y: 20
                                     )
                                 }
                                 .frame(
-                                    width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50),
+                                    width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60),
                                     height: geometry.size.height
                                 )
                             }
@@ -1329,7 +1340,7 @@ struct MainReportView: View {
     }
     
     private var projectWiseXAxis: some AxisContent {
-        AxisMarks(values: .automatic) { value in
+        AxisMarks(values: .automatic(desiredCount: 10)) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                 .foregroundStyle(.quaternary)
             AxisValueLabel {
@@ -1341,6 +1352,7 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
+                    .font(.system(size: 11, weight: .medium))
                 }
             }
         }
@@ -1459,16 +1471,33 @@ struct MainReportView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic) { _ in
-                        AxisValueLabel()
+                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel {
+                            if let project = value.as(String.self) {
+                                Text(project)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.primary)
+                            }
+                        }
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel {
+                            if let doubleValue = value.as(Double.self) {
+                                Text(formatChartValue(doubleValue))
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.primary)
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
                 .chartForegroundStyleScale([
                     "Budget": Color.gray,
                     "Actual": Color.green
@@ -1502,28 +1531,34 @@ struct MainReportView: View {
             }
             .chartYSelection(value: $selectedSpendCategory)
             .chartXAxis {
-                AxisMarks(position: .bottom) { value in
+                AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
                     AxisValueLabel {
                         if let doubleValue = value.as(Double.self) {
                             Text(formatChartValue(doubleValue))
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading) { value in
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 10)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
-                    AxisValueLabel()
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    AxisValueLabel {
+                        if let category = value.as(String.self) {
+                            Text(category)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
                 }
             }
-            .frame(height: CGFloat(viewModel.subCategorySpendData.count) * 50 + 40)
+            .frame(minHeight: CGFloat(max(viewModel.subCategorySpendData.count, 3)) * 50 + 60)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
             
             // Tooltip overlay
             if let selectedCategory = selectedSpendCategory,
@@ -1560,11 +1595,11 @@ struct MainReportView: View {
                             .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
                     }
                     .position(
-                        x: min(estimatedBarEndX + 60, geometry.size.width - 60),
+                        x: min(estimatedBarEndX + 70, geometry.size.width - 80),
                         y: yPosition
                     )
                 }
-                .frame(height: CGFloat(viewModel.subCategorySpendData.count) * 50 + 40)
+                .frame(minHeight: CGFloat(max(viewModel.subCategorySpendData.count, 3)) * 50 + 60)
             }
         }
     }
@@ -1606,19 +1641,37 @@ struct MainReportView: View {
             }
         }
         .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let progress = value.as(Double.self) {
+                        Text("\(Int(progress))%")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let overrun = value.as(Double.self) {
+                        Text("\(Int(overrun))%")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
         .chartXAxisLabel("Stage Progress (%)")
+            .font(.system(size: 12, weight: .medium))
         .chartYAxisLabel("Cost Overrun (%)")
+            .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
     }
     
     // Burn Rate Chart
@@ -1679,29 +1732,35 @@ struct MainReportView: View {
             }
             .chartXSelection(value: $selectedMonth)
             .chartXAxis {
-                AxisMarks(values: .automatic) { value in
+                AxisMarks(values: .automatic(desiredCount: 6)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
-                    AxisValueLabel()
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    AxisValueLabel {
+                        if let month = value.as(String.self) {
+                            Text(month)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading) { value in
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
                     AxisValueLabel {
                         if let intValue = value.as(Int.self) {
                             Text("\(intValue)")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
             }
             .chartYScale(domain: .automatic(includesZero: true))
-            .frame(height: 200)
+            .frame(minHeight: 220, maxHeight: 250)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
             
             // Tooltip overlay
             if let selectedMonth = selectedMonth,
@@ -1734,10 +1793,10 @@ struct MainReportView: View {
                     }
                     .position(
                         x: xPosition,
-                        y: 10
+                        y: 20
                     )
                 }
-                .frame(height: 200)
+                .frame(minHeight: 220, maxHeight: 250)
             }
         }
     }
@@ -1776,28 +1835,34 @@ struct MainReportView: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic) { value in
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                AxisValueLabel {
+                    if let stage = value.as(String.self) {
+                        Text(stage)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { value in
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(.quaternary)
                 AxisValueLabel {
                     if let doubleValue = value.as(Double.self) {
                         Text("\(Int(doubleValue))%")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
                     }
                 }
             }
         }
         .chartYScale(domain: 0...100)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
         .chartForegroundStyleScale([
             "In Progress": Color.blue,
             "Handover": Color.yellow,
@@ -1831,28 +1896,34 @@ struct MainReportView: View {
             }
             .chartYSelection(value: $selectedCategory)
             .chartXAxis {
-                AxisMarks(position: .bottom) { value in
+                AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
                     AxisValueLabel {
                         if let intValue = value.as(Int.self) {
                             Text("\(intValue)")
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
                         }
                     }
                 }
             }
             .chartYAxis {
-                AxisMarks(position: .leading) { value in
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 10)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.quaternary)
-                    AxisValueLabel()
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                    AxisValueLabel {
+                        if let category = value.as(String.self) {
+                            Text(category)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
                 }
             }
-            .frame(height: CGFloat(viewModel.subCategoryActivityData.count) * 50 + 40)
+            .frame(minHeight: CGFloat(max(viewModel.subCategoryActivityData.count, 3)) * 50 + 60)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
             
             // Tooltip overlay
             if let selectedCategory = selectedCategory,
@@ -1889,11 +1960,11 @@ struct MainReportView: View {
                             .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
                     }
                     .position(
-                        x: min(estimatedBarEndX + 60, geometry.size.width - 60),
+                        x: min(estimatedBarEndX + 70, geometry.size.width - 80),
                         y: yPosition
                     )
                 }
-                .frame(height: CGFloat(viewModel.subCategoryActivityData.count) * 50 + 40)
+                .frame(minHeight: CGFloat(max(viewModel.subCategoryActivityData.count, 3)) * 50 + 60)
             }
         }
     }
@@ -1911,19 +1982,37 @@ struct MainReportView: View {
             }
         }
         .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let days = value.as(Double.self) {
+                        Text("\(Int(days))")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let cost = value.as(Double.self) {
+                        Text(String(format: "%.1f", cost))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
         }
         .chartXAxisLabel("Delay Days")
+            .font(.system(size: 12, weight: .medium))
         .chartYAxisLabel("Extra Cost (₹ Cr)")
+            .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
     }
     
     // Suspension Reason Chart
