@@ -120,11 +120,21 @@ struct ProjectDetailView: View {
                             .font(.title3)
                             .foregroundColor(.primary)
                         
-                        if notificationViewModel.hasNotifications {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 10, height: 10)
+                        if notificationViewModel.unreadNotificationCount > 0 {
+                            Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
+                                .padding(.vertical, 2)
+                                .background(Color.red)
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.white, lineWidth: 1.5)
+                                )
                                 .offset(x: 8, y: -8)
+                                .minimumScaleFactor(0.5)
+                                .lineLimit(1)
                         }
                     }
                 }

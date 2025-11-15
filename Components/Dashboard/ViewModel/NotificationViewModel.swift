@@ -239,8 +239,15 @@ class NotificationViewModel: ObservableObject {
     
     // MARK: - Computed Properties
     
+    /// Total count of all notification types (for internal use)
     var totalNotifications: Int {
         pendingApprovalsCount + unreadMessagesCount + expenseChatUpdatesCount + savedNotifications.count
+    }
+    
+    /// Unread notification count for badge display (only FCM notifications)
+    /// This should be used for the notification badge to avoid double-counting
+    var unreadNotificationCount: Int {
+        savedNotifications.count
     }
     
     var hasNotifications: Bool {
