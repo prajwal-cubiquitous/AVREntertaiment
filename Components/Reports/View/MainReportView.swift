@@ -1169,6 +1169,7 @@ struct MainReportView: View {
     
     // Project-wise Budget vs Actual Chart
     @State private var selectedProjectName: String? = nil
+    @State private var selectedProjectForTooltip: String? = nil
     
     private var projectWiseBudgetChart: some View {
         // Calculate Y-axis max value
@@ -1182,80 +1183,140 @@ struct MainReportView: View {
             yAxisMax = maxValue + padding
         }
         
-        return GeometryReader { geometry in
-            HStack(alignment: .top, spacing: 0) {
-                // -----------------------------
-                // FIXED Y-AXIS
-                // -----------------------------
-                Chart {
-                    ForEach(viewModel.projectWiseData, id: \.project) { data in
-                        BarMark(
-                            x: .value("Project", data.project),
-                            y: .value("Amount", max(data.budget, data.actual))
-                        )
-                        .foregroundStyle(.clear) // Invisible, just for axis calculation
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYScale(domain: 0...yAxisMax, type: .linear)
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatChartValue(v))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartPlotStyle { plot in
-                    plot.frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .frame(width: 50)
-                .frame(height: geometry.size.height)
-                
-                // -----------------------------
-                // SCROLLABLE CHART CONTENT
-                // -----------------------------
-                ScrollView(.horizontal, showsIndicators: true) {
+        return ZStack(alignment: .top) {
+            GeometryReader { geometry in
+                HStack(alignment: .top, spacing: 0) {
+                    // -----------------------------
+                    // FIXED Y-AXIS
+                    // -----------------------------
                     Chart {
                         ForEach(viewModel.projectWiseData, id: \.project) { data in
                             BarMark(
                                 x: .value("Project", data.project),
-                                y: .value("Amount", data.budget)
+                                y: .value("Amount", max(data.budget, data.actual))
                             )
-                            .foregroundStyle(Color.blue)
-                            .position(by: .value("Type", "Budget"))
-                            
-                            BarMark(
-                                x: .value("Project", data.project),
-                                y: .value("Amount", data.actual)
-                            )
-                            .foregroundStyle(Color.green)
-                            .position(by: .value("Type", "Actual"))
+                            .foregroundStyle(.clear) // Invisible, just for axis calculation
                         }
                     }
-                    .chartXAxis {
-                        projectWiseXAxis
-                    }
-                    .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                    .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax, type: .linear)
-                    .chartForegroundStyleScale([
-                        "Budget": Color.blue,
-                        "Actual": Color.green
-                    ])
-                    .chartLegend(position: .bottom)
+                    .chartYAxis {
+                        AxisMarks(position: .leading) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel {
+                                if let v = value.as(Double.self) {
+                                    Text(formatChartValue(v))
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                    .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50))
-                    .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                    .frame(width: 50)
+                    .frame(height: geometry.size.height)
+                    
+                    // -----------------------------
+                    // SCROLLABLE CHART CONTENT
+                    // -----------------------------
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        ZStack(alignment: .top) {
+                            Chart {
+                                ForEach(viewModel.projectWiseData, id: \.project) { data in
+                                    BarMark(
+                                        x: .value("Project", data.project),
+                                        y: .value("Amount", data.budget)
+                                    )
+                                    .foregroundStyle(selectedProjectForTooltip == data.project ? Color.blue.opacity(0.8) : Color.blue)
+                                    .position(by: .value("Type", "Budget"))
+                                    
+                                    BarMark(
+                                        x: .value("Project", data.project),
+                                        y: .value("Amount", data.actual)
+                                    )
+                                    .foregroundStyle(selectedProjectForTooltip == data.project ? Color.green.opacity(0.8) : Color.green)
+                                    .position(by: .value("Type", "Actual"))
+                                }
+                                
+                                // Show rule mark for selected project
+                                if let selectedProject = selectedProjectForTooltip {
+                                    RuleMark(x: .value("Project", selectedProject))
+                                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                }
+                            }
+                            .chartXSelection(value: $selectedProjectForTooltip)
+                            .chartXAxis {
+                                projectWiseXAxis
+                            }
+                            .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                            .chartYScale(domain: 0...yAxisMax, type: .linear)
+                            .chartForegroundStyleScale([
+                                "Budget": Color.blue,
+                                "Actual": Color.green
+                            ])
+                            .chartLegend(position: .bottom)
+                            .chartPlotStyle { plot in
+                                plot.frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                            // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
+                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50))
+                            .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                            
+                            // Tooltip overlay
+                            if let selectedProject = selectedProjectForTooltip,
+                               let selectedData = viewModel.projectWiseData.first(where: { $0.project == selectedProject }),
+                               let projectIndex = viewModel.projectWiseData.firstIndex(where: { $0.project == selectedProject }) {
+                                GeometryReader { tooltipGeometry in
+                                    let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50)
+                                    let dataCount = CGFloat(viewModel.projectWiseData.count)
+                                    let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(selectedProject)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 6) {
+                                            Text("Budget (₹ Cr):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.1f", selectedData.budget / 10000000.0))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                        HStack(spacing: 6) {
+                                            Text("Actual (₹ Cr):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.1f", selectedData.actual / 10000000.0))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(.systemBackground))
+                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                    }
+                                    .position(
+                                        x: xPosition,
+                                        y: 10
+                                    )
+                                }
+                                .frame(
+                                    width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50),
+                                    height: geometry.size.height
+                                )
+                            }
+                        }
+                    }
+                    .scrollIndicators(.visible)
                 }
-                .scrollIndicators(.visible)
             }
         }
         .frame(height: 200) // Increased height to accommodate rotated labels
@@ -1418,25 +1479,92 @@ struct MainReportView: View {
     }
     
     // Sub-Category Spend Chart
+    @State private var selectedSpendCategory: String? = nil
+    
     private var subCategorySpendChart: some View {
-        Chart {
-            ForEach(viewModel.subCategorySpendData, id: \.category) { data in
-                BarMark(
-                    x: .value("Spend", data.value),
-                    y: .value("Category", data.category)
-                )
-                .foregroundStyle(Color.cyan)
+        ZStack(alignment: .trailing) {
+            Chart {
+                ForEach(viewModel.subCategorySpendData, id: \.category) { data in
+                    BarMark(
+                        x: .value("Spend", data.value),
+                        y: .value("Category", data.category)
+                    )
+                    .foregroundStyle(selectedSpendCategory == data.category ? Color.cyan.opacity(0.8) : Color.cyan)
+                }
+                
+                // Show rule mark for selected category
+                if let selectedCategory = selectedSpendCategory,
+                   let selectedData = viewModel.subCategorySpendData.first(where: { $0.category == selectedCategory }) {
+                    RuleMark(y: .value("Category", selectedCategory))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            .chartYSelection(value: $selectedSpendCategory)
+            .chartXAxis {
+                AxisMarks(position: .bottom) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(formatChartValue(doubleValue))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel()
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel()
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(height: CGFloat(viewModel.subCategorySpendData.count) * 50 + 40)
+            
+            // Tooltip overlay
+            if let selectedCategory = selectedSpendCategory,
+               let selectedData = viewModel.subCategorySpendData.first(where: { $0.category == selectedCategory }),
+               let categoryIndex = viewModel.subCategorySpendData.firstIndex(where: { $0.category == selectedCategory }) {
+                GeometryReader { geometry in
+                    let barHeight = 50.0
+                    let yPosition = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
+                    
+                    // Calculate x position based on the bar's end (spend value)
+                    // We need to estimate the bar width based on the spend relative to max spend
+                    let maxSpend = viewModel.subCategorySpendData.map { $0.value }.max() ?? 1
+                    let barWidthRatio = Double(selectedData.value) / Double(maxSpend)
+                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50 // Approximate chart area width
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(selectedCategory)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            Text("Spend (₹ Cr):")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: min(estimatedBarEndX + 60, geometry.size.width - 60),
+                        y: yPosition
+                    )
+                }
+                .frame(height: CGFloat(viewModel.subCategorySpendData.count) * 50 + 40)
             }
         }
     }
@@ -1680,25 +1808,92 @@ struct MainReportView: View {
     }
     
     // Sub-Category Activity Chart
+    @State private var selectedCategory: String? = nil
+    
     private var subCategoryActivityChart: some View {
-        Chart {
-            ForEach(viewModel.subCategoryActivityData, id: \.category) { data in
-                BarMark(
-                    x: .value("Count", data.count),
-                    y: .value("Category", data.category)
-                )
-                .foregroundStyle(Color.blue)
+        ZStack(alignment: .trailing) {
+            Chart {
+                ForEach(viewModel.subCategoryActivityData, id: \.category) { data in
+                    BarMark(
+                        x: .value("Count", data.count),
+                        y: .value("Category", data.category)
+                    )
+                    .foregroundStyle(selectedCategory == data.category ? Color.blue.opacity(0.8) : Color.blue)
+                }
+                
+                // Show rule mark for selected category
+                if let selectedCategory = selectedCategory,
+                   let selectedData = viewModel.subCategoryActivityData.first(where: { $0.category == selectedCategory }) {
+                    RuleMark(y: .value("Category", selectedCategory))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            .chartYSelection(value: $selectedCategory)
+            .chartXAxis {
+                AxisMarks(position: .bottom) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel()
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel()
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(height: CGFloat(viewModel.subCategoryActivityData.count) * 50 + 40)
+            
+            // Tooltip overlay
+            if let selectedCategory = selectedCategory,
+               let selectedData = viewModel.subCategoryActivityData.first(where: { $0.category == selectedCategory }),
+               let categoryIndex = viewModel.subCategoryActivityData.firstIndex(where: { $0.category == selectedCategory }) {
+                GeometryReader { geometry in
+                    let barHeight = 50.0
+                    let yPosition = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
+                    
+                    // Calculate x position based on the bar's end (count value)
+                    // We need to estimate the bar width based on the count relative to max count
+                    let maxCount = viewModel.subCategoryActivityData.map { $0.count }.max() ?? 1
+                    let barWidthRatio = Double(selectedData.count) / Double(maxCount)
+                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50 // Approximate chart area width
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(selectedCategory)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            Text("Expenses:")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Text("\(selectedData.count)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: min(estimatedBarEndX + 60, geometry.size.width - 60),
+                        y: yPosition
+                    )
+                }
+                .frame(height: CGFloat(viewModel.subCategoryActivityData.count) * 50 + 40)
             }
         }
     }

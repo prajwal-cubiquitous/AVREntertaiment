@@ -282,6 +282,12 @@ class MainReportViewModel: ObservableObject {
             await calculateActiveProjects()
             await calculateStageProgressStatus()
             
+            // Calculate initial sub-category activity
+            await calculateSubCategoryActivity()
+            
+            // Calculate initial sub-category spend
+            await calculateSubCategorySpend()
+            
             // Load sample chart data (for now)
             loadSampleChartData()
             
@@ -663,13 +669,7 @@ class MainReportViewModel: ObservableObject {
         
         stageAcrossProjectsData = []
         
-        subCategorySpendData = [
-            SubCategorySpendData(category: "Civil Works", value: 58.0),
-            SubCategorySpendData(category: "Labour", value: 34.0),
-            SubCategorySpendData(category: "Steel", value: 28.0),
-            SubCategorySpendData(category: "Cement", value: 24.0),
-            SubCategorySpendData(category: "MEP", value: 19.0)
-        ]
+        // subCategorySpendData is now calculated from real data in calculateSubCategorySpend()
         
         statusCostData = [
             StatusCostData(status: "Active", value: 72.0),
@@ -694,13 +694,7 @@ class MainReportViewModel: ObservableObject {
         
         // activeProjectsData is now calculated from real data in calculateActiveProjects()
         // stageProgressData is now calculated from real data in calculateStageProgressStatus()
-        
-        subCategoryActivityData = [
-            SubCategoryActivityData(category: "Labour", count: 84),
-            SubCategoryActivityData(category: "MEP Works", count: 52),
-            SubCategoryActivityData(category: "Equipment", count: 31),
-            SubCategoryActivityData(category: "Finishes", count: 40)
-        ]
+        // subCategoryActivityData is now calculated from real data in calculateSubCategoryActivity()
         
         delayCorrelationData = [
             DelayCorrelationData(project: "Aurum Heights", delayDays: 18.0, extraCost: 1.8),
@@ -995,6 +989,8 @@ class MainReportViewModel: ObservableObject {
             await calculateProjectWiseBudgetVsActual()
             await calculateActiveProjects()
             await calculateStageProgressStatus()
+            await calculateSubCategoryActivity()
+            await calculateSubCategorySpend()
         }
         
         // Update stage across projects data when stage is selected
@@ -1408,6 +1404,186 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             stageProgressData = progressData
+        }
+    }
+    
+    /// Calculate sub-category activity - count expenses by category for last 30 days
+    private func calculateSubCategoryActivity() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                subCategoryActivityData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProject == "All Projects" {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { $0.name == selectedProject }
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        let now = Date()
+        // Get date 30 days ago
+        guard let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) else {
+            await MainActor.run {
+                subCategoryActivityData = []
+            }
+            return
+        }
+        
+        var categoryCounts: [String: Int] = [:]
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            do {
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Parse expense date and filter by last 30 days
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let thirtyDaysAgoStartOfDay = calendar.startOfDay(for: thirtyDaysAgo)
+                    
+                    if expenseStartOfDay < thirtyDaysAgoStartOfDay {
+                        continue
+                    }
+                    
+                    // Filter by stage (phase name) - use phaseName from expense if available
+                    if selectedStage != "All Stages" {
+                        if let expensePhaseName = expense.phaseName {
+                            if expensePhaseName != selectedStage {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                        continue
+                    }
+                    
+                    // Extract categories from expense (categories is a list, but typically has one value)
+                    for category in expense.categories {
+                        categoryCounts[category, default: 0] += 1
+                    }
+                }
+            } catch {
+                print("Error calculating sub-category activity for project \(projectId): \(error)")
+            }
+        }
+        
+        // Get top 5 categories sorted by count (descending)
+        let topCategories = categoryCounts
+            .sorted { $0.value > $1.value }
+            .prefix(5)
+            .map { SubCategoryActivityData(category: $0.key, count: $0.value) }
+        
+        await MainActor.run {
+            subCategoryActivityData = Array(topCategories)
+        }
+    }
+    
+    /// Calculate sub-category spend - sum expense amounts by category
+    private func calculateSubCategorySpend() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                subCategorySpendData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProject == "All Projects" {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { $0.name == selectedProject }
+        }
+        
+        var categorySpend: [String: Double] = [:]
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            do {
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Filter by stage (phase name) - use phaseName from expense if available
+                    if selectedStage != "All Stages" {
+                        if let expensePhaseName = expense.phaseName {
+                            if expensePhaseName != selectedStage {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                        continue
+                    }
+                    
+                    // Extract categories from expense and sum amounts
+                    for category in expense.categories {
+                        categorySpend[category, default: 0] += expense.amount
+                    }
+                }
+            } catch {
+                print("Error calculating sub-category spend for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array and sort by spend (descending)
+        let spendData = categorySpend
+            .sorted { $0.value > $1.value }
+            .map { SubCategorySpendData(category: $0.key, value: $0.value) }
+        
+        await MainActor.run {
+            subCategorySpendData = Array(spendData)
         }
     }
 }
