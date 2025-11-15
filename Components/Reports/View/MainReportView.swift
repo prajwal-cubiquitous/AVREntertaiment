@@ -740,11 +740,15 @@ struct MainReportView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(position: .bottom) { _ in
+                    AxisMarks(position: .bottom) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(.quaternary)
-                        AxisValueLabel()
-                            .foregroundStyle(.secondary)
+                        AxisValueLabel {
+                            if let doubleValue = value.as(Double.self) {
+                                Text(formatChartValue(doubleValue))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 .chartYAxis {
@@ -791,14 +795,40 @@ struct MainReportView: View {
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading) { _ in
+                    AxisMarks(position: .leading) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(.quaternary)
-                        AxisValueLabel()
-                            .foregroundStyle(.secondary)
+                        AxisValueLabel {
+                            if let doubleValue = value.as(Double.self) {
+                                Text(formatChartValue(doubleValue))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+    
+    // Helper function to format chart axis values
+    private func formatChartValue(_ value: Double) -> String {
+        let absValue = abs(value)
+        
+        if absValue < 1000 {
+            // 1 to 999: show actual numbers
+            return String(format: "%.0f", value)
+        } else if absValue < 100000 {
+            // 1000 to 99999: show in thousands (k) with 2 decimals
+            let thousands = value / 1000.0
+            return String(format: "%.2fk", thousands)
+        } else if absValue < 10000000 {
+            // 100000 to 9999999: show in lakhs with 2 decimals
+            let lakhs = value / 100000.0
+            return String(format: "%.2f L", lakhs)
+        } else {
+            // 10000000+: show in crores (Cr) with 2 decimals
+            let crores = value / 10000000.0
+            return String(format: "%.2fCr", crores)
         }
     }
     
