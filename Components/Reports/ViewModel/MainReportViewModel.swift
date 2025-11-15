@@ -7,18 +7,25 @@
 
 import Foundation
 import SwiftUI
+import FirebaseFirestore
 
 @MainActor
 class MainReportViewModel: ObservableObject {
     // Filter selections
     @Published var selectedProject: String = "All Projects" {
         didSet {
-            updateDataBasedOnFilters()
+            Task {
+                await loadStagesForProject()
+                updateDataBasedOnFilters()
+            }
         }
     }
     @Published var selectedStage: String = "All Stages" {
         didSet {
-            updateDataBasedOnFilters()
+            Task {
+                await loadDepartmentsForStage()
+                updateDataBasedOnFilters()
+            }
         }
     }
     @Published var selectedDepartment: String = "All Departments" {
@@ -29,8 +36,20 @@ class MainReportViewModel: ObservableObject {
     
     // Filter options
     @Published var projectOptions: [String] = ["All Projects"]
-    @Published var stageOptions: [String] = ["All Stages", "Excavation", "Sub-structure", "Super-structure", "Finishing", "External Works"]
-    @Published var departmentOptions: [String] = ["All Departments", "Civil", "MEP", "Finishes", "Services"]
+    @Published var stageOptions: [String] = ["All Stages"]
+    @Published var departmentOptions: [String] = ["All Departments"]
+    
+    // Internal data storage
+    @Published var projects: [Project] = []
+    @Published var phases: [Phase] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let db = Firestore.firestore()
+    private var customerId: String?
+    
+    // Project ID mapping (project name -> project ID)
+    private var projectIdMap: [String: String] = [:]
     
     // KPI values
     @Published var totalBudget: Double = 120.0
@@ -162,8 +181,184 @@ class MainReportViewModel: ObservableObject {
         return "₹\(String(format: "%.1f", value)) Cr"
     }
     
-    // Load data (sample data for now)
+    // MARK: - Data Loading
+    
+    /// Load all projects and populate the project dropdown
     func loadData() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // Fetch customer ID
+            customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            
+            // Load projects
+            await loadProjects()
+            
+            // Load sample chart data (for now)
+            loadSampleChartData()
+            
+        } catch {
+            print("Error loading data: \(error)")
+            errorMessage = "Failed to load data: \(error.localizedDescription)"
+        }
+        
+        isLoading = false
+    }
+    
+    /// Load projects from Firestore
+    private func loadProjects() async {
+        guard let customerId = customerId else {
+            print("Error: Customer ID not available")
+            return
+        }
+        
+        do {
+            let snapshot = try await FirebasePathHelper.shared
+                .projectsCollection(customerId: customerId)
+                .getDocuments()
+            
+            var projectsList: [Project] = []
+            var projectNames: [String] = ["All Projects"]
+            var projectMap: [String: String] = [:]
+            
+            for doc in snapshot.documents {
+                if var project = try? doc.data(as: Project.self) {
+                    project.id = doc.documentID
+                    projectsList.append(project)
+                    projectNames.append(project.name)
+                    projectMap[project.name] = doc.documentID
+                }
+            }
+            
+            await MainActor.run {
+                self.projects = projectsList
+                self.projectOptions = projectNames
+                self.projectIdMap = projectMap
+            }
+        } catch {
+            print("Error loading projects: \(error)")
+            errorMessage = "Failed to load projects"
+        }
+    }
+    
+    /// Load stages (phases) for the selected project
+    private func loadStagesForProject() async {
+        guard let customerId = customerId else { return }
+        
+        do {
+            var allPhases: [Phase] = []
+            var uniqueStageNames: Set<String> = []
+            
+            if selectedProject == "All Projects" {
+                // Load phases from all projects
+                for project in projects {
+                    guard let projectId = project.id else { continue }
+                    
+                    let snapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .order(by: "phaseNumber")
+                        .getDocuments()
+                    
+                    for doc in snapshot.documents {
+                        if let phase = try? doc.data(as: Phase.self) {
+                            allPhases.append(phase)
+                            uniqueStageNames.insert(phase.phaseName)
+                        }
+                    }
+                }
+            } else {
+                // Load phases from selected project only
+                guard let projectId = projectIdMap[selectedProject] else {
+                    print("Error: Project ID not found for \(selectedProject)")
+                    return
+                }
+                
+                let snapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .order(by: "phaseNumber")
+                    .getDocuments()
+                
+                for doc in snapshot.documents {
+                    if let phase = try? doc.data(as: Phase.self) {
+                        allPhases.append(phase)
+                        uniqueStageNames.insert(phase.phaseName)
+                    }
+                }
+            }
+            
+            // Convert Set to sorted array and add "All Stages" at the beginning
+            var stageNames = Array(uniqueStageNames).sorted()
+            stageNames.insert("All Stages", at: 0)
+            
+            await MainActor.run {
+                self.phases = allPhases
+                self.stageOptions = stageNames
+                // Reset stage selection if current stage is not in the new list
+                if !stageNames.contains(selectedStage) {
+                    self.selectedStage = "All Stages"
+                }
+            }
+        } catch {
+            print("Error loading stages: \(error)")
+            errorMessage = "Failed to load stages"
+        }
+    }
+    
+    /// Load departments for the selected stage
+    private func loadDepartmentsForStage() async {
+        // Extract department names from phases
+        var uniqueDepartmentNames: Set<String> = []
+        
+        if selectedStage == "All Stages" {
+            // Extract departments from all phases
+            for phase in phases {
+                for deptKey in phase.departments.keys {
+                    let displayName: String
+                    if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                        // New format: remove "phaseId_" prefix
+                        displayName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                    } else {
+                        // Old format: use as is
+                        displayName = deptKey
+                    }
+                    uniqueDepartmentNames.insert(displayName)
+                }
+            }
+        } else {
+            // Extract departments from selected stage only
+            let selectedPhases = phases.filter { $0.phaseName == selectedStage }
+            
+            for phase in selectedPhases {
+                for deptKey in phase.departments.keys {
+                    let displayName: String
+                    if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                        // New format: remove "phaseId_" prefix
+                        displayName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                    } else {
+                        // Old format: use as is
+                        displayName = deptKey
+                    }
+                    uniqueDepartmentNames.insert(displayName)
+                }
+            }
+        }
+        
+        // Convert Set to sorted array and add "All Departments" at the beginning
+        var sortedDepartments = Array(uniqueDepartmentNames).sorted()
+        sortedDepartments.insert("All Departments", at: 0)
+        
+        await MainActor.run {
+            self.departmentOptions = sortedDepartments
+            // Reset department selection if current department is not in the new list
+            if !sortedDepartments.contains(selectedDepartment) {
+                self.selectedDepartment = "All Departments"
+            }
+        }
+    }
+    
+    /// Load sample chart data (to be replaced with real data later)
+    private func loadSampleChartData() {
         // Sample data matching the HTML structure
         costTrendData = [
             CostTrendData(month: "Apr", value: 12.4),

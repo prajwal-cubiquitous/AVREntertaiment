@@ -31,36 +31,40 @@ struct MainReportView: View {
                     headerView
                     
                     // Content
-                    ScrollView {
-                        LazyVStack(spacing: DesignSystem.Spacing.medium) {
-                            // Filters Section
-                            filtersSection
-                            
-                            // KPI Cards
-                            kpiSection
-                            
-                            // Tab Content with animation
-                            Group {
-                                if selectedTab == .cost {
-                                    costInsightsContent
-                                        .transition(.asymmetric(
-                                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                                            removal: .move(edge: .leading).combined(with: .opacity)
-                                        ))
-                                } else {
-                                    projectInsightsContent
-                                        .transition(.asymmetric(
-                                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                                            removal: .move(edge: .leading).combined(with: .opacity)
-                                        ))
+                    if viewModel.isLoading {
+                        loadingView
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: DesignSystem.Spacing.medium) {
+                                // Filters Section
+                                filtersSection
+                                
+                                // KPI Cards
+                                kpiSection
+                                
+                                // Tab Content with animation
+                                Group {
+                                    if selectedTab == .cost {
+                                        costInsightsContent
+                                            .transition(.asymmetric(
+                                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                                removal: .move(edge: .leading).combined(with: .opacity)
+                                            ))
+                                    } else {
+                                        projectInsightsContent
+                                            .transition(.asymmetric(
+                                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                                removal: .move(edge: .leading).combined(with: .opacity)
+                                            ))
+                                    }
                                 }
                             }
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.vertical, DesignSystem.Spacing.medium)
+                            .padding(.bottom, DesignSystem.Spacing.extraLarge)
                         }
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
-                        .padding(.vertical, DesignSystem.Spacing.medium)
-                        .padding(.bottom, DesignSystem.Spacing.extraLarge)
+                        .scrollIndicators(.visible)
                     }
-                    .scrollIndicators(.visible)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -139,6 +143,19 @@ struct MainReportView: View {
         }
         .background(.regularMaterial)
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+    
+    // MARK: - Loading View
+    private var loadingView: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("Loading reports...")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
     
     // MARK: - Filters Section
