@@ -20,6 +20,7 @@ struct ProjectListView: View {
     @State private var projectTempStatuses: [String: TempApproverStatus] = [:]
     @State private var businessName: String = "Your Projects"
     @State private var projectToReview: Project?
+    @State private var showingReports = false
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -137,12 +138,17 @@ struct ProjectListView: View {
                     }
                 }
                 
-                // Floating Action Button
+                // Floating Action Buttons
                 if role == .ADMIN && !viewModel.projects.isEmpty {
                     VStack {
                         Spacer()
                         HStack {
+                            // Reports button on the left
+                            floatingReportsButton
+                            
                             Spacer()
+                            
+                            // Create project button on the right
                             floatingActionButton
                         }
                     }
@@ -396,6 +402,10 @@ struct ProjectListView: View {
                     projectToReview = nil
                 }
             )
+        }
+        .sheet(isPresented: $showingReports) {
+            ReportsDummyView()
+                .presentationDetents([.large])
         }
     }
     
@@ -685,7 +695,36 @@ struct ProjectListView: View {
         }
     }
     
-    // MARK: - Floating Action Button
+    // MARK: - Floating Action Buttons
+    private var floatingReportsButton: some View {
+        Button {
+            HapticManager.impact(.medium)
+            withAnimation(DesignSystem.Animation.fastSpring) {
+                showingReports = true
+            }
+        } label: {
+            Image(systemName: "doc.text.fill")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .frame(width: 56, height: 56)
+                .background(
+                    Circle()
+                        .fill(Color.blue)
+                        .shadow(
+                            color: DesignSystem.Shadow.large.color,
+                            radius: DesignSystem.Shadow.large.radius,
+                            x: DesignSystem.Shadow.large.x,
+                            y: DesignSystem.Shadow.large.y
+                        )
+                )
+        }
+        .scaleEffect(showingReports ? 0.9 : 1.0)
+        .animation(DesignSystem.Animation.interactiveSpring, value: showingReports)
+        .padding(.leading, DesignSystem.Spacing.extraLarge)
+        .padding(.bottom, DesignSystem.Spacing.extraLarge)
+    }
+    
     private var floatingActionButton: some View {
         Button {
             HapticManager.impact(.medium)
@@ -1036,6 +1075,59 @@ struct NotificationPreviewItem: View {
         .padding(8)
         .background(Color(UIColor.tertiarySystemGroupedBackground))
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Reports Dummy View
+struct ReportsDummyView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: DesignSystem.Spacing.large) {
+                Spacer()
+                
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.blue)
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("Reports")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Reports feature coming soon")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        HapticManager.selection()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    Text("Reports")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
     }
 }
 
