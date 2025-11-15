@@ -359,15 +359,9 @@ struct DashboardView: View {
                         lineLimit: 1
                     )
                     
-                    Text(project?.isSuspended == true ? "SUSPENDED" : (project?.statusType.rawValue ?? ""))
-                        .font(.caption)
-                        .foregroundColor(project?.isSuspended == true ? .red : .secondary)
-                    
-                    // Show suspension reason if project is suspended
-                    if project?.isSuspended == true, let reason = project?.suspensionReason, !reason.isEmpty {
-                        TruncatedSuspensionReasonView(reason: reason)
-                            .padding(.top, 2)
-                    }
+//                    Text(project?.statusType.rawValue ?? "")
+//                        .font(.caption)
+//                        .foregroundColor(.secondary)
                 }
             }
             
@@ -4076,11 +4070,6 @@ struct SuspendedProjectStatsCard: View {
                 Text("Project Status")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.primary)
-                
-                Text("SUSPENDED")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.red)
-                    .lineLimit(1)
                 
                 // Suspended date
                 if let date = displayDate {
