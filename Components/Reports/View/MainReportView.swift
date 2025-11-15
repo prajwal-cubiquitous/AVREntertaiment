@@ -714,6 +714,8 @@ struct MainReportView: View {
     // MARK: - Charts
     
     // Cost Trend Chart
+    @State private var selectedCostTrendMonth: String? = nil
+    
     private var costTrendChart: some View {
         // Always use vertical layout with horizontal scrolling for > 6 months
         // Y-axis is fixed, only chart content scrolls
@@ -728,103 +730,161 @@ struct MainReportView: View {
             yAxisMax = maxValue + padding
         }
         
-        return GeometryReader { geometry in
-            HStack(alignment: .top, spacing: 0) {
+        return ZStack(alignment: .top) {
+            GeometryReader { geometry in
+                HStack(alignment: .top, spacing: 0) {
 
-                // -----------------------------
-                // FIXED Y-AXIS
-                // -----------------------------
-                Chart {
-                    ForEach(viewModel.costTrendData, id: \.month) { data in
-                        AreaMark(
-                            x: .value("Month", data.month),
-                            y: .value("Cost", max(data.value, 0))
-                        )
-                        .foregroundStyle(.clear)
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYScale(domain: 0...yAxisMax)
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatChartValue(v))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartPlotStyle { plot in
-                    plot.frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .frame(width: 50)
-
-                // -----------------------------
-                // SCROLLABLE CHART
-                // -----------------------------
-                ScrollView(.horizontal, showsIndicators: true) {
-
+                    // -----------------------------
+                    // FIXED Y-AXIS
+                    // -----------------------------
                     Chart {
-
-                        // 1️⃣ AREA FIRST – this fixes the baseline
                         ForEach(viewModel.costTrendData, id: \.month) { data in
                             AreaMark(
                                 x: .value("Month", data.month),
                                 y: .value("Cost", max(data.value, 0))
                             )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [
-                                        Color.accentColor.opacity(0.25),
-                                        Color.accentColor.opacity(0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .interpolationMethod(.linear)
-                        }
-
-                        // 2️⃣ LINE ON TOP
-                        ForEach(viewModel.costTrendData, id: \.month) { data in
-                            LineMark(
-                                x: .value("Month", data.month),
-                                y: .value("Cost", max(data.value, 0))
-                            )
-                            .foregroundStyle(Color.accentColor)
-                            .symbol(.circle)
-                            .symbolSize(40)
-                            .interpolationMethod(.linear)
+                            .foregroundStyle(.clear)
                         }
                     }
-                    .chartYAxis(.hidden)
+                    .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax)
-                    .chartXAxis {
-                        AxisMarks() { value in
+                    .chartYAxis {
+                        AxisMarks(position: .leading) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                 .foregroundStyle(.quaternary)
-                            AxisValueLabel()
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
+                            AxisValueLabel {
+                                if let v = value.as(Double.self) {
+                                    Text(formatChartValue(v))
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(
-                        width: max(CGFloat(viewModel.costTrendData.count) * 60,
-                                   geometry.size.width - 50),
-                        height: geometry.size.height
-                    )
-                    .padding(.bottom, 25)
+                    .frame(width: 50)
+
+                    // -----------------------------
+                    // SCROLLABLE CHART
+                    // -----------------------------
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        ZStack(alignment: .top) {
+                            Chart {
+                                // 1️⃣ AREA FIRST – this fixes the baseline
+                                ForEach(viewModel.costTrendData, id: \.month) { data in
+                                    AreaMark(
+                                        x: .value("Month", data.month),
+                                        y: .value("Cost", max(data.value, 0))
+                                    )
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.accentColor.opacity(0.25),
+                                                Color.accentColor.opacity(0)
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .interpolationMethod(.linear)
+                                }
+
+                                // 2️⃣ LINE ON TOP
+                                ForEach(viewModel.costTrendData, id: \.month) { data in
+                                    LineMark(
+                                        x: .value("Month", data.month),
+                                        y: .value("Cost", max(data.value, 0))
+                                    )
+                                    .foregroundStyle(Color.accentColor)
+                                    .symbol(.circle)
+                                    .symbolSize(selectedCostTrendMonth == data.month ? 60 : 40)
+                                    .interpolationMethod(.linear)
+                                }
+                                
+                                // Show tooltip indicators for selected month
+                                if let selectedMonth = selectedCostTrendMonth,
+                                   let selectedData = viewModel.costTrendData.first(where: { $0.month == selectedMonth }) {
+                                    RuleMark(x: .value("Month", selectedMonth))
+                                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                    
+                                    PointMark(
+                                        x: .value("Month", selectedMonth),
+                                        y: .value("Cost", max(selectedData.value, 0))
+                                    )
+                                    .foregroundStyle(Color.accentColor)
+                                    .symbolSize(60)
+                                }
+                            }
+                            .chartXSelection(value: $selectedCostTrendMonth)
+                            .chartYAxis(.hidden)
+                            .chartYScale(domain: 0...yAxisMax)
+                            .chartXAxis {
+                                AxisMarks() { value in
+                                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                        .foregroundStyle(.quaternary)
+                                    AxisValueLabel()
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .chartPlotStyle { plot in
+                                plot.frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                            .frame(
+                                width: max(CGFloat(viewModel.costTrendData.count) * 60,
+                                           geometry.size.width - 50),
+                                height: geometry.size.height
+                            )
+                            .padding(.bottom, 25)
+                            
+                            // Tooltip overlay
+                            if let selectedMonth = selectedCostTrendMonth,
+                               let selectedData = viewModel.costTrendData.first(where: { $0.month == selectedMonth }),
+                               let monthIndex = viewModel.costTrendData.firstIndex(where: { $0.month == selectedMonth }) {
+                                GeometryReader { tooltipGeometry in
+                                    let chartWidth = max(CGFloat(viewModel.costTrendData.count) * 60,
+                                                        geometry.size.width - 50)
+                                    let dataCount = CGFloat(viewModel.costTrendData.count)
+                                    let xPosition = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(selectedMonth)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 6) {
+                                            Text("Cost (₹ Cr):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(.systemBackground))
+                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                    }
+                                    .position(
+                                        x: xPosition,
+                                        y: 10
+                                    )
+                                }
+                                .frame(
+                                    width: max(CGFloat(viewModel.costTrendData.count) * 60,
+                                               geometry.size.width - 50),
+                                    height: geometry.size.height
+                                )
+                            }
+                        }
+                    }
                 }
             }
-
-
         }
         .frame(height: 160) // Match the chart card height
     }
@@ -853,6 +913,7 @@ struct MainReportView: View {
     
     // Stage Budget vs Actual Chart
     @State private var selectedPhaseName: String? = nil
+    @State private var selectedStageForTooltip: String? = nil
     
     private var stageBudgetChart: some View {
         // Calculate Y-axis max value
@@ -866,80 +927,140 @@ struct MainReportView: View {
             yAxisMax = maxValue + padding
         }
         
-        return GeometryReader { geometry in
-            HStack(alignment: .top, spacing: 0) {
-                // -----------------------------
-                // FIXED Y-AXIS
-                // -----------------------------
-                Chart {
-                    ForEach(viewModel.stageBudgetData, id: \.stage) { data in
-                        BarMark(
-                            x: .value("Stage", data.stage),
-                            y: .value("Amount", max(data.budget, data.actual))
-                        )
-                        .foregroundStyle(.clear) // Invisible, just for axis calculation
-                    }
-                }
-                .chartXAxis(.hidden)
-                .chartYScale(domain: 0...yAxisMax, type: .linear)
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let v = value.as(Double.self) {
-                                Text(formatChartValue(v))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartPlotStyle { plot in
-                    plot.frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .frame(width: 50)
-                .frame(height: geometry.size.height)
-                
-                // -----------------------------
-                // SCROLLABLE CHART CONTENT
-                // -----------------------------
-                ScrollView(.horizontal, showsIndicators: true) {
+        return ZStack(alignment: .top) {
+            GeometryReader { geometry in
+                HStack(alignment: .top, spacing: 0) {
+                    // -----------------------------
+                    // FIXED Y-AXIS
+                    // -----------------------------
                     Chart {
                         ForEach(viewModel.stageBudgetData, id: \.stage) { data in
                             BarMark(
                                 x: .value("Stage", data.stage),
-                                y: .value("Amount", data.budget)
+                                y: .value("Amount", max(data.budget, data.actual))
                             )
-                            .foregroundStyle(Color.blue)
-                            .position(by: .value("Type", "Budget"))
-                            
-                            BarMark(
-                                x: .value("Stage", data.stage),
-                                y: .value("Amount", data.actual)
-                            )
-                            .foregroundStyle(Color.green)
-                            .position(by: .value("Type", "Actual"))
+                            .foregroundStyle(.clear) // Invisible, just for axis calculation
                         }
                     }
-                    .chartXAxis {
-                        stageBudgetXAxis
-                    }
-                    .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                    .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax, type: .linear)
-                    .chartForegroundStyleScale([
-                        "Budget": Color.blue,
-                        "Actual": Color.green
-                    ])
-                    .chartLegend(position: .bottom)
+                    .chartYAxis {
+                        AxisMarks(position: .leading) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel {
+                                if let v = value.as(Double.self) {
+                                    Text(formatChartValue(v))
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                    .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50))
-                    .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                    .frame(width: 50)
+                    .frame(height: geometry.size.height)
+                    
+                    // -----------------------------
+                    // SCROLLABLE CHART CONTENT
+                    // -----------------------------
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        ZStack(alignment: .top) {
+                            Chart {
+                                ForEach(viewModel.stageBudgetData, id: \.stage) { data in
+                                    BarMark(
+                                        x: .value("Stage", data.stage),
+                                        y: .value("Amount", data.budget)
+                                    )
+                                    .foregroundStyle(selectedStageForTooltip == data.stage ? Color.blue.opacity(0.8) : Color.blue)
+                                    .position(by: .value("Type", "Budget"))
+                                    
+                                    BarMark(
+                                        x: .value("Stage", data.stage),
+                                        y: .value("Amount", data.actual)
+                                    )
+                                    .foregroundStyle(selectedStageForTooltip == data.stage ? Color.green.opacity(0.8) : Color.green)
+                                    .position(by: .value("Type", "Actual"))
+                                }
+                                
+                                // Show rule mark for selected stage
+                                if let selectedStage = selectedStageForTooltip {
+                                    RuleMark(x: .value("Stage", selectedStage))
+                                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                }
+                            }
+                            .chartXSelection(value: $selectedStageForTooltip)
+                            .chartXAxis {
+                                stageBudgetXAxis
+                            }
+                            .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                            .chartYScale(domain: 0...yAxisMax, type: .linear)
+                            .chartForegroundStyleScale([
+                                "Budget": Color.blue,
+                                "Actual": Color.green
+                            ])
+                            .chartLegend(position: .bottom)
+                            .chartPlotStyle { plot in
+                                plot.frame(maxHeight: .infinity, alignment: .bottom)
+                            }
+                            // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
+                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50))
+                            .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                            
+                            // Tooltip overlay
+                            if let selectedStage = selectedStageForTooltip,
+                               let selectedData = viewModel.stageBudgetData.first(where: { $0.stage == selectedStage }),
+                               let stageIndex = viewModel.stageBudgetData.firstIndex(where: { $0.stage == selectedStage }) {
+                                GeometryReader { tooltipGeometry in
+                                    let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50)
+                                    let dataCount = CGFloat(viewModel.stageBudgetData.count)
+                                    let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(selectedStage)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 6) {
+                                            Text("Budget (₹ Cr):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.1f", selectedData.budget / 10000000.0))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                        HStack(spacing: 6) {
+                                            Text("Actual (₹ Cr):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(String(format: "%.1f", selectedData.actual / 10000000.0))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(.systemBackground))
+                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                    }
+                                    .position(
+                                        x: xPosition,
+                                        y: 10
+                                    )
+                                }
+                                .frame(
+                                    width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50),
+                                    height: geometry.size.height
+                                )
+                            }
+                        }
+                    }
+                    .scrollIndicators(.visible)
                 }
-                .scrollIndicators(.visible)
             }
         }
         .frame(height: 200) // Increased height to accommodate rotated labels
