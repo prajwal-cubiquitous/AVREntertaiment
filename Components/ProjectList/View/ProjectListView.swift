@@ -404,7 +404,7 @@ struct ProjectListView: View {
             )
         }
         .sheet(isPresented: $showingReports) {
-            ReportsDummyView()
+            MainReportView()
                 .presentationDetents([.large])
         }
     }
