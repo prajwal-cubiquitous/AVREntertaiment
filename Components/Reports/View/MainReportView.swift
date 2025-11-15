@@ -711,45 +711,93 @@ struct MainReportView: View {
     
     // Cost Trend Chart
     private var costTrendChart: some View {
-        Chart {
-            ForEach(viewModel.costTrendData, id: \.month) { data in
-                LineMark(
-                    x: .value("Month", data.month),
-                    y: .value("Cost", data.value)
-                )
-                .foregroundStyle(Color.accentColor)
-                .interpolationMethod(.catmullRom)
-                .symbol(.circle)
-                .symbolSize(40)
-                
-                AreaMark(
-                    x: .value("Month", data.month),
-                    y: .value("Cost", data.value)
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.catmullRom)
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel()
-                    .foregroundStyle(.secondary)
+        Group {
+            if viewModel.isDateRangeGreaterThan6Months {
+                // Horizontal view for date ranges > 6 months
+                Chart {
+                    ForEach(viewModel.costTrendData, id: \.month) { data in
+                        LineMark(
+                            x: .value("Cost", data.value),
+                            y: .value("Month", data.month)
+                        )
+                        .foregroundStyle(Color.accentColor)
+                        .interpolationMethod(.catmullRom)
+                        .symbol(.circle)
+                        .symbolSize(40)
+                        
+                        AreaMark(
+                            x: .value("Cost", data.value),
+                            y: .value("Month", data.month)
+                        )
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.0)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(position: .bottom) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                // Vertical view for date ranges <= 6 months
+                Chart {
+                    ForEach(viewModel.costTrendData, id: \.month) { data in
+                        LineMark(
+                            x: .value("Month", data.month),
+                            y: .value("Cost", data.value)
+                        )
+                        .foregroundStyle(Color.accentColor)
+                        .interpolationMethod(.catmullRom)
+                        .symbol(.circle)
+                        .symbolSize(40)
+                        
+                        AreaMark(
+                            x: .value("Month", data.month),
+                            y: .value("Cost", data.value)
+                        )
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .interpolationMethod(.catmullRom)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { _ in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel()
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }

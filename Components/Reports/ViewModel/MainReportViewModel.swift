@@ -219,6 +219,13 @@ class MainReportViewModel: ObservableObject {
         return formatCr(total)
     }
     
+    // Computed property to check if date range is greater than 6 months
+    var isDateRangeGreaterThan6Months: Bool {
+        let calendar = Calendar.current
+        let months = calendar.dateComponents([.month], from: startDate, to: endDate).month ?? 0
+        return months > 6
+    }
+    
     // Helper function to format currency with appropriate units
     // 1-999: actual numbers
     // 1000-99999: thousands (k) with 2 decimals
@@ -261,6 +268,9 @@ class MainReportViewModel: ObservableObject {
             
             // Calculate initial budget metrics
             await calculateBudgetMetrics()
+            
+            // Calculate initial cost trend
+            await calculateCostTrend()
             
             // Load sample chart data (for now)
             loadSampleChartData()
@@ -502,17 +512,134 @@ class MainReportViewModel: ObservableObject {
         }
     }
     
+    /// Calculate cost trend data based on selected filters
+    private func calculateCostTrend() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                costTrendData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProject == "All Projects" {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { $0.name == selectedProject }
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        // Month formatter for grouping
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "MMM" // Short month name (Jan, Feb, etc.)
+        
+        // Year-month formatter for multi-year ranges
+        let yearMonthFormatter = DateFormatter()
+        yearMonthFormatter.dateFormat = "MMM yyyy"
+        
+        let calendar = Calendar.current
+        
+        // Determine if we need year in the format
+        let needsYear = calendar.component(.year, from: startDate) != calendar.component(.year, from: endDate)
+        let formatterToUse = needsYear ? yearMonthFormatter : monthFormatter
+        
+        var monthlyTotals: [String: Double] = [:]
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            do {
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Parse expense date
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    
+                    // Filter by date range
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let startOfDay = calendar.startOfDay(for: startDate)
+                    let endOfDay = calendar.startOfDay(for: endDate)
+                    
+                    if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
+                        continue
+                    }
+                    
+                    // Filter by stage (phase name)
+                    if selectedStage != "All Stages" {
+                        if let expensePhaseName = expense.phaseName {
+                            if expensePhaseName != selectedStage {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                        continue
+                    }
+                    
+                    // Group by month using the same formatter as we'll use for display
+                    let monthKey = formatterToUse.string(from: expenseDate)
+                    monthlyTotals[monthKey, default: 0] += expense.amount
+                }
+            } catch {
+                print("Error calculating cost trend for project \(projectId): \(error)")
+            }
+        }
+        
+        // Generate all months in the date range (with year if needed for clarity)
+        var allMonths: [String] = []
+        var currentDate = calendar.startOfDay(for: startDate)
+        let endDateDay = calendar.startOfDay(for: endDate)
+        
+        while currentDate <= endDateDay {
+            let monthKey = formatterToUse.string(from: currentDate)
+            if !allMonths.contains(monthKey) {
+                allMonths.append(monthKey)
+            }
+            // Move to first day of next month
+            if let nextMonth = calendar.date(byAdding: .month, value: 1, to: currentDate) {
+                currentDate = calendar.startOfDay(for: nextMonth)
+            } else {
+                break
+            }
+        }
+        
+        // Create cost trend data array with all months (including zeros for months with no expenses)
+        let trendData = allMonths.map { month in
+            CostTrendData(month: month, value: monthlyTotals[month] ?? 0.0)
+        }
+        
+        await MainActor.run {
+            costTrendData = trendData
+        }
+    }
+    
     /// Load sample chart data (to be replaced with real data later)
     private func loadSampleChartData() {
-        // Sample data matching the HTML structure
-        costTrendData = [
-            CostTrendData(month: "Apr", value: 12.4),
-            CostTrendData(month: "May", value: 14.2),
-            CostTrendData(month: "Jun", value: 13.8),
-            CostTrendData(month: "Jul", value: 15.6),
-            CostTrendData(month: "Aug", value: 17.1),
-            CostTrendData(month: "Sep", value: 18.9)
-        ]
+        // Sample data for other charts (cost trend is now calculated from real data)
         
         stageBudgetData = [
             StageBudgetData(stage: "Excavation", budget: 6.0, actual: 5.4),
@@ -728,9 +855,12 @@ class MainReportViewModel: ObservableObject {
     
     private func updateDataBasedOnFilters() {
         // Update chart data based on selected filters
-        // This would filter the data based on project, stage, and department selections
-        // For now, keeping sample data structure
         updateKPIs()
+        
+        // Calculate cost trend based on filters
+        Task {
+            await calculateCostTrend()
+        }
         
         // Update stage across projects data when stage is selected
         if selectedStage != "All Stages" {
