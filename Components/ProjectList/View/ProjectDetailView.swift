@@ -236,6 +236,19 @@ struct ProjectDetailView: View {
                 )
             }
         }
+        .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
+            ChatNavigationDestinationView(
+                chatId: chatNavigationItem.id,
+                project: project,
+                role: role ?? .USER,
+                phoneNumber: phoneNumber
+            )
+        }
+        .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
+            if let chatItem = newValue {
+                print("💬 Chat navigation trigger detected in ProjectDetailView for chat ID: \(chatItem.id)")
+            }
+        }
     }
     
     private func checkPhaseVisibility(frames: [CGRect]) {
@@ -2735,6 +2748,76 @@ private struct RequestStatusRow: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Chat Navigation Destination Helper
+struct ChatNavigationDestinationView: View {
+    let chatId: String
+    let project: Project
+    let role: UserRole
+    let phoneNumber: String
+    
+    @State private var participant: ChatParticipant?
+    @State private var isLoading = true
+    
+    var body: some View {
+        Group {
+            if isLoading {
+                ProgressView("Loading chat...")
+            } else if let participant = participant {
+                IndividualChatView(
+                    participant: participant,
+                    project: project,
+                    role: role,
+                    currentUserPhoneNumber: phoneNumber
+                )
+            } else {
+                VStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.largeTitle)
+                        .foregroundColor(.orange)
+                    Text("Chat not found")
+                        .font(.headline)
+                }
+            }
+        }
+        .task {
+            await resolveChatDestination()
+        }
+    }
+    
+    private func resolveChatDestination() async {
+        // Determine current user's identifier
+        let rawCurrent = (role == .ADMIN) ? "Admin" : phoneNumber
+        let current = rawCurrent.hasPrefix("+91") ? String(rawCurrent.dropFirst(3)) : rawCurrent
+        
+        // Extract counterpart id from chatId
+        let parts = chatId.split(separator: "_").map(String.init)
+        let otherId = parts.first { $0 != current } ?? ""
+        
+        if !otherId.isEmpty {
+            // Build participant
+            let participantRole: UserRole = (otherId == "Admin") ? .ADMIN : .USER
+            await MainActor.run {
+                self.participant = ChatParticipant(
+                    id: otherId,
+                    name: otherId,
+                    phoneNumber: otherId,
+                    role: participantRole,
+                    isOnline: true,
+                    lastSeen: nil,
+                    unreadCount: 0,
+                    lastMessage: nil,
+                    lastMessageTime: nil
+                )
+                self.isLoading = false
+            }
+        } else {
+            await MainActor.run {
+                self.isLoading = false
+            }
+        }
     }
 }
 

@@ -737,6 +737,23 @@ struct DashboardView: View {
                 handleRequestChange(requestItem.id)
             }
         }
+        .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
+            if let project = project {
+                ChatNavigationDestinationView(
+                    chatId: chatNavigationItem.id,
+                    project: project,
+                    role: role ?? .USER,
+                    phoneNumber: phoneNumber
+                )
+            } else {
+                ProgressView("Loading project...")
+            }
+        }
+        .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
+            if let chatItem = newValue {
+                print("💬 Chat navigation trigger detected in DashboardView for chat ID: \(chatItem.id)")
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
             // Immediately update state when expense status changes
             if let userInfo = notification.userInfo,
