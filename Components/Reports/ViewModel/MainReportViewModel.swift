@@ -281,16 +281,28 @@ class MainReportViewModel: ObservableObject {
                     // Handle SUSPENDED status: check both status field and isSuspended flag
                     var statusMatches = false
                     
-                    // Check if project's status field matches any selected status
-                    if selectedProjectStatuses.contains(project.status) {
-                        statusMatches = true
-                    }
-                    
-                    // Special handling for SUSPENDED: check isSuspended flag
-                    // A project can be suspended regardless of its status field
-                    // If SUSPENDED is selected, include all suspended projects
-                    if selectedProjectStatuses.contains("SUSPENDED") && project.isSuspended == true {
-                        statusMatches = true
+                    // IMPORTANT: If a project is suspended (isSuspended == true),
+                    // it should ONLY show if "SUSPENDED" is selected, regardless of status field
+                    if project.isSuspended == true {
+                        // Project is suspended - only show if SUSPENDED is selected
+                        if selectedProjectStatuses.contains("SUSPENDED") {
+                            statusMatches = true
+                        }
+                        // If SUSPENDED is not selected, statusMatches remains false
+                    } else {
+                        // Project is not suspended - check if status field matches selected statuses
+                        // Also handle case where status field is "SUSPENDED" but isSuspended is false
+                        if project.status == "SUSPENDED" {
+                            // Status field is SUSPENDED - only show if SUSPENDED is selected
+                            if selectedProjectStatuses.contains("SUSPENDED") {
+                                statusMatches = true
+                            }
+                        } else {
+                            // Normal status check
+                            if selectedProjectStatuses.contains(project.status) {
+                                statusMatches = true
+                            }
+                        }
                     }
                     
                     if !statusMatches {
