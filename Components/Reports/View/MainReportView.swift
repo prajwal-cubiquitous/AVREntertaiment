@@ -531,12 +531,14 @@ struct MainReportView: View {
                 costTrendChart
             }
             
-            // Stage Budget vs Actual
-            chartCard(
-                title: "Stage Budget vs Actual",
-                subtitle: "₹ Cr · Budget vs Actuals"
-            ) {
-                stageBudgetChart
+            // Stage Budget vs Actual - Only show if more than 1 phase
+            if viewModel.stageBudgetData.count > 1 {
+                chartCard(
+                    title: "Stage Budget vs Actual",
+                    subtitle: "₹ Cr · Budget vs Actuals"
+                ) {
+                    stageBudgetChart
+                }
             }
             
             // Project-wise Budget vs Actual
@@ -848,40 +850,198 @@ struct MainReportView: View {
     }
     
     // Stage Budget vs Actual Chart
+    @State private var selectedPhaseName: String? = nil
+    
     private var stageBudgetChart: some View {
-        Chart {
-            ForEach(viewModel.stageBudgetData, id: \.stage) { data in
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Amount", data.budget)
-                )
-                .foregroundStyle(Color.blue)
-                .position(by: .value("Type", "Budget"))
+        // Calculate Y-axis max value
+        let maxValue = viewModel.stageBudgetData.map { max($0.budget, $0.actual) }.max() ?? 0
+        let yAxisMax: Double
+        if maxValue == 0 {
+            yAxisMax = 1000 // Small default when all values are 0
+        } else {
+            // Add 10% padding, but ensure minimum increment
+            let padding = max(maxValue * 0.1, maxValue * 0.05)
+            yAxisMax = maxValue + padding
+        }
+        
+        return GeometryReader { geometry in
+            HStack(alignment: .top, spacing: 0) {
+                // -----------------------------
+                // FIXED Y-AXIS
+                // -----------------------------
+                Chart {
+                    ForEach(viewModel.stageBudgetData, id: \.stage) { data in
+                        BarMark(
+                            x: .value("Stage", data.stage),
+                            y: .value("Amount", max(data.budget, data.actual))
+                        )
+                        .foregroundStyle(.clear) // Invisible, just for axis calculation
+                    }
+                }
+                .chartXAxis(.hidden)
+                .chartYScale(domain: 0...yAxisMax, type: .linear)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(formatChartValue(v))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartPlotStyle { plot in
+                    plot.frame(maxHeight: .infinity, alignment: .bottom)
+                }
+                .frame(width: 50)
+                .frame(height: geometry.size.height)
                 
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Amount", data.actual)
-                )
-                .foregroundStyle(Color.green)
-                .position(by: .value("Type", "Actual"))
+                // -----------------------------
+                // SCROLLABLE CHART CONTENT
+                // -----------------------------
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Chart {
+                        ForEach(viewModel.stageBudgetData, id: \.stage) { data in
+                            BarMark(
+                                x: .value("Stage", data.stage),
+                                y: .value("Amount", data.budget)
+                            )
+                            .foregroundStyle(Color.blue)
+                            .position(by: .value("Type", "Budget"))
+                            
+                            BarMark(
+                                x: .value("Stage", data.stage),
+                                y: .value("Amount", data.actual)
+                            )
+                            .foregroundStyle(Color.green)
+                            .position(by: .value("Type", "Actual"))
+                        }
+                    }
+                    .chartXAxis {
+                        stageBudgetXAxis
+                    }
+                    .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                    .chartYScale(domain: 0...yAxisMax, type: .linear)
+                    .chartForegroundStyleScale([
+                        "Budget": Color.blue,
+                        "Actual": Color.green
+                    ])
+                    .chartLegend(position: .bottom)
+                    .chartPlotStyle { plot in
+                        plot.frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                    // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
+                    .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 50))
+                    .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                }
+                .scrollIndicators(.visible)
             }
         }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisValueLabel()
+        .frame(height: 200) // Increased height to accommodate rotated labels
+        .sheet(item: Binding(
+            get: { selectedPhaseName.map { PhaseNameItem(name: $0) } },
+            set: { selectedPhaseName = $0?.name }
+        )) { item in
+            phaseNameSheet(item: item)
+        }
+    }
+    
+    private var stageBudgetXAxis: some AxisContent {
+        AxisMarks(values: .automatic) { value in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                .foregroundStyle(.quaternary)
+            AxisValueLabel {
+                if let phaseName = value.as(String.self) {
+                    TruncatedPhaseNameView(
+                        phaseName: phaseName,
+                        onTap: {
+                            selectedPhaseName = phaseName
+                        }
+                    )
+                    .rotationEffect(.degrees(-45), anchor: .center)
+                }
             }
         }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+    }
+    
+    private func phaseNameSheet(item: PhaseNameItem) -> some View {
+        NavigationView {
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                Text(item.name)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .padding()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        HapticManager.selection()
+                        selectedPhaseName = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.secondary)
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                }
             }
         }
-        .chartForegroundStyleScale([
-            "Budget": Color.blue,
-            "Actual": Color.green
-        ])
-        .chartLegend(position: .bottom)
+        .presentationDetents([.medium])
+    }
+    
+    // Helper struct for phase name display with truncation
+    private struct TruncatedPhaseNameView: View {
+        let phaseName: String
+        let onTap: () -> Void
+        let maxLength: Int = 10
+        
+        private var truncatedName: String {
+            if phaseName.count > maxLength {
+                return String(phaseName.prefix(maxLength)) + "..."
+            }
+            return phaseName
+        }
+        
+        private var needsTruncation: Bool {
+            phaseName.count > maxLength
+        }
+        
+        var body: some View {
+            Group {
+                if needsTruncation {
+                    Text(truncatedName)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 70)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            HapticManager.selection()
+                            onTap()
+                        }
+                } else {
+                    Text(phaseName)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 70)
+                }
+            }
+        }
+    }
+    
+    // Helper struct for sheet presentation
+    private struct PhaseNameItem: Identifiable {
+        let id = UUID()
+        let name: String
     }
     
     // Project-wise Budget vs Actual Chart
