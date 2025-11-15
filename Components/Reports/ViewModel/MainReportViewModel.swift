@@ -84,6 +84,7 @@ class MainReportViewModel: ObservableObject {
     // Internal data storage
     @Published var projects: [Project] = []
     @Published var phases: [Phase] = []
+    @Published var expenses: [Expense] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
@@ -93,10 +94,10 @@ class MainReportViewModel: ObservableObject {
     // Project ID mapping (project name -> project ID)
     private var projectIdMap: [String: String] = [:]
     
-    // KPI values
-    @Published var totalBudget: Double = 120.0
-    @Published var totalSpent: Double = 95.0
-    @Published var remaining: Double = 25.0
+    // KPI values (will be calculated based on filters)
+    @Published var totalBudget: Double = 0.0
+    @Published var totalSpent: Double = 0.0
+    @Published var remaining: Double = 0.0
     
     // Chart data models
     struct CostTrendData: Identifiable {
@@ -236,6 +237,9 @@ class MainReportViewModel: ObservableObject {
             
             // Load projects
             await loadProjects()
+            
+            // Calculate initial budget metrics
+            await calculateBudgetMetrics()
             
             // Load sample chart data (for now)
             loadSampleChartData()
@@ -574,12 +578,130 @@ class MainReportViewModel: ObservableObject {
         updateKPIs()
     }
     
+    /// Calculate and update KPI values (Total Budget, Total Spent, Remaining) based on selected filters
     private func updateKPIs() {
-        // This would calculate KPIs based on selected filters
-        // For now, using sample data
-        totalBudget = 120.0
-        totalSpent = 95.0
-        remaining = max(totalBudget - totalSpent, 0)
+        Task {
+            await calculateBudgetMetrics()
+        }
+    }
+    
+    /// Calculate budget metrics based on selected project, stage, and department filters
+    private func calculateBudgetMetrics() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                totalBudget = 0
+                totalSpent = 0
+                remaining = 0
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProject == "All Projects" {
+            projectsToProcess = projects
+        } else {
+            // Find the selected project
+            projectsToProcess = projects.filter { $0.name == selectedProject }
+        }
+        
+        var calculatedBudget: Double = 0
+        var calculatedSpent: Double = 0
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            // Load phases for this project
+            do {
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                // Process each phase
+                for phaseDoc in phasesSnapshot.documents {
+                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
+                    let phaseId = phaseDoc.documentID
+                    
+                    // Filter by stage (phase name)
+                    if selectedStage != "All Stages" && phase.phaseName != selectedStage {
+                        continue
+                    }
+                    
+                    // Process departments in this phase
+                    for (deptKey, budgetAmount) in phase.departments {
+                        // Extract department name (handle both "phaseId_departmentName" and "departmentName" formats)
+                        let departmentName: String
+                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                            // New format: remove "phaseId_" prefix
+                            departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                        } else {
+                            // Old format: use as is
+                            departmentName = deptKey
+                        }
+                        
+                        // Filter by department
+                        if selectedDepartment != "All Departments" && departmentName != selectedDepartment {
+                            continue
+                        }
+                        
+                        // Add to total budget
+                        calculatedBudget += budgetAmount
+                    }
+                }
+                
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Filter by stage (phase name) - use phaseName from expense if available
+                    if selectedStage != "All Stages" {
+                        // Use phaseName from expense if available, otherwise skip if stage filter is active
+                        if let expensePhaseName = expense.phaseName {
+                            if expensePhaseName != selectedStage {
+                                continue
+                            }
+                        } else {
+                            // If expense doesn't have phaseName and stage filter is active, skip it
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        // New format: remove "phaseId_" prefix
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        // Old format: use as is
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                        continue
+                    }
+                    
+                    // Add to total spent
+                    calculatedSpent += expense.amount
+                }
+            } catch {
+                print("Error calculating budget metrics for project \(projectId): \(error)")
+            }
+        }
+        
+        // Update published properties on main thread
+        await MainActor.run {
+            totalBudget = calculatedBudget / 1_00_00_000 // Convert to crores
+            totalSpent = calculatedSpent / 1_00_00_000 // Convert to crores
+            remaining = max(totalBudget - totalSpent, 0)
+        }
     }
     
     private func updateDataBasedOnFilters() {
