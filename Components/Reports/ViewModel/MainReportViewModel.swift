@@ -33,11 +33,53 @@ class MainReportViewModel: ObservableObject {
             updateDataBasedOnFilters()
         }
     }
+    @Published var selectedProjectStatuses: Set<String> = ["ACTIVE", "COMPLETED", "MAINTENANCE", "ARCHIVE", "SUSPENDED"] {
+        didSet {
+            Task {
+                await loadProjects()
+                updateDataBasedOnFilters()
+            }
+        }
+    }
+    @Published var startDate: Date = Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? Date() {
+        didSet {
+            Task {
+                await loadProjects()
+                updateDataBasedOnFilters()
+            }
+        }
+    }
+    @Published var endDate: Date = Date() {
+        didSet {
+            if endDate < startDate {
+                // Auto-adjust start date if end date is before it
+                startDate = endDate
+            }
+            Task {
+                await loadProjects()
+                updateDataBasedOnFilters()
+            }
+        }
+    }
     
     // Filter options
     @Published var projectOptions: [String] = ["All Projects"]
     @Published var stageOptions: [String] = ["All Stages"]
     @Published var departmentOptions: [String] = ["All Departments"]
+    @Published var projectStatusOptions: [String] = ["ACTIVE", "COMPLETED", "MAINTENANCE", "ARCHIVE", "SUSPENDED"]
+    
+    // Computed property for display text
+    var selectedStatusesDisplayText: String {
+        if selectedProjectStatuses.count == projectStatusOptions.count {
+            return "ALL Status"
+        } else if selectedProjectStatuses.isEmpty {
+            return "No Status"
+        } else if selectedProjectStatuses.count == 1 {
+            return selectedProjectStatuses.first ?? "No Status"
+        } else {
+            return "\(selectedProjectStatuses.count) Selected"
+        }
+    }
     
     // Internal data storage
     @Published var projects: [Project] = []
@@ -206,7 +248,7 @@ class MainReportViewModel: ObservableObject {
         isLoading = false
     }
     
-    /// Load projects from Firestore
+    /// Load projects from Firestore with status and date filtering
     private func loadProjects() async {
         guard let customerId = customerId else {
             print("Error: Customer ID not available")
@@ -222,9 +264,65 @@ class MainReportViewModel: ObservableObject {
             var projectNames: [String] = ["All Projects"]
             var projectMap: [String: String] = [:]
             
+            // Date formatter for parsing project dates
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            // Calendar for date comparisons
+            let calendar = Calendar.current
+            let startOfDay = calendar.startOfDay(for: startDate)
+            let endOfDay = calendar.startOfDay(for: endDate)
+            
             for doc in snapshot.documents {
                 if var project = try? doc.data(as: Project.self) {
                     project.id = doc.documentID
+                    
+                    // Filter by status - check if project status is in selected statuses
+                    // Handle SUSPENDED status: check both status field and isSuspended flag
+                    var statusMatches = false
+                    
+                    // Check if project's status field matches any selected status
+                    if selectedProjectStatuses.contains(project.status) {
+                        statusMatches = true
+                    }
+                    
+                    // Special handling for SUSPENDED: check isSuspended flag
+                    // A project can be suspended regardless of its status field
+                    // If SUSPENDED is selected, include all suspended projects
+                    if selectedProjectStatuses.contains("SUSPENDED") && project.isSuspended == true {
+                        statusMatches = true
+                    }
+                    
+                    if !statusMatches {
+                        continue
+                    }
+                    
+                    // Filter by date range (check if plannedDate or maintenanceDate falls within range)
+                    var dateMatches = false
+                    
+                    // Check plannedDate
+                    if let plannedDateStr = project.plannedDate,
+                       let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                        let plannedStartOfDay = calendar.startOfDay(for: plannedDate)
+                        if plannedStartOfDay >= startOfDay && plannedStartOfDay <= endOfDay {
+                            dateMatches = true
+                        }
+                    }
+                    
+                    // Check maintenanceDate
+                    if !dateMatches, let maintenanceDateStr = project.maintenanceDate,
+                       let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                        let maintenanceStartOfDay = calendar.startOfDay(for: maintenanceDate)
+                        if maintenanceStartOfDay >= startOfDay && maintenanceStartOfDay <= endOfDay {
+                            dateMatches = true
+                        }
+                    }
+                    
+                    // If no dates match, skip this project
+                    if !dateMatches {
+                        continue
+                    }
+                    
                     projectsList.append(project)
                     projectNames.append(project.name)
                     projectMap[project.name] = doc.documentID
@@ -235,6 +333,16 @@ class MainReportViewModel: ObservableObject {
                 self.projects = projectsList
                 self.projectOptions = projectNames
                 self.projectIdMap = projectMap
+                
+                // Reset project selection if current selection is not in the filtered list
+                if !projectNames.contains(selectedProject) {
+                    self.selectedProject = "All Projects"
+                } else {
+                    // Reload stages for the currently selected project
+                    Task {
+                        await loadStagesForProject()
+                    }
+                }
             }
         } catch {
             print("Error loading projects: \(error)")

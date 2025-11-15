@@ -161,6 +161,18 @@ struct MainReportView: View {
     // MARK: - Filters Section
     private var filtersSection: some View {
         VStack(spacing: DesignSystem.Spacing.small) {
+            // First row: Date Range and Project Status
+            HStack(spacing: DesignSystem.Spacing.small) {
+                // Date Range Filter (takes 2/3 of width)
+                dateRangeFilter
+                    .frame(maxWidth: .infinity)
+                
+                // Project Status Filter (takes 1/3 of width) - Multi-select
+                projectStatusMultiSelectFilter
+                    .frame(maxWidth: .infinity)
+            }
+            
+            // Second row: Project, Stage, Department
             HStack(spacing: DesignSystem.Spacing.small) {
                 // Project Filter
                 filterDropdown(
@@ -184,6 +196,240 @@ struct MainReportView: View {
                 )
             }
         }
+    }
+    
+    // MARK: - Date Range Filter
+    private var dateRangeFilter: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+            Text("Date Range")
+                .font(.system(size: 12, weight: .medium, design: .default))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            Menu {
+                Button {
+                    HapticManager.selection()
+                    // Set to last 3 months
+                    let calendar = Calendar.current
+                    viewModel.startDate = calendar.date(byAdding: .month, value: -3, to: Date()) ?? Date()
+                    viewModel.endDate = Date()
+                } label: {
+                    Label("Last 3 Months", systemImage: "calendar")
+                }
+                
+                Button {
+                    HapticManager.selection()
+                    // Set to last 6 months
+                    let calendar = Calendar.current
+                    viewModel.startDate = calendar.date(byAdding: .month, value: -6, to: Date()) ?? Date()
+                    viewModel.endDate = Date()
+                } label: {
+                    Label("Last 6 Months", systemImage: "calendar")
+                }
+                
+                Button {
+                    HapticManager.selection()
+                    // Set to last year
+                    let calendar = Calendar.current
+                    viewModel.startDate = calendar.date(byAdding: .year, value: -1, to: Date()) ?? Date()
+                    viewModel.endDate = Date()
+                } label: {
+                    Label("Last Year", systemImage: "calendar")
+                }
+                
+                Divider()
+                
+                Button {
+                    HapticManager.selection()
+                    // Show custom date picker
+                    showingDateRangePicker = true
+                } label: {
+                    Label("Custom Range", systemImage: "calendar.badge.clock")
+                }
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.small) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    
+                    Text(dateRangeDisplayText)
+                        .font(.system(size: 14, weight: .regular, design: .default))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(DesignSystem.CornerRadius.medium)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                        .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
+                )
+            }
+            .accessibilityLabel("Date Range filter")
+            .accessibilityValue(dateRangeDisplayText)
+        }
+        .sheet(isPresented: $showingDateRangePicker) {
+            dateRangePickerSheet
+        }
+    }
+    
+    @State private var showingDateRangePicker = false
+    
+    // MARK: - Project Status Multi-Select Filter
+    private var projectStatusMultiSelectFilter: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+            Text("Project Status")
+                .font(.system(size: 12, weight: .medium, design: .default))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+            
+            Menu {
+                // "ALL Status" option
+                Button {
+                    HapticManager.selection()
+                    if viewModel.selectedProjectStatuses.count == viewModel.projectStatusOptions.count {
+                        // If all are selected, deselect all
+                        viewModel.selectedProjectStatuses = []
+                    } else {
+                        // Select all statuses
+                        viewModel.selectedProjectStatuses = Set(viewModel.projectStatusOptions)
+                    }
+                } label: {
+                    HStack {
+                        Text("ALL Status")
+                        Spacer()
+                        if viewModel.selectedProjectStatuses.count == viewModel.projectStatusOptions.count {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                    }
+                }
+                
+                Divider()
+                
+                // Individual status options
+                ForEach(viewModel.projectStatusOptions, id: \.self) { status in
+                    Button {
+                        HapticManager.selection()
+                        if viewModel.selectedProjectStatuses.contains(status) {
+                            viewModel.selectedProjectStatuses.remove(status)
+                        } else {
+                            viewModel.selectedProjectStatuses.insert(status)
+                        }
+                    } label: {
+                        HStack {
+                            Text(status)
+                            Spacer()
+                            if viewModel.selectedProjectStatuses.contains(status) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: DesignSystem.Spacing.small) {
+                    Text(viewModel.selectedStatusesDisplayText)
+                        .font(.system(size: 14, weight: .regular, design: .default))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .symbolEffect(.bounce, value: viewModel.selectedProjectStatuses)
+                }
+                .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                .padding(.vertical, DesignSystem.Spacing.small)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(DesignSystem.CornerRadius.medium)
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                        .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
+                )
+            }
+            .accessibilityLabel("Project Status filter")
+            .accessibilityValue(viewModel.selectedStatusesDisplayText)
+        }
+    }
+    
+    // MARK: - Date Range Display Text
+    private var dateRangeDisplayText: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd MMM"
+        
+        let startText = formatter.string(from: viewModel.startDate)
+        let endText = formatter.string(from: viewModel.endDate)
+        
+        return "\(startText) - \(endText)"
+    }
+    
+    private var dateRangePickerSheet: some View {
+        NavigationView {
+            Form {
+                Section {
+                    DatePicker(
+                        "Start Date",
+                        selection: $viewModel.startDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    
+                    DatePicker(
+                        "End Date",
+                        selection: $viewModel.endDate,
+                        in: viewModel.startDate...,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.compact)
+                    
+                    if viewModel.endDate < viewModel.startDate {
+                        HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            Text("End date must be after start date")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        .padding(.top, DesignSystem.Spacing.extraSmall)
+                    }
+                } header: {
+                    Text("Select Date Range")
+                } footer: {
+                    Text("Choose a date range to filter the reports data")
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("Date Range")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        HapticManager.selection()
+                        showingDateRangePicker = false
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        HapticManager.selection()
+                        showingDateRangePicker = false
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
     
     private func filterDropdown(label: String, selection: Binding<String>, options: [String]) -> some View {
