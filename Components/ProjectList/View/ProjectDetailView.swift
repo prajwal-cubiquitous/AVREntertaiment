@@ -21,6 +21,8 @@ struct ProjectDetailView: View {
     @State private var showingNotifications = false
     @State private var isTeamMembersDropdownVisible = false
     @State private var hasVisiblePhase = false
+    @State private var showingExpenseChat = false
+    @State private var expenseForChat: Expense? = nil
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -236,17 +238,78 @@ struct ProjectDetailView: View {
                 )
             }
         }
-        .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
-            ChatNavigationDestinationView(
-                chatId: chatNavigationItem.id,
-                project: project,
-                role: role ?? .USER,
-                phoneNumber: phoneNumber
-            )
+        .sheet(isPresented: $showingExpenseChat) {
+            if let expense = expenseForChat {
+                ExpenseChatView(
+                    expense: expense,
+                    userPhoneNumber: phoneNumber,
+                    projectId: project.id ?? "",
+                    role: role ?? .USER
+                )
+                .presentationDetents([.large])
+            }
         }
-        .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
-            if let chatItem = newValue {
-                print("💬 Chat navigation trigger detected in ProjectDetailView for chat ID: \(chatItem.id)")
+        .onChange(of: navigationManager.activeExpenseId) { oldValue, newValue in
+            if let expenseItem = newValue {
+                // Check screen type to determine if we should show chat or detail
+                let showChat = navigationManager.expenseScreenType == .chat
+                handleExpenseChange(expenseItem.id, showChat: showChat)
+            }
+        }
+    }
+    
+    func handleExpenseChange(_ expenseId: String?, showChat: Bool = false) {
+        guard let expenseId = expenseId else {
+            return
+        }
+        
+        guard let projectId = project.id,
+              let customerId = customerId else {
+            // If projectId is not available yet, wait a bit and retry
+            Task {
+                // Wait for project to be available (navigation might be in progress)
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                // Retry
+                handleExpenseChange(expenseId, showChat: showChat)
+            }
+            return
+        }
+        
+        Task {
+            do {
+                // Load the expense by ID
+                let expenseDoc = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .document(expenseId)
+                    .getDocument()
+                
+                if expenseDoc.exists, var expense = try? expenseDoc.data(as: Expense.self) {
+                    expense.id = expenseDoc.documentID
+                    
+                    await MainActor.run {
+                        if showChat {
+                            // Show expense chat view
+                            expenseForChat = expense
+                            showingExpenseChat = true
+                            // Clear navigation after showing
+                            navigationManager.setExpenseId(nil)
+                        } else {
+                            // For ProjectDetailView, we might want to show expense detail
+                            // For now, just clear the navigation
+                            navigationManager.setExpenseId(nil)
+                        }
+                    }
+                } else {
+                    print("⚠️ Expense not found: \(expenseId)")
+                    await MainActor.run {
+                        navigationManager.setExpenseId(nil)
+                    }
+                }
+            } catch {
+                print("❌ Error loading expense: \(error)")
+                await MainActor.run {
+                    navigationManager.setExpenseId(nil)
+                }
             }
         }
     }

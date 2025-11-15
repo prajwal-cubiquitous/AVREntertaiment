@@ -724,7 +724,8 @@ struct DashboardView: View {
             if let expenseItem = newValue {
                 // Check screen type to determine if we should show chat or detail
                 let showChat = navigationManager.expenseScreenType == .chat
-                handleExpenseChange(expenseItem.id, showChat: showChat)
+                showingExpenseChat = true
+//                handleExpenseChange(expenseItem.id, showChat: showChat)
             }
         }
         .onChange(of: navigationManager.activePhaseId) { newValue in
