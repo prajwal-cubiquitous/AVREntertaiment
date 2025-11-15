@@ -1397,29 +1397,98 @@ struct MainReportView: View {
     }
     
     // Active Projects Chart
+    @State private var selectedMonth: String? = nil
+    
     private var activeProjectsChart: some View {
-        Chart {
-            ForEach(viewModel.activeProjectsData, id: \.month) { data in
-                LineMark(
-                    x: .value("Month", data.month),
-                    y: .value("Count", data.count)
-                )
-                .foregroundStyle(Color.green)
-                .interpolationMethod(.catmullRom)
-                .symbol(.circle)
-                .symbolSize(30)
+        ZStack(alignment: .top) {
+            Chart {
+                ForEach(viewModel.activeProjectsData, id: \.month) { data in
+                    LineMark(
+                        x: .value("Month", data.month),
+                        y: .value("Count", data.count)
+                    )
+                    .foregroundStyle(Color.green)
+                    .interpolationMethod(.linear)
+                    .symbol(.circle)
+                    .symbolSize(selectedMonth == data.month ? 60 : 40)
+                }
+                
+                // Show tooltip indicators for selected month
+                if let selectedMonth = selectedMonth,
+                   let selectedData = viewModel.activeProjectsData.first(where: { $0.month == selectedMonth }) {
+                    RuleMark(x: .value("Month", selectedMonth))
+                        .foregroundStyle(Color.green.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    
+                    PointMark(
+                        x: .value("Month", selectedMonth),
+                        y: .value("Count", selectedData.count)
+                    )
+                    .foregroundStyle(Color.green)
+                    .symbolSize(60)
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            .chartXSelection(value: $selectedMonth)
+            .chartXAxis {
+                AxisMarks(values: .automatic) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel()
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let intValue = value.as(Int.self) {
+                            Text("\(intValue)")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: true))
+            .frame(height: 200)
+            
+            // Tooltip overlay
+            if let selectedMonth = selectedMonth,
+               let selectedData = viewModel.activeProjectsData.first(where: { $0.month == selectedMonth }),
+               let monthIndex = viewModel.activeProjectsData.firstIndex(where: { $0.month == selectedMonth }) {
+                GeometryReader { geometry in
+                    let chartWidth = geometry.size.width
+                    let dataCount = CGFloat(viewModel.activeProjectsData.count)
+                    let xPosition = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(selectedMonth)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            Text("Active Projects:")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Text("\(selectedData.count)")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: xPosition,
+                        y: 10
+                    )
+                }
+                .frame(height: 200)
             }
         }
     }
@@ -1458,16 +1527,28 @@ struct MainReportView: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
+            AxisMarks(values: .automatic) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
                 AxisValueLabel()
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
             }
         }
         .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            AxisMarks(position: .leading) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(.quaternary)
+                AxisValueLabel {
+                    if let doubleValue = value.as(Double.self) {
+                        Text("\(Int(doubleValue))%")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
+        .chartYScale(domain: 0...100)
         .chartForegroundStyleScale([
             "In Progress": Color.blue,
             "Handover": Color.yellow,

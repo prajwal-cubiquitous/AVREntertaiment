@@ -278,6 +278,10 @@ class MainReportViewModel: ObservableObject {
             // Calculate initial project-wise budget vs actual
             await calculateProjectWiseBudgetVsActual()
             
+            // Calculate initial active projects and stage progress
+            await calculateActiveProjects()
+            await calculateStageProgressStatus()
+            
             // Load sample chart data (for now)
             loadSampleChartData()
             
@@ -688,21 +692,8 @@ class MainReportViewModel: ObservableObject {
             BurnRateData(project: "Lotus Enclave", rate: 0.37)
         ]
         
-        activeProjectsData = [
-            ActiveProjectsData(month: "Apr", count: 4),
-            ActiveProjectsData(month: "May", count: 6),
-            ActiveProjectsData(month: "Jun", count: 7),
-            ActiveProjectsData(month: "Jul", count: 9),
-            ActiveProjectsData(month: "Aug", count: 10),
-            ActiveProjectsData(month: "Sep", count: 12)
-        ]
-        
-        stageProgressData = [
-            StageProgressData(stage: "In Progress", inProgress: 60.0, handover: 10.0, delayed: 10.0, complete: 20.0),
-            StageProgressData(stage: "HandOver", inProgress: 40.0, handover: 20.0, delayed: 10.0, complete: 30.0),
-            StageProgressData(stage: "Planned", inProgress: 10.0, handover: 0.0, delayed: 0.0, complete: 90.0),
-            StageProgressData(stage: "Complete", inProgress: 0.0, handover: 0.0, delayed: 0.0, complete: 100.0)
-        ]
+        // activeProjectsData is now calculated from real data in calculateActiveProjects()
+        // stageProgressData is now calculated from real data in calculateStageProgressStatus()
         
         subCategoryActivityData = [
             SubCategoryActivityData(category: "Labour", count: 84),
@@ -1002,6 +993,8 @@ class MainReportViewModel: ObservableObject {
             await calculateCostTrend()
             await calculateStageBudgetVsActual()
             await calculateProjectWiseBudgetVsActual()
+            await calculateActiveProjects()
+            await calculateStageProgressStatus()
         }
         
         // Update stage across projects data when stage is selected
@@ -1160,6 +1153,261 @@ class MainReportViewModel: ObservableObject {
             } else {
                 projectWiseData = []
             }
+        }
+    }
+    
+    /// Calculate active projects count per month for the last 6 months
+    private func calculateActiveProjects() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                activeProjectsData = []
+            }
+            return
+        }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Get last 6 months
+        var monthlyCounts: [String: Int] = [:]
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "MMM" // Short month name (Jan, Feb, etc.)
+        
+        // Generate last 6 months
+        for i in 0..<6 {
+            guard let monthDate = calendar.date(byAdding: .month, value: -i, to: now) else { continue }
+            let monthKey = monthFormatter.string(from: monthDate)
+            monthlyCounts[monthKey] = 0
+        }
+        
+        // Process all projects
+        for project in projects {
+            // Filter by project status if needed
+            if selectedProjectStatuses.count < projectStatusOptions.count {
+                // Check if project matches selected statuses
+                var statusMatches = false
+                if project.isSuspended == true {
+                    if selectedProjectStatuses.contains("SUSPENDED") {
+                        statusMatches = true
+                    }
+                } else {
+                    if project.status == "SUSPENDED" {
+                        if selectedProjectStatuses.contains("SUSPENDED") {
+                            statusMatches = true
+                        }
+                    } else {
+                        if selectedProjectStatuses.contains(project.status) {
+                            statusMatches = true
+                        }
+                    }
+                }
+                if !statusMatches {
+                    continue
+                }
+            }
+            
+            // Check if project was active in each month
+            let projectStartDate: Date?
+            let projectEndDate: Date?
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            if let plannedDateStr = project.plannedDate,
+               let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                projectStartDate = plannedDate
+            } else if let startDateStr = project.startDate,
+                      let startDate = dateFormatter.date(from: startDateStr) {
+                projectStartDate = startDate
+            } else {
+                projectStartDate = nil
+            }
+            
+            if let maintenanceDateStr = project.maintenanceDate,
+               let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                projectEndDate = maintenanceDate
+            } else if let endDateStr = project.endDate,
+                      let endDate = dateFormatter.date(from: endDateStr) {
+                projectEndDate = endDate
+            } else {
+                projectEndDate = nil
+            }
+            
+            // Check each month
+            for i in 0..<6 {
+                guard let monthDate = calendar.date(byAdding: .month, value: -i, to: now) else { continue }
+                let monthKey = monthFormatter.string(from: monthDate)
+                
+                // Get first and last day of the month
+                let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: monthDate))!
+                let monthEnd = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart)!
+                
+                // Check if project was active during this month
+                // A project is active if:
+                // 1. Status is ACTIVE (or was ACTIVE during this month)
+                // 2. Project start date is before or during this month
+                // 3. Project end date is after or during this month (or nil)
+                
+                var wasActive = false
+                
+                // Check if project status is ACTIVE
+                if project.status == "ACTIVE" && project.isSuspended != true {
+                    // Check if project dates overlap with this month
+                    if let startDate = projectStartDate {
+                        if startDate <= monthEnd {
+                            if let endDate = projectEndDate {
+                                if endDate >= monthStart {
+                                    wasActive = true
+                                }
+                            } else {
+                                // No end date, project is ongoing
+                                wasActive = true
+                            }
+                        }
+                    } else {
+                        // No start date, assume it's active if status is ACTIVE
+                        wasActive = true
+                    }
+                }
+                
+                if wasActive {
+                    monthlyCounts[monthKey, default: 0] += 1
+                }
+            }
+        }
+        
+        // Convert to array and sort by month (chronological order - oldest to newest)
+        // Build array of month dates first, then sort
+        var monthDates: [(month: String, date: Date)] = []
+        for i in 0..<6 {
+            guard let monthDate = calendar.date(byAdding: .month, value: -i, to: now) else { continue }
+            let monthKey = monthFormatter.string(from: monthDate)
+            monthDates.append((month: monthKey, date: monthDate))
+        }
+        
+        // Sort by date (oldest first)
+        monthDates.sort { $0.date < $1.date }
+        
+        // Create data array in chronological order
+        let activeData = monthDates.map { monthDate in
+            ActiveProjectsData(month: monthDate.month, count: monthlyCounts[monthDate.month] ?? 0)
+        }
+        
+        await MainActor.run {
+            activeProjectsData = activeData
+        }
+    }
+    
+    /// Calculate stage progress status - current status count of projects
+    private func calculateStageProgressStatus() async {
+        // Categorize projects by their current status
+        var inProgressCount = 0
+        var handoverCount = 0
+        var plannedCount = 0
+        var completeCount = 0
+        var delayedCount = 0
+        var totalCount = 0
+        
+        for project in projects {
+            // Filter by project status if needed
+            if selectedProjectStatuses.count < projectStatusOptions.count {
+                var statusMatches = false
+                if project.isSuspended == true {
+                    if selectedProjectStatuses.contains("SUSPENDED") {
+                        statusMatches = true
+                    }
+                } else {
+                    if project.status == "SUSPENDED" {
+                        if selectedProjectStatuses.contains("SUSPENDED") {
+                            statusMatches = true
+                        }
+                    } else {
+                        if selectedProjectStatuses.contains(project.status) {
+                            statusMatches = true
+                        }
+                    }
+                }
+                if !statusMatches {
+                    continue
+                }
+            }
+            
+            totalCount += 1
+            
+            // Categorize by status
+            if project.isSuspended == true {
+                // Suspended projects might be considered delayed
+                delayedCount += 1
+            } else {
+                switch project.status {
+                case "ACTIVE":
+                    inProgressCount += 1
+                case "HANDOVER":
+                    handoverCount += 1
+                case "LOCKED", "IN_REVIEW":
+                    plannedCount += 1
+                case "COMPLETED", "ARCHIVE":
+                    completeCount += 1
+                case "MAINTENANCE":
+                    // Maintenance could be considered complete or handover
+                    completeCount += 1
+                default:
+                    // Other statuses might be delayed
+                    delayedCount += 1
+                }
+            }
+        }
+        
+        // Calculate percentages
+        let total = Double(totalCount)
+        guard total > 0 else {
+            await MainActor.run {
+                stageProgressData = []
+            }
+            return
+        }
+        
+        let inProgressPercent = (Double(inProgressCount) / total) * 100
+        let handoverPercent = (Double(handoverCount) / total) * 100
+        let plannedPercent = (Double(plannedCount) / total) * 100
+        let completePercent = (Double(completeCount) / total) * 100
+        let delayedPercent = (Double(delayedCount) / total) * 100
+        
+        // Create data showing the distribution of project statuses
+        // Each row represents a category, showing the percentage share of each status type
+        let progressData = [
+            StageProgressData(
+                stage: "In Progress",
+                inProgress: inProgressPercent,
+                handover: handoverPercent,
+                delayed: delayedPercent,
+                complete: completePercent
+            ),
+            StageProgressData(
+                stage: "HandOver",
+                inProgress: inProgressPercent,
+                handover: handoverPercent,
+                delayed: delayedPercent,
+                complete: completePercent
+            ),
+            StageProgressData(
+                stage: "Planned",
+                inProgress: 0,
+                handover: 0,
+                delayed: 0,
+                complete: plannedPercent
+            ),
+            StageProgressData(
+                stage: "Complete",
+                inProgress: 0,
+                handover: 0,
+                delayed: 0,
+                complete: completePercent
+            )
+        ]
+        
+        await MainActor.run {
+            stageProgressData = progressData
         }
     }
 }
