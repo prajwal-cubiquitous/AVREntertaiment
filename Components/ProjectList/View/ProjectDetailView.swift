@@ -1658,6 +1658,7 @@ private struct ProjectHeaderView: View {
     @State private var managerName: String?
     @State private var managerPhone: String?
     @State private var isLoadingManager = false
+    @State private var hasLoadedManager = false // Track if manager details have been loaded
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
@@ -1784,16 +1785,20 @@ private struct ProjectHeaderView: View {
             }
         }
         .padding(DesignSystem.Spacing.medium)
-        .onAppear {
-            if let managerId = project.managerIds.first {
-                Task {
-                    await fetchManagerDetails(managerId: managerId)
-                }
+        .task(id: project.managerIds.first) {
+            // Only fetch if manager ID exists and hasn't been loaded yet
+            guard let managerId = project.managerIds.first,
+                  !hasLoadedManager else {
+                return
             }
+            await fetchManagerDetails(managerId: managerId)
         }
     }
     
     private func fetchManagerDetails(managerId: String) async {
+        // Prevent duplicate fetches
+        guard !isLoadingManager && !hasLoadedManager else { return }
+        
         await MainActor.run {
             isLoadingManager = true
         }
@@ -1816,6 +1821,7 @@ private struct ProjectHeaderView: View {
                         self.managerName = userData.name
                         self.managerPhone = userData.phoneNumber
                         self.isLoadingManager = false
+                        self.hasLoadedManager = true
                     }
                     return
                 }
@@ -1828,6 +1834,7 @@ private struct ProjectHeaderView: View {
                         self.managerName = name
                         self.managerPhone = phone
                         self.isLoadingManager = false
+                        self.hasLoadedManager = true
                     }
                     return
                 }
@@ -1845,6 +1852,7 @@ private struct ProjectHeaderView: View {
                         self.managerName = userData.name
                         self.managerPhone = userData.phoneNumber
                         self.isLoadingManager = false
+                        self.hasLoadedManager = true
                     }
                     return
                 }
@@ -1857,6 +1865,7 @@ private struct ProjectHeaderView: View {
                         self.managerName = name
                         self.managerPhone = phone
                         self.isLoadingManager = false
+                        self.hasLoadedManager = true
                     }
                     return
                 }
@@ -1867,11 +1876,13 @@ private struct ProjectHeaderView: View {
                 self.managerName = nil
                 self.managerPhone = cleanManagerId
                 self.isLoadingManager = false
+                self.hasLoadedManager = true
             }
         } catch {
             print("Error fetching manager details: \(error)")
             await MainActor.run {
                 self.isLoadingManager = false
+                // Don't set hasLoadedManager = true on error, so it can retry
             }
         }
     }

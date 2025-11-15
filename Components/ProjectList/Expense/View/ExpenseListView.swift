@@ -35,12 +35,22 @@ struct ExpenseListView: View {
         .padding()
         .background(Color(UIColor.secondarySystemGroupedBackground))
         .cornerRadius(12)
-        .onAppear {
+        .task(id: project.id) {
             // Update customerId in ViewModel when it becomes available
             if let customerId = customerId {
                 viewModel.updateCustomerId(customerId)
             }
-            viewModel.fetchExpenses()
+            // Only fetch if customerId is available
+            if customerId != nil {
+                viewModel.fetchExpenses()
+            }
+        }
+        .onChange(of: customerId) { oldValue, newValue in
+            // When customerId becomes available, update and fetch
+            if let newValue = newValue, oldValue == nil {
+                viewModel.updateCustomerId(newValue)
+                viewModel.fetchExpenses()
+            }
         }
         .sheet(isPresented: $viewModel.showingFullList) {
             FullExpenseListView(

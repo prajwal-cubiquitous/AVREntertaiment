@@ -18,6 +18,8 @@ class ExpenseListViewModel: ObservableObject {
     private let db = Firestore.firestore()
     private let currentUserPhone: String
     var customerId: String? // Make it mutable so we can update it
+    private var hasLoaded: Bool = false // Track if expenses have been loaded
+    private var currentFetchTask: Task<Void, Never>? // Track current fetch task
     
     init(project: Project, currentUserPhone: String, customerId: String?) {
         self.project = project
@@ -26,25 +28,46 @@ class ExpenseListViewModel: ObservableObject {
     }
     
     func updateCustomerId(_ newCustomerId: String) {
+        // Only update if customerId actually changed
+        guard customerId != newCustomerId else { return }
         customerId = newCustomerId
+        // Reset hasLoaded so expenses can be fetched with new customerId
+        hasLoaded = false
     }
     
-    func fetchExpenses() {
+    func fetchExpenses(forceRefresh: Bool = false) {
+        // Prevent duplicate fetches
+        guard !isLoading else { return }
+        
+        // If already loaded and not forcing refresh, skip
+        if hasLoaded && !forceRefresh {
+            return
+        }
+        
         guard let projectId = project.id,
               let customerId = customerId else {
             isLoading = false
             return
         }
         
+        // Cancel any existing fetch task
+        currentFetchTask?.cancel()
+        
         isLoading = true
         
-        Task {
+        currentFetchTask = Task {
             do {
+                // Check if task was cancelled
+                try Task.checkCancellation()
+                
                 let snapshot = try await FirebasePathHelper.shared
                     .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("submittedBy", isEqualTo: currentUserPhone)
                     .order(by: "createdAt", descending: true)
                     .getDocuments()
+                
+                // Check again if task was cancelled
+                try Task.checkCancellation()
                 
                 var loadedExpenses: [Expense] = []
                 for document in snapshot.documents {
@@ -53,11 +76,18 @@ class ExpenseListViewModel: ObservableObject {
                     loadedExpenses.append(expense)
                 }
                 
-                expenses = loadedExpenses
-                isLoading = false
+                // Only update if task wasn't cancelled
+                if !Task.isCancelled {
+                    expenses = loadedExpenses
+                    hasLoaded = true
+                    isLoading = false
+                }
             } catch {
-                print("Error fetching expenses: \(error)")
-                isLoading = false
+                // Don't update state if task was cancelled
+                if !Task.isCancelled {
+                    print("Error fetching expenses: \(error)")
+                    isLoading = false
+                }
             }
         }
     }
@@ -112,8 +142,8 @@ class ExpenseListViewModel: ObservableObject {
                 "approvedBy": currentUserPhone
             ])
             
-            // Refresh the expenses list
-            await fetchExpenses()
+            // Refresh the expenses list (force refresh to get updated status)
+            fetchExpenses(forceRefresh: true)
             
             // Show success feedback
             HapticManager.notification(.success)
