@@ -219,9 +219,30 @@ class MainReportViewModel: ObservableObject {
         return formatCr(total)
     }
     
-    // Helper function to format currency in Cr (Crores)
+    // Helper function to format currency with appropriate units
+    // 1-999: actual numbers
+    // 1000-99999: thousands (k) with 2 decimals
+    // 100000-9999999: lakhs with 2 decimals
+    // 10000000+: crores (Cr) with 2 decimals
     private func formatCr(_ value: Double) -> String {
-        return "₹\(String(format: "%.1f", value)) Cr"
+        let absValue = abs(value)
+        
+        if absValue < 1000 {
+            // 1 to 999: show actual numbers
+            return "₹\(String(format: "%.0f", value))"
+        } else if absValue < 100000 {
+            // 1000 to 99999: show in thousands (k) with 2 decimals
+            let thousands = value / 1000.0
+            return "₹\(String(format: "%.2f", thousands))k"
+        } else if absValue < 10000000 {
+            // 100000 to 9999999: show in lakhs with 2 decimals
+            let lakhs = value / 100000.0
+            return "₹\(String(format: "%.2f", lakhs)) lakhs"
+        } else {
+            // 10000000+: show in crores (Cr) with 2 decimals
+            let crores = value / 10000000.0
+            return "₹\(String(format: "%.2f", crores)) Cr"
+        }
     }
     
     // MARK: - Data Loading
@@ -697,9 +718,10 @@ class MainReportViewModel: ObservableObject {
         }
         
         // Update published properties on main thread
+        // Store values in actual currency (rupees), not crores
         await MainActor.run {
-            totalBudget = calculatedBudget / 1_00_00_000 // Convert to crores
-            totalSpent = calculatedSpent / 1_00_00_000 // Convert to crores
+            totalBudget = calculatedBudget
+            totalSpent = calculatedSpent
             remaining = max(totalBudget - totalSpent, 0)
         }
     }
