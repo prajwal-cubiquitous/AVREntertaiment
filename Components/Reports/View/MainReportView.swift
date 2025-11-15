@@ -711,103 +711,118 @@ struct MainReportView: View {
     
     // Cost Trend Chart
     private var costTrendChart: some View {
-        Group {
-            if viewModel.isDateRangeGreaterThan6Months {
-                // Horizontal view for date ranges > 6 months
+        // Always use vertical layout with horizontal scrolling for > 6 months
+        // Y-axis is fixed, only chart content scrolls
+        let maxValue = viewModel.costTrendData.map { $0.value }.max() ?? 0
+        // Calculate Y-axis max: if max is 0, use small default; otherwise add 10% padding, but ensure it's at least slightly above max
+        let yAxisMax: Double
+        if maxValue == 0 {
+            yAxisMax = 1000 // Small default when all values are 0
+        } else {
+            // Add 10% padding, but ensure minimum increment
+            let padding = max(maxValue * 0.1, maxValue * 0.05)
+            yAxisMax = maxValue + padding
+        }
+        
+        return GeometryReader { geometry in
+            HStack(alignment: .top, spacing: 0) {
+
+                // -----------------------------
+                // FIXED Y-AXIS
+                // -----------------------------
                 Chart {
                     ForEach(viewModel.costTrendData, id: \.month) { data in
-                        LineMark(
-                            x: .value("Cost", data.value),
-                            y: .value("Month", data.month)
-                        )
-                        .foregroundStyle(Color.accentColor)
-                        .interpolationMethod(.catmullRom)
-                        .symbol(.circle)
-                        .symbolSize(40)
-                        
-                        AreaMark(
-                            x: .value("Cost", data.value),
-                            y: .value("Month", data.month)
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.0)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .interpolationMethod(.catmullRom)
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(position: .bottom) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let doubleValue = value.as(Double.self) {
-                                Text(formatChartValue(doubleValue))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading) { _ in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                // Vertical view for date ranges <= 6 months
-                Chart {
-                    ForEach(viewModel.costTrendData, id: \.month) { data in
-                        LineMark(
-                            x: .value("Month", data.month),
-                            y: .value("Cost", data.value)
-                        )
-                        .foregroundStyle(Color.accentColor)
-                        .interpolationMethod(.catmullRom)
-                        .symbol(.circle)
-                        .symbolSize(40)
-                        
                         AreaMark(
                             x: .value("Month", data.month),
-                            y: .value("Cost", data.value)
+                            y: .value("Cost", max(data.value, 0))
                         )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.0)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(.clear)
                     }
                 }
-                .chartXAxis {
-                    AxisMarks(values: .automatic) { _ in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel()
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .chartXAxis(.hidden)
+                .chartYScale(domain: 0...yAxisMax)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
                         AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                             .foregroundStyle(.quaternary)
                         AxisValueLabel {
-                            if let doubleValue = value.as(Double.self) {
-                                Text(formatChartValue(doubleValue))
+                            if let v = value.as(Double.self) {
+                                Text(formatChartValue(v))
+                                    .font(.system(size: 10))
                                     .foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
+                .chartPlotStyle { plot in
+                    plot.frame(maxHeight: .infinity, alignment: .bottom)
+                }
+                .frame(width: 50)
+
+                // -----------------------------
+                // SCROLLABLE CHART
+                // -----------------------------
+                ScrollView(.horizontal, showsIndicators: true) {
+
+                    Chart {
+
+                        // 1️⃣ AREA FIRST – this fixes the baseline
+                        ForEach(viewModel.costTrendData, id: \.month) { data in
+                            AreaMark(
+                                x: .value("Month", data.month),
+                                y: .value("Cost", max(data.value, 0))
+                            )
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        Color.accentColor.opacity(0.25),
+                                        Color.accentColor.opacity(0)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .interpolationMethod(.linear)
+                        }
+
+                        // 2️⃣ LINE ON TOP
+                        ForEach(viewModel.costTrendData, id: \.month) { data in
+                            LineMark(
+                                x: .value("Month", data.month),
+                                y: .value("Cost", max(data.value, 0))
+                            )
+                            .foregroundStyle(Color.accentColor)
+                            .symbol(.circle)
+                            .symbolSize(40)
+                            .interpolationMethod(.linear)
+                        }
+                    }
+                    .chartYAxis(.hidden)
+                    .chartYScale(domain: 0...yAxisMax)
+                    .chartXAxis {
+                        AxisMarks() { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel()
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .chartPlotStyle { plot in
+                        plot.frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                    .frame(
+                        width: max(CGFloat(viewModel.costTrendData.count) * 60,
+                                   geometry.size.width - 50),
+                        height: geometry.size.height
+                    )
+                    .padding(.bottom, 25)
+                }
             }
+
+
         }
+        .frame(height: 160) // Match the chart card height
     }
     
     // Helper function to format chart axis values

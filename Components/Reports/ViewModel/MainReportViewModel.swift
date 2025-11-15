@@ -629,7 +629,14 @@ class MainReportViewModel: ObservableObject {
         
         // Create cost trend data array with all months (including zeros for months with no expenses)
         let trendData = allMonths.map { month in
-            CostTrendData(month: month, value: monthlyTotals[month] ?? 0.0)
+            let value = monthlyTotals[month] ?? 0.0
+            return CostTrendData(month: month, value: value)
+        }
+        
+        // Debug: Print the data to verify values
+        print("📊 Cost Trend Data:")
+        for data in trendData {
+            print("  \(data.month): ₹\(data.value)")
         }
         
         await MainActor.run {
