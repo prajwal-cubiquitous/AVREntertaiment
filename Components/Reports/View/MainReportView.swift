@@ -541,12 +541,14 @@ struct MainReportView: View {
                 }
             }
             
-            // Project-wise Budget vs Actual
-            chartCard(
-                title: "Project-wise Budget vs Actual",
-                subtitle: "Total project budget vs total spend"
-            ) {
-                projectWiseBudgetChart
+            // Project-wise Budget vs Actual - Only show if more than 1 project
+            if viewModel.projectWiseData.count > 1 {
+                chartCard(
+                    title: "Project-wise Budget vs Actual",
+                    subtitle: "Total project budget vs total spend"
+                ) {
+                    projectWiseBudgetChart
+                }
             }
             
             // Projects at Selected Stage
@@ -1045,40 +1047,198 @@ struct MainReportView: View {
     }
     
     // Project-wise Budget vs Actual Chart
+    @State private var selectedProjectName: String? = nil
+    
     private var projectWiseBudgetChart: some View {
-        Chart {
-            ForEach(viewModel.projectWiseData, id: \.project) { data in
-                BarMark(
-                    x: .value("Project", data.project),
-                    y: .value("Amount", data.budget)
-                )
-                .foregroundStyle(Color.blue)
-                .position(by: .value("Type", "Budget"))
+        // Calculate Y-axis max value
+        let maxValue = viewModel.projectWiseData.map { max($0.budget, $0.actual) }.max() ?? 0
+        let yAxisMax: Double
+        if maxValue == 0 {
+            yAxisMax = 1000 // Small default when all values are 0
+        } else {
+            // Add 10% padding, but ensure minimum increment
+            let padding = max(maxValue * 0.1, maxValue * 0.05)
+            yAxisMax = maxValue + padding
+        }
+        
+        return GeometryReader { geometry in
+            HStack(alignment: .top, spacing: 0) {
+                // -----------------------------
+                // FIXED Y-AXIS
+                // -----------------------------
+                Chart {
+                    ForEach(viewModel.projectWiseData, id: \.project) { data in
+                        BarMark(
+                            x: .value("Project", data.project),
+                            y: .value("Amount", max(data.budget, data.actual))
+                        )
+                        .foregroundStyle(.clear) // Invisible, just for axis calculation
+                    }
+                }
+                .chartXAxis(.hidden)
+                .chartYScale(domain: 0...yAxisMax, type: .linear)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(.quaternary)
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(formatChartValue(v))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .chartPlotStyle { plot in
+                    plot.frame(maxHeight: .infinity, alignment: .bottom)
+                }
+                .frame(width: 50)
+                .frame(height: geometry.size.height)
                 
-                BarMark(
-                    x: .value("Project", data.project),
-                    y: .value("Amount", data.actual)
-                )
-                .foregroundStyle(Color.green)
-                .position(by: .value("Type", "Actual"))
+                // -----------------------------
+                // SCROLLABLE CHART CONTENT
+                // -----------------------------
+                ScrollView(.horizontal, showsIndicators: true) {
+                    Chart {
+                        ForEach(viewModel.projectWiseData, id: \.project) { data in
+                            BarMark(
+                                x: .value("Project", data.project),
+                                y: .value("Amount", data.budget)
+                            )
+                            .foregroundStyle(Color.blue)
+                            .position(by: .value("Type", "Budget"))
+                            
+                            BarMark(
+                                x: .value("Project", data.project),
+                                y: .value("Amount", data.actual)
+                            )
+                            .foregroundStyle(Color.green)
+                            .position(by: .value("Type", "Actual"))
+                        }
+                    }
+                    .chartXAxis {
+                        projectWiseXAxis
+                    }
+                    .chartYAxis(.hidden) // Hide Y-axis in scrollable part
+                    .chartYScale(domain: 0...yAxisMax, type: .linear)
+                    .chartForegroundStyleScale([
+                        "Budget": Color.blue,
+                        "Actual": Color.green
+                    ])
+                    .chartLegend(position: .bottom)
+                    .chartPlotStyle { plot in
+                        plot.frame(maxHeight: .infinity, alignment: .bottom)
+                    }
+                    // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
+                    .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 50))
+                    .padding(.bottom, 25) // Add padding to prevent scroll indicator from covering labels
+                }
+                .scrollIndicators(.visible)
             }
         }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisValueLabel()
+        .frame(height: 200) // Increased height to accommodate rotated labels
+        .sheet(item: Binding(
+            get: { selectedProjectName.map { ProjectNameItem(name: $0) } },
+            set: { selectedProjectName = $0?.name }
+        )) { item in
+            projectNameSheet(item: item)
+        }
+    }
+    
+    private var projectWiseXAxis: some AxisContent {
+        AxisMarks(values: .automatic) { value in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                .foregroundStyle(.quaternary)
+            AxisValueLabel {
+                if let projectName = value.as(String.self) {
+                    TruncatedProjectNameView(
+                        projectName: projectName,
+                        onTap: {
+                            selectedProjectName = projectName
+                        }
+                    )
+                    .rotationEffect(.degrees(-45), anchor: .center)
+                }
             }
         }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+    }
+    
+    private func projectNameSheet(item: ProjectNameItem) -> some View {
+        NavigationView {
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                Text(item.name)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                    .padding()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        HapticManager.selection()
+                        selectedProjectName = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.secondary)
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                }
             }
         }
-        .chartForegroundStyleScale([
-            "Budget": Color.blue,
-            "Actual": Color.green
-        ])
-        .chartLegend(position: .bottom)
+        .presentationDetents([.medium])
+    }
+    
+    // Helper struct for project name display with truncation
+    private struct TruncatedProjectNameView: View {
+        let projectName: String
+        let onTap: () -> Void
+        let maxLength: Int = 10
+        
+        private var truncatedName: String {
+            if projectName.count > maxLength {
+                return String(projectName.prefix(maxLength)) + "..."
+            }
+            return projectName
+        }
+        
+        private var needsTruncation: Bool {
+            projectName.count > maxLength
+        }
+        
+        var body: some View {
+            Group {
+                if needsTruncation {
+                    Text(truncatedName)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 70)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            HapticManager.selection()
+                            onTap()
+                        }
+                } else {
+                    Text(projectName)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 70)
+                }
+            }
+        }
+    }
+    
+    // Helper struct for sheet presentation
+    private struct ProjectNameItem: Identifiable {
+        let id = UUID()
+        let name: String
     }
     
     // Stage Across Projects Chart

@@ -275,6 +275,9 @@ class MainReportViewModel: ObservableObject {
             // Calculate initial stage budget vs actual
             await calculateStageBudgetVsActual()
             
+            // Calculate initial project-wise budget vs actual
+            await calculateProjectWiseBudgetVsActual()
+            
             // Load sample chart data (for now)
             loadSampleChartData()
             
@@ -652,12 +655,7 @@ class MainReportViewModel: ObservableObject {
         // Sample data for other charts (cost trend and stage budget vs actual are now calculated from real data)
         
         // stageBudgetData is now calculated from real data in calculateStageBudgetVsActual()
-        
-        projectWiseData = [
-            ProjectWiseData(project: "Aurum Heights", budget: 35.0, actual: 34.0),
-            ProjectWiseData(project: "Tracura Residency", budget: 27.0, actual: 26.5),
-            ProjectWiseData(project: "Lotus Enclave", budget: 33.0, actual: 34.5)
-        ]
+        // projectWiseData is now calculated from real data in calculateProjectWiseBudgetVsActual()
         
         stageAcrossProjectsData = []
         
@@ -1003,6 +1001,7 @@ class MainReportViewModel: ObservableObject {
         Task {
             await calculateCostTrend()
             await calculateStageBudgetVsActual()
+            await calculateProjectWiseBudgetVsActual()
         }
         
         // Update stage across projects data when stage is selected
@@ -1014,6 +1013,153 @@ class MainReportViewModel: ObservableObject {
             ]
         } else {
             stageAcrossProjectsData = []
+        }
+    }
+    
+    /// Calculate project-wise budget vs actual data based on selected filters
+    private func calculateProjectWiseBudgetVsActual() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                projectWiseData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProject == "All Projects" {
+            projectsToProcess = projects
+        } else {
+            // If a specific project is selected, only show that one (but we need > 1 to show chart)
+            projectsToProcess = projects.filter { $0.name == selectedProject }
+        }
+        
+        // Only calculate if we have more than 1 project
+        guard projectsToProcess.count > 1 else {
+            await MainActor.run {
+                projectWiseData = []
+            }
+            return
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        var projectDataMap: [String: (budget: Double, actual: Double)] = [:] // projectName -> (budget, actual)
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            let projectName = project.name
+            
+            do {
+                // Load phases for this project
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var projectBudget: Double = 0
+                
+                // Process each phase
+                for phaseDoc in phasesSnapshot.documents {
+                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
+                    let phaseId = phaseDoc.documentID
+                    let phaseName = phase.phaseName
+                    
+                    // Filter by stage (phase name) - if a specific stage is selected, only include that
+                    if selectedStage != "All Stages" && phaseName != selectedStage {
+                        continue
+                    }
+                    
+                    // Calculate budget for this phase (sum of all departments)
+                    for (deptKey, budgetAmount) in phase.departments {
+                        // Filter by department if specific department is selected
+                        if selectedDepartment != "All Departments" {
+                            let departmentName: String
+                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                            } else {
+                                departmentName = deptKey
+                            }
+                            
+                            if departmentName != selectedDepartment {
+                                continue
+                            }
+                        }
+                        projectBudget += budgetAmount
+                    }
+                }
+                
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                var projectActual: Double = 0
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Filter by stage (phase name) - use phaseName from expense if available
+                    if selectedStage != "All Stages" {
+                        if let expensePhaseName = expense.phaseName {
+                            if expensePhaseName != selectedStage {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Parse expense date and filter by date range
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let startOfDay = calendar.startOfDay(for: startDate)
+                    let endOfDay = calendar.startOfDay(for: endDate)
+                    
+                    if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
+                        continue
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                        continue
+                    }
+                    
+                    projectActual += expense.amount
+                }
+                
+                // Store data for this project
+                projectDataMap[projectName] = (budget: projectBudget, actual: projectActual)
+            } catch {
+                print("Error calculating project-wise budget vs actual for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array
+        let projectData = projectDataMap.map { projectName, values in
+            ProjectWiseData(project: projectName, budget: values.budget, actual: values.actual)
+        }.sorted { $0.project < $1.project }
+        
+        await MainActor.run {
+            // Only show data if there are more than 1 project
+            if projectData.count > 1 {
+                projectWiseData = projectData
+            } else {
+                projectWiseData = []
+            }
         }
     }
 }
