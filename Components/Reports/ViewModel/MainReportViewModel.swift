@@ -179,7 +179,8 @@ class MainReportViewModel: ObservableObject {
     struct BurnRateData: Identifiable {
         let id = UUID()
         let project: String
-        let rate: Double
+        let rate: Double // Burn rate in ₹ Cr/day
+        let totalSpend: Double // Actual amount spent in last 30 days (in ₹)
     }
     
     struct ActiveProjectsData: Identifiable {
@@ -701,11 +702,7 @@ class MainReportViewModel: ObservableObject {
         
         // overrunData is now calculated from real data in calculateOverrunData()
         
-        burnRateData = [
-            BurnRateData(project: "Aurum Heights", rate: 0.58),
-            BurnRateData(project: "Tracura Residency", rate: 0.42),
-            BurnRateData(project: "Lotus Enclave", rate: 0.37)
-        ]
+        // burnRateData is now calculated from real data in calculateBurnRate()
         
         // activeProjectsData is now calculated from real data in calculateActiveProjects()
         // stageProgressData is now calculated from real data in calculateStageProgressStatus()
@@ -1004,6 +1001,7 @@ class MainReportViewModel: ObservableObject {
             await calculateStageAcrossProjects()
             await calculateStatusCost()
             await calculateOverrunData()
+            await calculateBurnRate()
             await calculateActiveProjects()
             await calculateStageProgressStatus()
             await calculateSubCategoryActivity()
@@ -2062,6 +2060,127 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             overrunData = overrunDataArray
+        }
+    }
+    
+    /// Calculate burn rate by project - shows daily spend rate (₹ Cr/day) for last 30 days
+    /// Sorted by amount (top spent on top)
+    private func calculateBurnRate() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                burnRateData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProjects.isEmpty {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Get date 30 days ago
+        guard let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) else {
+            await MainActor.run {
+                burnRateData = []
+            }
+            return
+        }
+        
+        var projectSpendMap: [String: (rate: Double, totalSpend: Double)] = [:] // projectName -> (burn rate, total spend)
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            let projectName = project.name
+            
+            // Filter by project status
+            var projectStatus: String? = nil
+            if project.isSuspended == true {
+                projectStatus = "SUSPENDED"
+            } else {
+                projectStatus = project.status
+            }
+            
+            guard let status = projectStatus, selectedProjectStatuses.contains(status) else {
+                continue
+            }
+            
+            do {
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                var totalSpend: Double = 0
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Parse expense date and filter by last 30 days
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let thirtyDaysAgoStartOfDay = calendar.startOfDay(for: thirtyDaysAgo)
+                    
+                    if expenseStartOfDay < thirtyDaysAgoStartOfDay {
+                        continue
+                    }
+                    
+                    // Filter by stage if specific stages are selected
+                    if !selectedStages.isEmpty {
+                        if let expensePhaseName = expense.phaseName {
+                            if !selectedStages.contains(expensePhaseName) {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department if specific departments are selected
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                        continue
+                    }
+                    
+                    totalSpend += expense.amount
+                }
+                
+                // Calculate burn rate (₹ Cr/day) = total spend / 30 days
+                if totalSpend > 0 {
+                    let burnRate = totalSpend / 30.0 / 10000000.0 // Convert to Cr/day
+                    projectSpendMap[projectName] = (rate: burnRate, totalSpend: totalSpend)
+                }
+            } catch {
+                print("Error calculating burn rate for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array, sort by rate (descending - top spent on top)
+        let burnRateArray = projectSpendMap.map { projectName, data in
+            BurnRateData(project: projectName, rate: data.rate, totalSpend: data.totalSpend)
+        }.sorted { $0.rate > $1.rate }
+        
+        await MainActor.run {
+            burnRateData = burnRateArray
         }
     }
 }

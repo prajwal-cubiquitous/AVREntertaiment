@@ -2029,27 +2029,174 @@ struct MainReportView: View {
     }
     
     // Burn Rate Chart
+    @State private var selectedBurnRateProject: String? = nil
+    
     private var burnRateChart: some View {
-        Chart {
-            ForEach(viewModel.burnRateData, id: \.project) { data in
-                BarMark(
-                    x: .value("Rate", data.rate),
-                    y: .value("Project", data.project)
-                )
-                .foregroundStyle(Color.green)
+        // Handle empty state
+        if viewModel.burnRateData.isEmpty {
+            return AnyView(
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    Text("No Data Available")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("No approved expenses found in the last 30 days for selected filters")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 40)
+            )
+        }
+        
+        // Calculate X-axis max value
+        let maxRate = viewModel.burnRateData.map { $0.rate }.max() ?? 0
+        let xAxisMax: Double
+        if maxRate == 0 {
+            xAxisMax = 1.0 // Small default when all values are 0
+        } else {
+            // Add 10% padding
+            let padding = max(maxRate * 0.1, 0.1)
+            xAxisMax = maxRate + padding
+        }
+        
+        return AnyView(ZStack(alignment: .topLeading) {
+            GeometryReader { geometry in
+                VStack(alignment: .leading, spacing: 0) {
+                    // -----------------------------
+                    // SCROLLABLE CHART CONTENT (with Y-axis)
+                    // -----------------------------
+                    ScrollView(.vertical, showsIndicators: true) {
+                        ZStack(alignment: .topLeading) {
+                            Chart {
+                                ForEach(viewModel.burnRateData, id: \.project) { data in
+                                    BarMark(
+                                        x: .value("Rate", data.rate),
+                                        y: .value("Project", data.project)
+                                    )
+                                    .foregroundStyle(selectedBurnRateProject == data.project ? Color.green.opacity(0.8) : Color.green)
+                                }
+                                
+                                // Show rule mark for selected project
+                                if let selectedProject = selectedBurnRateProject {
+                                    RuleMark(y: .value("Project", selectedProject))
+                                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                }
+                            }
+                            .chartYSelection(value: $selectedBurnRateProject)
+                            .chartXAxis(.hidden) // Hide X-axis in scrollable part
+                            .chartXScale(domain: 0...xAxisMax, type: .linear)
+                            .chartYAxis {
+                                AxisMarks(position: .leading, values: .automatic(desiredCount: 10)) { value in
+                                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                        .foregroundStyle(.quaternary)
+                                    AxisValueLabel {
+                                        if let project = value.as(String.self) {
+                                            Text(project)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                }
+                            }
+                            .chartPlotStyle { plot in
+                                plot.frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(
+                                width: geometry.size.width,
+                                height: CGFloat(max(viewModel.burnRateData.count, 3)) * 50 + 40
+                            )
+                            .padding(.bottom, 40)
+                            .padding(.top, 10)
+                            
+                            // Tooltip overlay
+                            if let selectedProject = selectedBurnRateProject,
+                               let selectedData = viewModel.burnRateData.first(where: { $0.project == selectedProject }),
+                               let projectIndex = viewModel.burnRateData.firstIndex(where: { $0.project == selectedProject }) {
+                                GeometryReader { tooltipGeometry in
+                                    let barHeight = 50.0
+                                    let yPosition = (CGFloat(projectIndex) * barHeight) + (barHeight / 2) + 20
+                                    
+                                    // Calculate x position based on the bar's end (rate value)
+                                    let maxRate = viewModel.burnRateData.map { $0.rate }.max() ?? 1
+                                    let barWidthRatio = Double(selectedData.rate) / Double(maxRate)
+                                    let estimatedBarEndX = tooltipGeometry.size.width * 0.7 * barWidthRatio + 50
+                                    
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(selectedProject)
+                                            .font(.system(size: 13, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 6) {
+                                            Text("Spent (last 30 days):")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                            Text(formatAmount(selectedData.totalSpend))
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(.systemBackground))
+                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                    }
+                                    .position(
+                                        x: min(estimatedBarEndX + 70, tooltipGeometry.size.width - 80),
+                                        y: yPosition
+                                    )
+                                }
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: CGFloat(max(viewModel.burnRateData.count, 3)) * 50 + 40
+                                )
+                            }
+                        }
+                    }
+                    .scrollIndicators(.visible)
+                    
+                    // -----------------------------
+                    // FIXED X-AXIS (at bottom)
+                    // -----------------------------
+                    Chart {
+                        ForEach(viewModel.burnRateData, id: \.project) { data in
+                            BarMark(
+                                x: .value("Rate", data.rate),
+                                y: .value("Project", data.project)
+                            )
+                            .foregroundStyle(.clear) // Invisible, just for axis calculation
+                        }
+                    }
+                    .chartYAxis(.hidden)
+                    .chartXScale(domain: 0...xAxisMax, type: .linear)
+                    .chartXAxis {
+                        AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel {
+                                if let rate = value.as(Double.self) {
+                                    Text(String(format: "%.2f", rate))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                        }
+                    }
+                    .chartPlotStyle { plot in
+                        plot.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 40)
+                    .padding(.top, 4)
+                }
             }
         }
-        .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel()
-            }
-        }
+        .frame(minHeight: 200, maxHeight: 300))
     }
     
     // Active Projects Chart
@@ -2390,6 +2537,28 @@ struct MainReportView: View {
             AxisMarks(position: .leading) { _ in
                 AxisValueLabel()
             }
+        }
+    }
+    
+    // Helper function to format currency with appropriate units
+    private func formatAmount(_ value: Double) -> String {
+        let absValue = abs(value)
+        
+        if absValue < 1000 {
+            // 1 to 999: show actual numbers
+            return "₹\(String(format: "%.0f", value))"
+        } else if absValue < 100000 {
+            // 1000 to 99999: show in thousands (k) with 2 decimals
+            let thousands = value / 1000.0
+            return "₹\(String(format: "%.2f", thousands))k"
+        } else if absValue < 10000000 {
+            // 100000 to 9999999: show in lakhs with 2 decimals
+            let lakhs = value / 100000.0
+            return "₹\(String(format: "%.2f", lakhs)) lakhs"
+        } else {
+            // 10000000+: show in crores (Cr) with 2 decimals
+            let crores = value / 10000000.0
+            return "₹\(String(format: "%.2f", crores)) Cr"
         }
     }
 }
