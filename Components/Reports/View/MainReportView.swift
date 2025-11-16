@@ -1162,7 +1162,7 @@ struct MainReportView: View {
                         }
                     }
                     .chartXAxis(.hidden)
-                    .chartYScale(domain: 0...yAxisMax, type: .linear)
+                    .chartYScale(domain: 0...yAxisMax)
                     .chartYAxis {
                         AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -1180,7 +1180,6 @@ struct MainReportView: View {
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: 70)
-                    .frame(height: geometry.size.height)
                     .padding(.trailing, 8)
                     
                     // -----------------------------
@@ -1238,7 +1237,7 @@ struct MainReportView: View {
                                 stageBudgetXAxis
                             }
                             .chartYAxis(.hidden) // Hide Y-axis in scrollable part
-                            .chartYScale(domain: 0...yAxisMax, type: .linear)
+                            .chartYScale(domain: 0...yAxisMax)
                             .chartForegroundStyleScale([
                                 "Budget": Color.blue,
                                 "Actual": Color.green
@@ -1248,7 +1247,10 @@ struct MainReportView: View {
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             // Calculate width: each bar pair needs ~90 points for better spacing
-                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70))
+                            .frame(
+                                width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70),
+                                height: geometry.size.height
+                            )
                             .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
                             .padding(.top, 12)
                             .padding(.leading, 4)
@@ -1566,7 +1568,7 @@ struct MainReportView: View {
                         }
                     }
                     .chartXAxis(.hidden)
-                    .chartYScale(domain: 0...yAxisMax, type: .linear)
+                    .chartYScale(domain: 0...yAxisMax)
                     .chartYAxis {
                         AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -1584,7 +1586,6 @@ struct MainReportView: View {
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
                     .frame(width: 70)
-                    .frame(height: geometry.size.height)
                     .padding(.trailing, 8)
                     
                     // -----------------------------
@@ -1642,7 +1643,7 @@ struct MainReportView: View {
                                 projectWiseXAxis
                             }
                             .chartYAxis(.hidden) // Hide Y-axis in scrollable part
-                            .chartYScale(domain: 0...yAxisMax, type: .linear)
+                            .chartYScale(domain: 0...yAxisMax)
                             .chartForegroundStyleScale([
                                 "Budget": Color.blue,
                                 "Actual": Color.green
@@ -1652,7 +1653,10 @@ struct MainReportView: View {
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             // Calculate width: each bar pair needs ~90 points for better spacing
-                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70))
+                            .frame(
+                                width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70),
+                                height: geometry.size.height
+                            )
                             .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
                             .padding(.top, 12)
                             .padding(.leading, 4)
