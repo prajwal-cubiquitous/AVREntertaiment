@@ -417,11 +417,17 @@ struct ProjectListView: View {
         do {
             // When approver accepts, always set status to LOCKED
             // The status check logic will automatically transition LOCKED to ACTIVE when planned date or phase start date arrives
+            
+            // Parse plannedDate string to Date for comparison
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let plannedDateObj = project.plannedDate.flatMap { dateFormatter.date(from: $0) }
+            let isPlannedDatePassed = plannedDateObj.map { $0 < Date() } ?? false
 
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": project.plannedDate < Date() ? ProjectStatus.LOCKED.rawValue : ProjectStatus.ACTIVE.rawValue,
+                    "status": isPlannedDatePassed ? ProjectStatus.ACTIVE.rawValue : ProjectStatus.LOCKED.rawValue,
                     "updatedAt": FieldValue.serverTimestamp()
                 ])
 
