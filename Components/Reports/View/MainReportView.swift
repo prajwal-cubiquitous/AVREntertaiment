@@ -1521,6 +1521,34 @@ struct MainReportView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityLabel("No stage selected. Select a stage to view project comparison.")
+            } else if viewModel.selectedStages.count > 1 {
+                VStack(spacing: DesignSystem.Spacing.small) {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.tertiary)
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("Select a single Stage to compare projects")
+                        .font(.system(size: 13, weight: .medium, design: .default))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("Multiple stages selected. Select a single stage to view project comparison.")
+            } else if viewModel.stageAcrossProjectsData.isEmpty {
+                VStack(spacing: DesignSystem.Spacing.small) {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.tertiary)
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("No projects found with the selected stage")
+                        .font(.system(size: 13, weight: .medium, design: .default))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel("No projects found with the selected stage.")
             } else {
                 Chart {
                     ForEach(viewModel.stageAcrossProjectsData, id: \.project) { data in

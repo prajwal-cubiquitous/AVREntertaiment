@@ -1012,21 +1012,162 @@ class MainReportViewModel: ObservableObject {
             await calculateCostTrend()
             await calculateStageBudgetVsActual()
             await calculateProjectWiseBudgetVsActual()
+            await calculateStageAcrossProjects()
             await calculateActiveProjects()
             await calculateStageProgressStatus()
             await calculateSubCategoryActivity()
             await calculateSubCategorySpend()
         }
+    }
+    
+    /// Calculate stage across projects data - shows budget vs actual for selected stage(s) across projects
+    private func calculateStageAcrossProjects() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                stageAcrossProjectsData = []
+            }
+            return
+        }
         
-        // Update stage across projects data when stage is selected
-        if !selectedStages.isEmpty {
-            stageAcrossProjectsData = [
-                StageAcrossProjectsData(project: "Aurum Heights", budget: 2.0, actual: 1.8),
-                StageAcrossProjectsData(project: "Tracura Residency", budget: 1.5, actual: 1.6),
-                StageAcrossProjectsData(project: "Lotus Enclave", budget: 2.5, actual: 2.0)
-            ]
+        // Only show data when exactly one stage is selected
+        guard selectedStages.count == 1, let selectedStage = selectedStages.first else {
+            await MainActor.run {
+                stageAcrossProjectsData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProjects.isEmpty {
+            projectsToProcess = projects
         } else {
-            stageAcrossProjectsData = []
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        var projectDataMap: [String: (budget: Double, actual: Double)] = [:] // projectName -> (budget, actual)
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            let projectName = project.name
+            
+            do {
+                // Load phases for this project
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var stageBudget: Double = 0
+                var hasSelectedStage = false
+                var matchingPhaseId: String? = nil
+                
+                // Find the selected stage in this project's phases
+                for phaseDoc in phasesSnapshot.documents {
+                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
+                    let phaseId = phaseDoc.documentID
+                    let phaseName = phase.phaseName
+                    
+                    // Check if this phase matches the selected stage
+                    if phaseName == selectedStage {
+                        hasSelectedStage = true
+                        matchingPhaseId = phaseId
+                        
+                        // Calculate budget for this stage (sum of all departments)
+                        for (deptKey, budgetAmount) in phase.departments {
+                            // Filter by department if specific department is selected
+                            if !selectedDepartments.isEmpty {
+                                let departmentName: String
+                                if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                    departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                                } else {
+                                    departmentName = deptKey
+                                }
+                                
+                                if !selectedDepartments.contains(departmentName) {
+                                    continue
+                                }
+                            }
+                            stageBudget += budgetAmount
+                        }
+                        break // Found the stage, no need to continue
+                    }
+                }
+                
+                // Only process expenses if this project has the selected stage
+                guard hasSelectedStage, let phaseId = matchingPhaseId else { continue }
+                
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                var stageActual: Double = 0
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Filter by stage (phase name or phaseId) - must match the selected stage
+                    if let expensePhaseName = expense.phaseName {
+                        if expensePhaseName != selectedStage {
+                            continue
+                        }
+                    } else {
+                        // If expense doesn't have phaseName, check by phaseId
+                        if expense.phaseId != phaseId {
+                            continue
+                        }
+                    }
+                    
+                    // Parse expense date and filter by date range
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let startOfDay = calendar.startOfDay(for: startDate)
+                    let endOfDay = calendar.startOfDay(for: endDate)
+                    
+                    if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
+                        continue
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                        continue
+                    }
+                    
+                    stageActual += expense.amount
+                }
+                
+                // Store data for this project (only if it has the selected stage)
+                if hasSelectedStage {
+                    projectDataMap[projectName] = (budget: stageBudget, actual: stageActual)
+                }
+            } catch {
+                print("Error calculating stage across projects for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array and sort by project name
+        let stageData = projectDataMap.map { projectName, values in
+            StageAcrossProjectsData(project: projectName, budget: values.budget, actual: values.actual)
+        }.sorted { $0.project < $1.project }
+        
+        await MainActor.run {
+            stageAcrossProjectsData = stageData
         }
     }
     
