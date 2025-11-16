@@ -628,45 +628,21 @@ struct MainReportView: View {
                 stageAcrossProjectsChart
             }
             
-            // Two Column Layout - Responsive
-            GeometryReader { geometry in
-                if geometry.size.width > 600 {
-                    // Wider layout: side by side
-                    HStack(alignment: .top, spacing: DesignSystem.Spacing.medium) {
-                        chartCard(
-                            title: "Sub-Category Spend",
-                            subtitle: "Filtered by Project · Department"
-                        ) {
-                            subCategorySpendChart
-                        }
-                        
-                        chartCard(
-                            title: "Cost by Project Status",
-                            subtitle: "₹ Cr · Portfolio split"
-                        ) {
-                            statusCostChart
-                        }
-                    }
-                } else {
-                    // Narrow layout: stacked
-                    VStack(spacing: DesignSystem.Spacing.medium) {
-                        chartCard(
-                            title: "Sub-Category Spend",
-                            subtitle: "Filtered by Project · Department"
-                        ) {
-                            subCategorySpendChart
-                        }
-                        
-                        chartCard(
-                            title: "Cost by Project Status",
-                            subtitle: "₹ Cr · Portfolio split"
-                        ) {
-                            statusCostChart
-                        }
-                    }
-                }
+            // Cost by Project Status
+            chartCard(
+                title: "Cost by Project Status",
+                subtitle: "₹ Cr · Portfolio split"
+            ) {
+                statusCostChart
             }
-            .frame(height: 240)
+            
+            // Sub-Category Spend
+            chartCard(
+                title: "Sub-Category Spend",
+                subtitle: "Filtered by Project · Department"
+            ) {
+                subCategorySpendChart
+            }
             
             // Cost Overrun vs Stage Progress
             chartCard(
@@ -1505,6 +1481,8 @@ struct MainReportView: View {
     }
     
     // Stage Across Projects Chart
+    @State private var selectedStageProjectForTooltip: String? = nil
+    
     private var stageAcrossProjectsChart: some View {
         Group {
             if viewModel.selectedStages.isEmpty {
@@ -1550,56 +1528,112 @@ struct MainReportView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityLabel("No projects found with the selected stage.")
             } else {
-                Chart {
-                    ForEach(viewModel.stageAcrossProjectsData, id: \.project) { data in
-                        BarMark(
-                            x: .value("Project", data.project),
-                            y: .value("Amount", data.budget)
-                        )
-                        .foregroundStyle(Color.gray)
-                        .position(by: .value("Type", "Budget"))
+                ZStack(alignment: .top) {
+                    Chart {
+                        ForEach(viewModel.stageAcrossProjectsData, id: \.project) { data in
+                            BarMark(
+                                x: .value("Project", data.project),
+                                y: .value("Amount", data.budget)
+                            )
+                            .foregroundStyle(selectedStageProjectForTooltip == data.project ? Color.gray.opacity(0.8) : Color.gray)
+                            .position(by: .value("Type", "Budget"))
+                            
+                            BarMark(
+                                x: .value("Project", data.project),
+                                y: .value("Amount", data.actual)
+                            )
+                            .foregroundStyle(selectedStageProjectForTooltip == data.project ? Color.green.opacity(0.8) : Color.green)
+                            .position(by: .value("Type", "Actual"))
+                        }
                         
-                        BarMark(
-                            x: .value("Project", data.project),
-                            y: .value("Amount", data.actual)
-                        )
-                        .foregroundStyle(Color.green)
-                        .position(by: .value("Type", "Actual"))
+                        // Show rule mark for selected project
+                        if let selectedProject = selectedStageProjectForTooltip {
+                            RuleMark(x: .value("Project", selectedProject))
+                                .foregroundStyle(Color.accentColor.opacity(0.3))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                        }
                     }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let project = value.as(String.self) {
-                                Text(project)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.primary)
+                    .chartXSelection(value: $selectedStageProjectForTooltip)
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel {
+                                if let project = value.as(String.self) {
+                                    Text(project)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
                             }
                         }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                            .foregroundStyle(.quaternary)
-                        AxisValueLabel {
-                            if let doubleValue = value.as(Double.self) {
-                                Text(formatChartValue(doubleValue))
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.primary)
+                    .chartYAxis {
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(.quaternary)
+                            AxisValueLabel {
+                                if let doubleValue = value.as(Double.self) {
+                                    Text(formatChartValue(doubleValue))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.primary)
+                                }
                             }
                         }
                     }
+                    .chartForegroundStyleScale([
+                        "Budget": Color.gray,
+                        "Actual": Color.green
+                    ])
+                    .chartLegend(position: .bottom)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 200, maxHeight: 300)
+                    
+                    // Tooltip overlay
+                    if let selectedProject = selectedStageProjectForTooltip,
+                       let selectedData = viewModel.stageAcrossProjectsData.first(where: { $0.project == selectedProject }),
+                       let projectIndex = viewModel.stageAcrossProjectsData.firstIndex(where: { $0.project == selectedProject }) {
+                        GeometryReader { geometry in
+                            let chartWidth = geometry.size.width - 16 // Account for padding
+                            let dataCount = CGFloat(viewModel.stageAcrossProjectsData.count)
+                            let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
+                            
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(selectedProject)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                HStack(spacing: 6) {
+                                    Text("Budget (₹ Cr):")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                    Text(String(format: "%.1f", selectedData.budget / 10000000.0))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                                HStack(spacing: 6) {
+                                    Text("Actual (₹ Cr):")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(.secondary)
+                                    Text(String(format: "%.1f", selectedData.actual / 10000000.0))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color(.systemBackground))
+                                    .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                            }
+                            .position(
+                                x: xPosition,
+                                y: 20
+                            )
+                        }
+                        .frame(minHeight: 200, maxHeight: 300)
+                    }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                .chartForegroundStyleScale([
-                    "Budget": Color.gray,
-                    "Actual": Color.green
-                ])
-                .chartLegend(position: .bottom)
             }
         }
     }
@@ -1702,25 +1736,111 @@ struct MainReportView: View {
     }
     
     // Status Cost Chart
+    @State private var selectedStatusForTooltip: String? = nil
+    
     private var statusCostChart: some View {
-        Chart {
-            ForEach(viewModel.statusCostData, id: \.status) { data in
-                BarMark(
-                    x: .value("Status", data.status),
-                    y: .value("Cost", data.value)
-                )
-                .foregroundStyle(Color.orange)
-            }
+        // Calculate Y-axis max value
+        let maxValue = viewModel.statusCostData.map { $0.value }.max() ?? 0
+        let yAxisMax: Double
+        if maxValue == 0 {
+            yAxisMax = 1000 // Small default when all values are 0
+        } else {
+            // Add 10% padding, but ensure minimum increment
+            let padding = max(maxValue * 0.1, maxValue * 0.05)
+            yAxisMax = maxValue + padding
         }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisValueLabel()
+        
+        return ZStack(alignment: .top) {
+            Chart {
+                ForEach(viewModel.statusCostData, id: \.status) { data in
+                    BarMark(
+                        x: .value("Status", data.status),
+                        y: .value("Cost", data.value)
+                    )
+                    .foregroundStyle(selectedStatusForTooltip == data.status ? Color.orange.opacity(0.8) : Color.orange)
+                }
+                
+                // Show rule mark for selected status
+                if let selectedStatus = selectedStatusForTooltip {
+                    RuleMark(x: .value("Status", selectedStatus))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine()
-                AxisValueLabel()
+            .chartXSelection(value: $selectedStatusForTooltip)
+            .chartXAxis {
+                AxisMarks(values: .automatic) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let status = value.as(String.self) {
+                            Text(status)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(formatChartValue(doubleValue))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .chartYScale(domain: 0...yAxisMax, type: .linear)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(minHeight: 200, maxHeight: 300)
+            
+            // Tooltip overlay
+            if let selectedStatus = selectedStatusForTooltip,
+               let selectedData = viewModel.statusCostData.first(where: { $0.status == selectedStatus }),
+               let statusIndex = viewModel.statusCostData.firstIndex(where: { $0.status == selectedStatus }) {
+                GeometryReader { geometry in
+                    let chartWidth = geometry.size.width - 16 // Account for padding
+                    let dataCount = CGFloat(viewModel.statusCostData.count)
+                    let xPosition = (CGFloat(statusIndex) + 0.5) * (chartWidth / dataCount)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            // Orange square indicator
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.orange)
+                                .frame(width: 12, height: 12)
+                            
+                            Text(selectedStatus)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                        HStack(spacing: 6) {
+                            Text("Cost (₹ Cr):")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: xPosition,
+                        y: 20
+                    )
+                }
+                .frame(minHeight: 200, maxHeight: 300)
             }
         }
     }

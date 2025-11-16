@@ -697,12 +697,7 @@ class MainReportViewModel: ObservableObject {
         
         // subCategorySpendData is now calculated from real data in calculateSubCategorySpend()
         
-        statusCostData = [
-            StatusCostData(status: "Active", value: 72.0),
-            StatusCostData(status: "On Hold", value: 18.0),
-            StatusCostData(status: "Delayed", value: 26.0),
-            StatusCostData(status: "Completed", value: 40.0)
-        ]
+        // statusCostData is now calculated from real data in calculateStatusCost()
         
         overrunData = [
             OverrunData(stage: "Excavation", progress: 25.0, overrun: -5.0),
@@ -1013,6 +1008,7 @@ class MainReportViewModel: ObservableObject {
             await calculateStageBudgetVsActual()
             await calculateProjectWiseBudgetVsActual()
             await calculateStageAcrossProjects()
+            await calculateStatusCost()
             await calculateActiveProjects()
             await calculateStageProgressStatus()
             await calculateSubCategoryActivity()
@@ -1749,6 +1745,129 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             subCategorySpendData = Array(spendData)
+        }
+    }
+    
+    /// Calculate cost by project status - shows total spend for each selected status
+    private func calculateStatusCost() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                statusCostData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProjects.isEmpty {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
+        }
+        
+        // Date formatter for parsing expense dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        var statusCostMap: [String: Double] = [:] // status -> total cost
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            // Determine the project's status for filtering
+            var projectStatus: String? = nil
+            
+            // Handle SUSPENDED status: check both status field and isSuspended flag
+            if project.isSuspended == true {
+                projectStatus = "SUSPENDED"
+            } else {
+                projectStatus = project.status
+            }
+            
+            // Only process if this project's status is in the selected statuses
+            guard let status = projectStatus, selectedProjectStatuses.contains(status) else {
+                continue
+            }
+            
+            do {
+                // Load expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                // Process each approved expense
+                for expenseDoc in expensesSnapshot.documents {
+                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                    
+                    // Parse expense date and filter by date range
+                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                    let startOfDay = calendar.startOfDay(for: startDate)
+                    let endOfDay = calendar.startOfDay(for: endDate)
+                    
+                    if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
+                        continue
+                    }
+                    
+                    // Filter by stage if specific stages are selected
+                    if !selectedStages.isEmpty {
+                        if let expensePhaseName = expense.phaseName {
+                            if !selectedStages.contains(expensePhaseName) {
+                                continue
+                            }
+                        } else {
+                            continue
+                        }
+                    }
+                    
+                    // Extract department name from expense
+                    let expenseDepartmentName: String
+                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                    } else {
+                        expenseDepartmentName = expense.department
+                    }
+                    
+                    // Filter by department if specific departments are selected
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                        continue
+                    }
+                    
+                    // Add to total cost for this status
+                    statusCostMap[status, default: 0] += expense.amount
+                }
+            } catch {
+                print("Error calculating status cost for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array, only include selected statuses, and sort by status name
+        let statusData = selectedProjectStatuses.compactMap { status -> StatusCostData? in
+            guard let cost = statusCostMap[status], cost > 0 else { return nil }
+            // Map status names to display names
+            let displayName: String
+            switch status {
+            case "ACTIVE":
+                displayName = "Active"
+            case "COMPLETED":
+                displayName = "Completed"
+            case "MAINTENANCE":
+                displayName = "Maintenance"
+            case "ARCHIVE":
+                displayName = "Archive"
+            case "SUSPENDED":
+                displayName = "Suspended"
+            default:
+                displayName = status
+            }
+            return StatusCostData(status: displayName, value: cost)
+        }.sorted { $0.status < $1.status }
+        
+        await MainActor.run {
+            statusCostData = statusData
         }
     }
 }
