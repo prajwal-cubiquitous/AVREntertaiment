@@ -1184,7 +1184,7 @@ struct MainReportView: View {
                                let selectedData = viewModel.stageBudgetData.first(where: { $0.stage == selectedStage }),
                                let stageIndex = viewModel.stageBudgetData.firstIndex(where: { $0.stage == selectedStage }) {
                                 GeometryReader { tooltipGeometry in
-                                    let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60)
+                                    let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.stageBudgetData.count)
                                     let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
                                     
@@ -1284,7 +1284,7 @@ struct MainReportView: View {
     private var stageBudgetXAxis: some AxisContent {
         AxisMarks(values: .automatic(desiredCount: 10)) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(Color(.separator).opacity(0.2))
             AxisValueLabel {
                 if let phaseName = value.as(String.self) {
                     TruncatedPhaseNameView(
@@ -1294,7 +1294,7 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
                 }
             }
         }
@@ -1405,7 +1405,7 @@ struct MainReportView: View {
             GeometryReader { geometry in
                 HStack(alignment: .top, spacing: 0) {
                     // -----------------------------
-                    // FIXED Y-AXIS
+                    // FIXED Y-AXIS (Enhanced)
                     // -----------------------------
                     Chart {
                         ForEach(viewModel.projectWiseData, id: \.project) { data in
@@ -1419,13 +1419,13 @@ struct MainReportView: View {
                     .chartXAxis(.hidden)
                     .chartYScale(domain: 0...yAxisMax, type: .linear)
                     .chartYAxis {
-                        AxisMarks(position: .leading) { value in
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(.quaternary)
+                                .foregroundStyle(Color(.separator).opacity(0.3))
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text(formatChartValue(v))
-                                        .font(.system(size: 10))
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -1434,8 +1434,9 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 50)
+                    .frame(width: 70)
                     .frame(height: geometry.size.height)
+                    .padding(.trailing, 8)
                     
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
@@ -1444,26 +1445,46 @@ struct MainReportView: View {
                         ZStack(alignment: .top) {
                             Chart {
                                 ForEach(viewModel.projectWiseData, id: \.project) { data in
+                                    // Budget Bar (Enhanced styling)
                                     BarMark(
                                         x: .value("Project", data.project),
                                         y: .value("Amount", data.budget)
                                     )
-                                    .foregroundStyle(selectedProjectForTooltip == data.project ? Color.blue.opacity(0.8) : Color.blue)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: selectedProjectForTooltip == data.project
+                                                ? [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
+                                                : [Color.blue.opacity(0.8), Color.blue.opacity(0.6)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .cornerRadius(6)
                                     .position(by: .value("Type", "Budget"))
                                     
+                                    // Actual Bar (Enhanced styling)
                                     BarMark(
                                         x: .value("Project", data.project),
                                         y: .value("Amount", data.actual)
                                     )
-                                    .foregroundStyle(selectedProjectForTooltip == data.project ? Color.green.opacity(0.8) : Color.green)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: selectedProjectForTooltip == data.project
+                                                ? [Color.green.opacity(0.9), Color.green.opacity(0.7)]
+                                                : [Color.green.opacity(0.8), Color.green.opacity(0.6)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .cornerRadius(6)
                                     .position(by: .value("Type", "Actual"))
                                 }
                                 
-                                // Show rule mark for selected project
+                                // Show rule mark for selected project (Enhanced)
                                 if let selectedProject = selectedProjectForTooltip {
                                     RuleMark(x: .value("Project", selectedProject))
-                                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                                 }
                             }
                             .chartXSelection(value: $selectedProjectForTooltip)
@@ -1476,62 +1497,100 @@ struct MainReportView: View {
                                 "Budget": Color.blue,
                                 "Actual": Color.green
                             ])
-                            .chartLegend(position: .bottom, alignment: .center)
+                            .chartLegend(position: .bottom, alignment: .center, spacing: 16)
                             .chartPlotStyle { plot in
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
-                            // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60))
-                            .padding(.bottom, 40) // Add padding to prevent scroll indicator from covering labels
-                            .padding(.top, 10)
+                            // Calculate width: each bar pair needs ~90 points for better spacing
+                            .frame(width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70))
+                            .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
+                            .padding(.top, 12)
+                            .padding(.leading, 4)
+                            .padding(.trailing, 8)
                             
-                            // Tooltip overlay
+                            // Enhanced Tooltip overlay
                             if let selectedProject = selectedProjectForTooltip,
                                let selectedData = viewModel.projectWiseData.first(where: { $0.project == selectedProject }),
                                let projectIndex = viewModel.projectWiseData.firstIndex(where: { $0.project == selectedProject }) {
                                 GeometryReader { tooltipGeometry in
-                                    let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60)
+                                    let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.projectWiseData.count)
                                     let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
                                     
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 10) {
                                         Text(truncateName(selectedProject))
-                                            .font(.system(size: 13, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                                             .foregroundStyle(.primary)
                                             .lineLimit(1)
-                                        HStack(spacing: 6) {
-                                            Text("Budget (₹ Cr):")
-                                                .font(.system(size: 12))
+                                        
+                                        Divider()
+                                            .background(Color(.separator).opacity(0.3))
+                                        
+                                        // Budget row
+                                        HStack(spacing: 10) {
+                                            Circle()
+                                                .fill(Color.blue)
+                                                .frame(width: 10, height: 10)
+                                            Text("Budget")
+                                                .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
-                                            Text(String(format: "%.1f", selectedData.budget / 10000000.0))
-                                                .font(.system(size: 12, weight: .semibold))
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
-                                        HStack(spacing: 6) {
-                                            Text("Actual (₹ Cr):")
-                                                .font(.system(size: 12))
+                                        
+                                        // Actual row
+                                        HStack(spacing: 10) {
+                                            Circle()
+                                                .fill(Color.green)
+                                                .frame(width: 10, height: 10)
+                                            Text("Actual")
+                                                .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
-                                            Text(String(format: "%.1f", selectedData.actual / 10000000.0))
-                                                .font(.system(size: 12, weight: .semibold))
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
+                                        }
+                                        
+                                        // Variance row
+                                        let variance = selectedData.actual - selectedData.budget
+                                        let variancePercent = selectedData.budget > 0 ? (variance / selectedData.budget) * 100 : 0
+                                        HStack(spacing: 10) {
+                                            Image(systemName: variance >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(variance >= 0 ? .red : .green)
+                                            Text("Variance")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
+                                            Text(String(format: "%.1f%%", abs(variancePercent)))
+                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                                .foregroundStyle(variance >= 0 ? .red : .green)
                                         }
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
                                     .background {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(Color(.systemBackground))
-                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.regularMaterial)
+                                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                                     }
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                                    )
                                     .position(
                                         x: xPosition,
-                                        y: 20
+                                        y: 28
                                     )
                                 }
                                 .frame(
-                                    width: max(CGFloat(viewModel.projectWiseData.count) * 80, geometry.size.width - 60),
+                                    width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70),
                                     height: geometry.size.height
                                 )
+                                .transition(.scale.combined(with: .opacity))
                             }
                         }
                     }
@@ -1539,7 +1598,10 @@ struct MainReportView: View {
                 }
             }
         }
-        .frame(height: 200) // Increased height to accommodate rotated labels
+        .frame(minHeight: 220, maxHeight: 350)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Project-wise budget versus actual chart")
+        .accessibilityHint("Tap on bars to see detailed budget and actual values")
         .sheet(item: Binding(
             get: { selectedProjectName.map { ProjectNameItem(name: $0) } },
             set: { selectedProjectName = $0?.name }
@@ -1551,7 +1613,7 @@ struct MainReportView: View {
     private var projectWiseXAxis: some AxisContent {
         AxisMarks(values: .automatic(desiredCount: 10)) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                .foregroundStyle(.quaternary)
+                .foregroundStyle(Color(.separator).opacity(0.2))
             AxisValueLabel {
                 if let projectName = value.as(String.self) {
                     TruncatedProjectNameView(
@@ -1561,7 +1623,7 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
                 }
             }
         }
@@ -2272,11 +2334,51 @@ struct MainReportView: View {
             xAxisMax = maxRate + padding
         }
         
+        // Calculate proper bar height - Apple Charts recommends 24-32pt per bar
+        let barHeight: CGFloat = 32
+        let barSpacing: CGFloat = 8
+        let totalBarHeight = barHeight + barSpacing
+        let chartHeight = CGFloat(viewModel.burnRateData.count) * totalBarHeight + 60 // 60 for padding
+        
         return AnyView(ZStack(alignment: .topLeading) {
             GeometryReader { geometry in
-                VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     // -----------------------------
-                    // SCROLLABLE CHART CONTENT (with Y-axis)
+                    // FIXED X-AXIS (on left, showing values)
+                    // -----------------------------
+                    Chart {
+                        ForEach(viewModel.burnRateData, id: \.project) { data in
+                            BarMark(
+                                x: .value("Rate", data.rate),
+                                y: .value("Project", data.project)
+                            )
+                            .foregroundStyle(.clear)
+                        }
+                    }
+                    .chartYAxis(.hidden)
+                    .chartXScale(domain: 0...xAxisMax, type: .linear)
+                    .chartXAxis {
+                        AxisMarks(position: .bottom, values: .automatic(desiredCount: 5)) { value in
+                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                                .foregroundStyle(Color(.separator).opacity(0.3))
+                            AxisValueLabel {
+                                if let rate = value.as(Double.self) {
+                                    Text(String(format: "%.2f", rate))
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .chartPlotStyle { plot in
+                        plot.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(width: 50)
+                    .frame(height: min(chartHeight, geometry.size.height))
+                    .padding(.trailing, 8)
+                    
+                    // -----------------------------
+                    // SCROLLABLE CHART CONTENT (with Y-axis labels)
                     // -----------------------------
                     ScrollView(.vertical, showsIndicators: true) {
                         ZStack(alignment: .topLeading) {
@@ -2286,29 +2388,39 @@ struct MainReportView: View {
                                         x: .value("Rate", data.rate),
                                         y: .value("Project", data.project)
                                     )
-                                    .foregroundStyle(selectedBurnRateProject == data.project ? Color.green.opacity(0.8) : Color.green)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: selectedBurnRateProject == data.project
+                                                ? [Color.green.opacity(0.9), Color.green.opacity(0.7)]
+                                                : [Color.green.opacity(0.8), Color.green.opacity(0.6)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(4)
                                 }
                                 
-                                // Show rule mark for selected project
+                                // Show rule mark for selected project (Enhanced)
                                 if let selectedProject = selectedBurnRateProject {
                                     RuleMark(y: .value("Project", selectedProject))
-                                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                                 }
                             }
                             .chartYSelection(value: $selectedBurnRateProject)
                             .chartXAxis(.hidden) // Hide X-axis in scrollable part
                             .chartXScale(domain: 0...xAxisMax, type: .linear)
                             .chartYAxis {
-                                AxisMarks(position: .leading, values: .automatic(desiredCount: 10)) { value in
+                                AxisMarks(position: .leading, values: .automatic(desiredCount: viewModel.burnRateData.count)) { value in
                                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                        .foregroundStyle(.quaternary)
+                                        .foregroundStyle(Color(.separator).opacity(0.2))
                                     AxisValueLabel {
                                         if let project = value.as(String.self) {
                                             Text(truncateName(project))
-                                                .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(.primary)
+                                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                                .foregroundStyle(.secondary)
                                                 .lineLimit(1)
+                                                .frame(maxWidth: 120, alignment: .trailing)
                                         }
                                     }
                                 }
@@ -2317,96 +2429,96 @@ struct MainReportView: View {
                                 plot.frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(
-                                width: geometry.size.width,
-                                height: CGFloat(max(viewModel.burnRateData.count, 3)) * 50 + 40
+                                width: geometry.size.width - 58,
+                                height: max(chartHeight, geometry.size.height - 50)
                             )
-                            .padding(.bottom, 40)
-                            .padding(.top, 10)
+                            .padding(.leading, 4)
+                            .padding(.trailing, 8)
+                            .padding(.top, 12)
+                            .padding(.bottom, 50)
                             
-                            // Tooltip overlay
+                            // Enhanced Tooltip overlay
                             if let selectedProject = selectedBurnRateProject,
                                let selectedData = viewModel.burnRateData.first(where: { $0.project == selectedProject }),
                                let projectIndex = viewModel.burnRateData.firstIndex(where: { $0.project == selectedProject }) {
                                 GeometryReader { tooltipGeometry in
-                                    let barHeight = 50.0
-                                    let yPosition = (CGFloat(projectIndex) * barHeight) + (barHeight / 2) + 20
+                                    // Use proper bar height calculation
+                                    let yPosition = (CGFloat(projectIndex) * totalBarHeight) + (barHeight / 2) + 12
                                     
                                     // Calculate x position based on the bar's end (rate value)
                                     let maxRate = viewModel.burnRateData.map { $0.rate }.max() ?? 1
                                     let barWidthRatio = Double(selectedData.rate) / Double(maxRate)
-                                    let estimatedBarEndX = tooltipGeometry.size.width * 0.7 * barWidthRatio + 50
+                                    let chartAreaWidth = tooltipGeometry.size.width - 16 // Account for padding
+                                    let estimatedBarEndX = chartAreaWidth * 0.85 * barWidthRatio + 60
                                     
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 8) {
                                         Text(truncateName(selectedProject))
-                                            .font(.system(size: 13, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                                             .foregroundStyle(.primary)
                                             .lineLimit(1)
-                                        HStack(spacing: 6) {
-                                            Text("Spent (last 30 days):")
+                                        
+                                        Divider()
+                                            .background(Color(.separator).opacity(0.3))
+                                        
+                                        HStack(spacing: 10) {
+                                            Image(systemName: "flame.fill")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.orange)
+                                            Text("Burn Rate")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr/day", selectedData.rate))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                                .foregroundStyle(.primary)
+                                        }
+                                        
+                                        HStack(spacing: 10) {
+                                            Image(systemName: "indianrupeesign.circle.fill")
                                                 .font(.system(size: 12))
                                                 .foregroundStyle(.secondary)
+                                            Text("Spent (30 days)")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
                                             Text(formatAmount(selectedData.totalSpend))
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
                                     .background {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(Color(.systemBackground))
-                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.regularMaterial)
+                                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                                     }
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                                    )
                                     .position(
-                                        x: min(estimatedBarEndX + 70, tooltipGeometry.size.width - 80),
+                                        x: min(estimatedBarEndX + 80, tooltipGeometry.size.width - 100),
                                         y: yPosition
                                     )
                                 }
                                 .frame(
-                                    width: geometry.size.width,
-                                    height: CGFloat(max(viewModel.burnRateData.count, 3)) * 50 + 40
+                                    width: geometry.size.width - 58,
+                                    height: max(chartHeight, geometry.size.height - 50)
                                 )
+                                .transition(.scale.combined(with: .opacity))
                             }
                         }
                     }
                     .scrollIndicators(.visible)
-                    
-                    // -----------------------------
-                    // FIXED X-AXIS (at bottom)
-                    // -----------------------------
-                    Chart {
-                        ForEach(viewModel.burnRateData, id: \.project) { data in
-                            BarMark(
-                                x: .value("Rate", data.rate),
-                                y: .value("Project", data.project)
-                            )
-                            .foregroundStyle(.clear) // Invisible, just for axis calculation
-                        }
-                    }
-                    .chartYAxis(.hidden)
-                    .chartXScale(domain: 0...xAxisMax, type: .linear)
-                    .chartXAxis {
-                        AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
-                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(.quaternary)
-                            AxisValueLabel {
-                                if let rate = value.as(Double.self) {
-                                    Text(String(format: "%.2f", rate))
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                        }
-                    }
-                    .chartPlotStyle { plot in
-                        plot.frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 40)
-                    .padding(.top, 4)
                 }
             }
         }
-        .frame(minHeight: 200, maxHeight: 300))
+        .frame(minHeight: 220, maxHeight: 400)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Burn rate chart showing daily spending rate by project")
+        .accessibilityHint("Tap on bars to see detailed burn rate information")
+        )
     }
     
     // Active Projects Chart
