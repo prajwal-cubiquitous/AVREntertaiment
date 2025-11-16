@@ -1096,6 +1096,7 @@ class CreateProjectViewModel: ObservableObject {
                         location: location,
                         currency: currency,
                         budget: totalBudget,
+                        estimatedBudget: totalBudget, // Set estimated budget to total budget on creation (constant)
                         status: initialStatus,
                         startDate: nil, // Removed from main project
                         endDate: nil, // Removed from main project

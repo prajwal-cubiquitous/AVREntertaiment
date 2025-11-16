@@ -610,14 +610,14 @@ class AdminProjectDetailViewModel: ObservableObject {
                 let today = calendar.startOfDay(for: Date())
                 let planned = calendar.startOfDay(for: newPlannedDate)
                 
-//                let newStatus: String
-//                if planned <= today {
-//                    // If planned date is today or in the past, set to ACTIVE
-//                    newStatus = ProjectStatus.ACTIVE.rawValue
-//                } else {
-//                    // If planned date is in the future, set to LOCKED
-//                    newStatus = ProjectStatus.LOCKED.rawValue
-//                }
+                let newStatus: String
+                if planned <= today {
+                    // If planned date is today or in the past, set to ACTIVE
+                    newStatus = ProjectStatus.ACTIVE.rawValue
+                } else {
+                    // If planned date is in the future, set to LOCKED
+                    newStatus = ProjectStatus.LOCKED.rawValue
+                }
                 
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)

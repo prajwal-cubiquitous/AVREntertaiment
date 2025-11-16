@@ -25,6 +25,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let location: String
     let currency: String
     let budget: Double // This remains the total budget stored in Firestore
+    let estimatedBudget: Double? // Original estimated budget when project was created (constant, never changes)
     let status: String
     let startDate: String?
     let endDate: String?
@@ -106,6 +107,7 @@ extension Project {
                 currency: "INR",
                 // The total budget MUST match the sum of the categories
                 budget: 0000,
+                estimatedBudget: nil,
                 status: "ACTIVE",
                 startDate: "",
                 endDate: "",
@@ -129,6 +131,7 @@ extension Project {
                 currency: "INR",
                 // The total budget MUST match the sum of the categories
                 budget: 50000,
+                estimatedBudget: 50000,
                 status: "ACTIVE",
                 startDate: "01/06/2024",
                 endDate: "31/12/2024",
@@ -152,6 +155,7 @@ extension Project {
                 location: "Bengaluru",
                 currency: "INR",
                 budget: 120000,
+                estimatedBudget: 120000,
                 status: "COMPLETED",
                 startDate: "01/01/2024",
                 endDate: "31/05/2024",
