@@ -1074,9 +1074,10 @@ struct MainReportView: View {
                                     let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
                                     
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text(selectedStage)
+                                        Text(truncateName(selectedStage))
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(.primary)
+                                            .lineLimit(1)
                                         HStack(spacing: 6) {
                                             Text("Budget (₹ Cr):")
                                                 .font(.system(size: 12))
@@ -1174,11 +1175,19 @@ struct MainReportView: View {
         .presentationDetents([.medium])
     }
     
+    // Helper function to truncate names consistently
+    private func truncateName(_ name: String, maxLength: Int = 15) -> String {
+        if name.count > maxLength {
+            return String(name.prefix(maxLength)) + "..."
+        }
+        return name
+    }
+    
     // Helper struct for phase name display with truncation
     private struct TruncatedPhaseNameView: View {
         let phaseName: String
         let onTap: () -> Void
-        let maxLength: Int = 10
+        let maxLength: Int = 15
         
         private var truncatedName: String {
             if phaseName.count > maxLength {
@@ -1199,7 +1208,7 @@ struct MainReportView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: 70)
+                        .frame(maxWidth: 100)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             HapticManager.selection()
@@ -1210,7 +1219,7 @@ struct MainReportView: View {
                         .font(.system(size: 9, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .frame(maxWidth: 70)
+                        .frame(maxWidth: 100)
                 }
             }
         }
@@ -1332,9 +1341,10 @@ struct MainReportView: View {
                                     let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
                                     
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text(selectedProject)
+                                        Text(truncateName(selectedProject))
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(.primary)
+                                            .lineLimit(1)
                                         HStack(spacing: 6) {
                                             Text("Budget (₹ Cr):")
                                                 .font(.system(size: 12))
@@ -1436,7 +1446,7 @@ struct MainReportView: View {
     private struct TruncatedProjectNameView: View {
         let projectName: String
         let onTap: () -> Void
-        let maxLength: Int = 10
+        let maxLength: Int = 15
         
         private var truncatedName: String {
             if projectName.count > maxLength {
@@ -1457,7 +1467,7 @@ struct MainReportView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .frame(maxWidth: 70)
+                        .frame(maxWidth: 100)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             HapticManager.selection()
@@ -1468,7 +1478,7 @@ struct MainReportView: View {
                         .font(.system(size: 9, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .frame(maxWidth: 70)
+                        .frame(maxWidth: 100)
                 }
             }
         }
@@ -1560,9 +1570,10 @@ struct MainReportView: View {
                                 .foregroundStyle(.quaternary)
                             AxisValueLabel {
                                 if let project = value.as(String.self) {
-                                    Text(project)
+                                    Text(truncateName(project))
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.primary)
+                                        .lineLimit(1)
                                 }
                             }
                         }
@@ -1599,9 +1610,10 @@ struct MainReportView: View {
                             let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
                             
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(selectedProject)
+                                Text(truncateName(selectedProject))
                                     .font(.system(size: 13, weight: .semibold))
                                     .foregroundStyle(.primary)
+                                    .lineLimit(1)
                                 HStack(spacing: 6) {
                                     Text("Budget (₹ Cr):")
                                         .font(.system(size: 12))
@@ -2006,9 +2018,10 @@ struct MainReportView: View {
                                 .fill(Color.red)
                                 .frame(width: 12, height: 12)
                             
-                            Text("Stage: \(selectedData.stage) · Progress: \(Int(selectedData.progress))% · Overrun: \(Int(selectedData.overrun))%")
+                            Text("Stage: \(truncateName(selectedData.stage)) · Progress: \(Int(selectedData.progress))% · Overrun: \(Int(selectedData.overrun))%")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(.primary)
+                                .lineLimit(1)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -2097,9 +2110,10 @@ struct MainReportView: View {
                                         .foregroundStyle(.quaternary)
                                     AxisValueLabel {
                                         if let project = value.as(String.self) {
-                                            Text(project)
+                                            Text(truncateName(project))
                                                 .font(.system(size: 11, weight: .medium))
                                                 .foregroundStyle(.primary)
+                                                .lineLimit(1)
                                         }
                                     }
                                 }
@@ -2128,9 +2142,10 @@ struct MainReportView: View {
                                     let estimatedBarEndX = tooltipGeometry.size.width * 0.7 * barWidthRatio + 50
                                     
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text(selectedProject)
+                                        Text(truncateName(selectedProject))
                                             .font(.system(size: 13, weight: .semibold))
                                             .foregroundStyle(.primary)
+                                            .lineLimit(1)
                                         HStack(spacing: 6) {
                                             Text("Spent (last 30 days):")
                                                 .font(.system(size: 12))
@@ -2341,9 +2356,10 @@ struct MainReportView: View {
                     .foregroundStyle(.quaternary)
                 AxisValueLabel {
                     if let stage = value.as(String.self) {
-                        Text(stage)
+                        Text(truncateName(stage))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.primary)
+                            .lineLimit(1)
                     }
                 }
             }
