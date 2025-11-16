@@ -969,7 +969,7 @@ struct MainReportView: View {
                             .padding(.top, 12)
                             .padding(.leading, 4)
                             
-                            // Enhanced Tooltip overlay
+                            // Enhanced Tooltip overlay with safe positioning
                             if let selectedMonth = selectedCostTrendMonth,
                                let selectedData = viewModel.costTrendData.first(where: { $0.month == selectedMonth }),
                                let monthIndex = viewModel.costTrendData.firstIndex(where: { $0.month == selectedMonth }) {
@@ -977,7 +977,22 @@ struct MainReportView: View {
                                     let chartWidth = max(CGFloat(viewModel.costTrendData.count) * 70,
                                                         geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.costTrendData.count)
-                                    let xPosition = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
+                                    let preferredX = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    // Estimate tooltip size
+                                    let tooltipWidth: CGFloat = 180
+                                    let tooltipHeight: CGFloat = 80
+                                    
+                                    // Calculate safe position
+                                    let safePosition = calculateSafeTooltipPosition(
+                                        preferredX: preferredX,
+                                        preferredY: 24,
+                                        tooltipWidth: tooltipWidth,
+                                        tooltipHeight: tooltipHeight,
+                                        containerWidth: tooltipGeometry.size.width,
+                                        containerHeight: tooltipGeometry.size.height,
+                                        padding: 12
+                                    )
                                     
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text(selectedMonth)
@@ -1011,10 +1026,8 @@ struct MainReportView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                                     )
-                                    .position(
-                                        x: xPosition,
-                                        y: 24
-                                    )
+                                    .frame(width: tooltipWidth)
+                                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                                 }
                                 .frame(
                                     width: max(CGFloat(viewModel.costTrendData.count) * 70,
@@ -1179,14 +1192,29 @@ struct MainReportView: View {
                             .padding(.top, 12)
                             .padding(.leading, 4)
                             
-                            // Tooltip overlay
+                            // Enhanced Tooltip overlay with safe positioning
                             if let selectedStage = selectedStageForTooltip,
                                let selectedData = viewModel.stageBudgetData.first(where: { $0.stage == selectedStage }),
                                let stageIndex = viewModel.stageBudgetData.firstIndex(where: { $0.stage == selectedStage }) {
                                 GeometryReader { tooltipGeometry in
                                     let chartWidth = max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.stageBudgetData.count)
-                                    let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
+                                    let preferredX = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    // Estimate tooltip size
+                                    let tooltipWidth: CGFloat = 200
+                                    let tooltipHeight: CGFloat = 140
+                                    
+                                    // Calculate safe position
+                                    let safePosition = calculateSafeTooltipPosition(
+                                        preferredX: preferredX,
+                                        preferredY: 28,
+                                        tooltipWidth: tooltipWidth,
+                                        tooltipHeight: tooltipHeight,
+                                        containerWidth: tooltipGeometry.size.width,
+                                        containerHeight: tooltipGeometry.size.height,
+                                        padding: 12
+                                    )
                                     
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text(truncateName(selectedStage))
@@ -1252,10 +1280,8 @@ struct MainReportView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                                     )
-                                    .position(
-                                        x: xPosition,
-                                        y: 28
-                                    )
+                                    .frame(width: tooltipWidth)
+                                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                                 }
                                 .frame(
                                     width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70),
@@ -1335,6 +1361,50 @@ struct MainReportView: View {
             return String(name.prefix(maxLength)) + "..."
         }
         return name
+    }
+    
+    // Helper function to calculate safe tooltip position that avoids screen edges
+    // Follows Apple Charts guidelines for tooltip positioning
+    private func calculateSafeTooltipPosition(
+        preferredX: CGFloat,
+        preferredY: CGFloat,
+        tooltipWidth: CGFloat,
+        tooltipHeight: CGFloat,
+        containerWidth: CGFloat,
+        containerHeight: CGFloat,
+        padding: CGFloat = 16
+    ) -> (x: CGFloat, y: CGFloat) {
+        // Calculate safe boundaries with padding
+        let minX = padding
+        let maxX = containerWidth - tooltipWidth - padding
+        let minY = padding
+        let maxY = containerHeight - tooltipHeight - padding
+        
+        // Calculate preferred position (centered on preferredX)
+        var safeX = preferredX - tooltipWidth / 2
+        
+        // Adjust X if tooltip would go off-screen
+        if safeX < minX {
+            // Too far left - align to left edge with padding
+            safeX = minX
+        } else if safeX > maxX {
+            // Too far right - align to right edge with padding
+            safeX = maxX
+        }
+        
+        // Clamp Y position to stay within bounds
+        var safeY = preferredY
+        if safeY < minY {
+            safeY = minY
+        } else if safeY + tooltipHeight > containerHeight - padding {
+            // If tooltip would go below screen, position it above the preferred point
+            safeY = max(minY, preferredY - tooltipHeight - 8)
+        }
+        
+        // Final clamp to ensure we're within bounds
+        safeY = max(minY, min(maxY, safeY))
+        
+        return (safeX, safeY)
     }
     
     // Helper struct for phase name display with truncation
@@ -1508,14 +1578,29 @@ struct MainReportView: View {
                             .padding(.leading, 4)
                             .padding(.trailing, 8)
                             
-                            // Enhanced Tooltip overlay
+                            // Enhanced Tooltip overlay with safe positioning
                             if let selectedProject = selectedProjectForTooltip,
                                let selectedData = viewModel.projectWiseData.first(where: { $0.project == selectedProject }),
                                let projectIndex = viewModel.projectWiseData.firstIndex(where: { $0.project == selectedProject }) {
                                 GeometryReader { tooltipGeometry in
                                     let chartWidth = max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.projectWiseData.count)
-                                    let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
+                                    let preferredX = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
+                                    
+                                    // Estimate tooltip size
+                                    let tooltipWidth: CGFloat = 200
+                                    let tooltipHeight: CGFloat = 140
+                                    
+                                    // Calculate safe position
+                                    let safePosition = calculateSafeTooltipPosition(
+                                        preferredX: preferredX,
+                                        preferredY: 28,
+                                        tooltipWidth: tooltipWidth,
+                                        tooltipHeight: tooltipHeight,
+                                        containerWidth: tooltipGeometry.size.width,
+                                        containerHeight: tooltipGeometry.size.height,
+                                        padding: 12
+                                    )
                                     
                                     VStack(alignment: .leading, spacing: 10) {
                                         Text(truncateName(selectedProject))
@@ -1581,10 +1666,8 @@ struct MainReportView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                                     )
-                                    .position(
-                                        x: xPosition,
-                                        y: 28
-                                    )
+                                    .frame(width: tooltipWidth)
+                                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                                 }
                                 .frame(
                                     width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70),
@@ -1816,50 +1899,81 @@ struct MainReportView: View {
                     .padding(.vertical, 8)
                     .frame(minHeight: 200, maxHeight: 300)
                     
-                    // Tooltip overlay
+                    // Enhanced Tooltip overlay with safe positioning
                     if let selectedProject = selectedStageProjectForTooltip,
                        let selectedData = viewModel.stageAcrossProjectsData.first(where: { $0.project == selectedProject }),
                        let projectIndex = viewModel.stageAcrossProjectsData.firstIndex(where: { $0.project == selectedProject }) {
                         GeometryReader { geometry in
                             let chartWidth = geometry.size.width - 16 // Account for padding
                             let dataCount = CGFloat(viewModel.stageAcrossProjectsData.count)
-                            let xPosition = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
+                            let preferredX = (CGFloat(projectIndex) + 0.5) * (chartWidth / dataCount)
                             
-                            VStack(alignment: .leading, spacing: 6) {
+                            // Estimate tooltip size
+                            let tooltipWidth: CGFloat = 200
+                            let tooltipHeight: CGFloat = 100
+                            
+                            // Calculate safe position
+                            let safePosition = calculateSafeTooltipPosition(
+                                preferredX: preferredX,
+                                preferredY: 28,
+                                tooltipWidth: tooltipWidth,
+                                tooltipHeight: tooltipHeight,
+                                containerWidth: geometry.size.width,
+                                containerHeight: geometry.size.height,
+                                padding: 12
+                            )
+                            
+                            VStack(alignment: .leading, spacing: 10) {
                                 Text(truncateName(selectedProject))
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
-                                HStack(spacing: 6) {
-                                    Text("Budget (₹ Cr):")
-                                        .font(.system(size: 12))
+                                
+                                Divider()
+                                    .background(Color(.separator).opacity(0.3))
+                                
+                                HStack(spacing: 10) {
+                                    Circle()
+                                        .fill(Color.gray)
+                                        .frame(width: 10, height: 10)
+                                    Text("Budget")
+                                        .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.secondary)
-                                    Text(String(format: "%.1f", selectedData.budget / 10000000.0))
-                                        .font(.system(size: 12, weight: .semibold))
+                                    Spacer()
+                                    Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                        .font(.system(size: 14, weight: .bold, design: .rounded))
                                         .foregroundStyle(.primary)
                                 }
-                                HStack(spacing: 6) {
-                                    Text("Actual (₹ Cr):")
-                                        .font(.system(size: 12))
+                                
+                                HStack(spacing: 10) {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 10, height: 10)
+                                    Text("Actual")
+                                        .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.secondary)
-                                    Text(String(format: "%.1f", selectedData.actual / 10000000.0))
-                                        .font(.system(size: 12, weight: .semibold))
+                                    Spacer()
+                                    Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                        .font(.system(size: 14, weight: .bold, design: .rounded))
                                         .foregroundStyle(.primary)
                                 }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
                             .background {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(.regularMaterial)
+                                    .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                             }
-                            .position(
-                                x: xPosition,
-                                y: 20
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                             )
+                            .frame(width: tooltipWidth)
+                            .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                         }
                         .frame(minHeight: 200, maxHeight: 300)
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
             }
@@ -1919,46 +2033,73 @@ struct MainReportView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedCategory = selectedSpendCategory,
                let selectedData = viewModel.subCategorySpendData.first(where: { $0.category == selectedCategory }),
                let categoryIndex = viewModel.subCategorySpendData.firstIndex(where: { $0.category == selectedCategory }) {
                 GeometryReader { geometry in
                     let barHeight = 50.0
-                    let yPosition = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
+                    let preferredY = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
                     
                     // Calculate x position based on the bar's end (spend value)
-                    // We need to estimate the bar width based on the spend relative to max spend
                     let maxSpend = viewModel.subCategorySpendData.map { $0.value }.max() ?? 1
                     let barWidthRatio = Double(selectedData.value) / Double(maxSpend)
-                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50 // Approximate chart area width
+                    let chartAreaWidth = geometry.size.width - 16
+                    let preferredX = chartAreaWidth * 0.75 * barWidthRatio + 60
                     
-                    VStack(alignment: .leading, spacing: 6) {
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 200
+                    let tooltipHeight: CGFloat = 80
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: preferredY,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(selectedCategory)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.primary)
-                        HStack(spacing: 6) {
-                            Text("Spend (₹ Cr):")
+                            .lineLimit(1)
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 10) {
+                            Image(systemName: "indianrupeesign.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
-                                .font(.system(size: 12, weight: .semibold))
+                            Text("Spend")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: min(estimatedBarEndX + 70, geometry.size.width - 80),
-                        y: yPosition
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                 }
                 .frame(minHeight: CGFloat(max(viewModel.subCategorySpendData.count, 3)) * 50 + 60)
+                .transition(.scale.combined(with: .opacity))
             }
         }
     }
@@ -2027,48 +2168,72 @@ struct MainReportView: View {
             .padding(.vertical, 8)
             .frame(minHeight: 200, maxHeight: 300)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedStatus = selectedStatusForTooltip,
                let selectedData = viewModel.statusCostData.first(where: { $0.status == selectedStatus }),
                let statusIndex = viewModel.statusCostData.firstIndex(where: { $0.status == selectedStatus }) {
                 GeometryReader { geometry in
                     let chartWidth = geometry.size.width - 16 // Account for padding
                     let dataCount = CGFloat(viewModel.statusCostData.count)
-                    let xPosition = (CGFloat(statusIndex) + 0.5) * (chartWidth / dataCount)
+                    let preferredX = (CGFloat(statusIndex) + 0.5) * (chartWidth / dataCount)
                     
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            // Orange square indicator
-                            RoundedRectangle(cornerRadius: 2)
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 180
+                    let tooltipHeight: CGFloat = 80
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: 28,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Circle()
                                 .fill(Color.orange)
-                                .frame(width: 12, height: 12)
-                            
+                                .frame(width: 10, height: 10)
                             Text(selectedStatus)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
-                        HStack(spacing: 6) {
-                            Text("Cost (₹ Cr):")
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 10) {
+                            Image(systemName: "indianrupeesign.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
-                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
-                                .font(.system(size: 12, weight: .semibold))
+                            Text("Cost")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: xPosition,
-                        y: 20
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                 }
                 .frame(minHeight: 200, maxHeight: 300)
+                .transition(.scale.combined(with: .opacity))
             }
         }
     }
@@ -2210,7 +2375,7 @@ struct MainReportView: View {
             .padding(.vertical, 12)
             .frame(minHeight: 220, maxHeight: 350)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedStage = selectedOverrunStage,
                let selectedData = viewModel.overrunData.first(where: { $0.stage == selectedStage }) {
                 GeometryReader { geometry in
@@ -2232,12 +2397,27 @@ struct MainReportView: View {
                     let chartWidth = geometry.size.width - chartPadding * 2
                     let chartHeight = geometry.size.height - chartPadding * 2
                     
-                    // Calculate position
+                    // Calculate preferred position
                     let xRatio = (selectedData.progress - minProgress) / progressRangeSize
                     let yRatio = (selectedData.overrun - minOverrun) / overrunRangeSize
                     
-                    let xPosition = chartPadding + (xRatio * chartWidth)
-                    let yPosition = chartPadding + ((1 - yRatio) * chartHeight) // Invert Y for screen coordinates
+                    let preferredX = chartPadding + (xRatio * chartWidth)
+                    let preferredY = chartPadding + ((1 - yRatio) * chartHeight) // Invert Y for screen coordinates
+                    
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 220
+                    let tooltipHeight: CGFloat = 110
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: preferredY - 70, // Offset above point
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
                     
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
@@ -2287,13 +2467,11 @@ struct MainReportView: View {
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
-                    .position(
-                        x: min(max(xPosition, 100), geometry.size.width - 100),
-                        y: max(min(yPosition - 70, geometry.size.height - 100), 80)
-                    )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                     .transition(.scale.combined(with: .opacity))
                 }
-                .frame(minHeight: 200, maxHeight: 300)
+                .frame(minHeight: 220, maxHeight: 350)
             }
         }
     }
@@ -2437,19 +2615,34 @@ struct MainReportView: View {
                             .padding(.top, 12)
                             .padding(.bottom, 50)
                             
-                            // Enhanced Tooltip overlay
+                            // Enhanced Tooltip overlay with safe positioning
                             if let selectedProject = selectedBurnRateProject,
                                let selectedData = viewModel.burnRateData.first(where: { $0.project == selectedProject }),
                                let projectIndex = viewModel.burnRateData.firstIndex(where: { $0.project == selectedProject }) {
                                 GeometryReader { tooltipGeometry in
                                     // Use proper bar height calculation
-                                    let yPosition = (CGFloat(projectIndex) * totalBarHeight) + (barHeight / 2) + 12
+                                    let preferredY = (CGFloat(projectIndex) * totalBarHeight) + (barHeight / 2) + 12
                                     
                                     // Calculate x position based on the bar's end (rate value)
                                     let maxRate = viewModel.burnRateData.map { $0.rate }.max() ?? 1
                                     let barWidthRatio = Double(selectedData.rate) / Double(maxRate)
                                     let chartAreaWidth = tooltipGeometry.size.width - 16 // Account for padding
-                                    let estimatedBarEndX = chartAreaWidth * 0.85 * barWidthRatio + 60
+                                    let preferredX = chartAreaWidth * 0.85 * barWidthRatio + 60
+                                    
+                                    // Estimate tooltip size
+                                    let tooltipWidth: CGFloat = 220
+                                    let tooltipHeight: CGFloat = 120
+                                    
+                                    // Calculate safe position
+                                    let safePosition = calculateSafeTooltipPosition(
+                                        preferredX: preferredX,
+                                        preferredY: preferredY,
+                                        tooltipWidth: tooltipWidth,
+                                        tooltipHeight: tooltipHeight,
+                                        containerWidth: tooltipGeometry.size.width,
+                                        containerHeight: tooltipGeometry.size.height,
+                                        padding: 12
+                                    )
                                     
                                     VStack(alignment: .leading, spacing: 8) {
                                         Text(truncateName(selectedProject))
@@ -2497,10 +2690,8 @@ struct MainReportView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                                     )
-                                    .position(
-                                        x: min(estimatedBarEndX + 80, tooltipGeometry.size.width - 100),
-                                        y: yPosition
-                                    )
+                                    .frame(width: tooltipWidth)
+                                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                                 }
                                 .frame(
                                     width: geometry.size.width - 58,
@@ -2585,41 +2776,67 @@ struct MainReportView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedMonth = selectedMonth,
                let selectedData = viewModel.activeProjectsData.first(where: { $0.month == selectedMonth }),
                let monthIndex = viewModel.activeProjectsData.firstIndex(where: { $0.month == selectedMonth }) {
                 GeometryReader { geometry in
                     let chartWidth = geometry.size.width
                     let dataCount = CGFloat(viewModel.activeProjectsData.count)
-                    let xPosition = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
+                    let preferredX = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
                     
-                    VStack(alignment: .leading, spacing: 6) {
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 180
+                    let tooltipHeight: CGFloat = 70
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: 24,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(selectedMonth)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.primary)
-                        HStack(spacing: 6) {
-                            Text("Active Projects:")
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 10) {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+                            Text("Active Projects")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
                             Text("\(selectedData.count)")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: xPosition,
-                        y: 20
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                 }
                 .frame(minHeight: 220, maxHeight: 250)
+                .transition(.scale.combined(with: .opacity))
             }
         }
     }
@@ -2749,46 +2966,73 @@ struct MainReportView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedCategory = selectedCategory,
                let selectedData = viewModel.subCategoryActivityData.first(where: { $0.category == selectedCategory }),
                let categoryIndex = viewModel.subCategoryActivityData.firstIndex(where: { $0.category == selectedCategory }) {
                 GeometryReader { geometry in
                     let barHeight = 50.0
-                    let yPosition = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
+                    let preferredY = (CGFloat(categoryIndex) * barHeight) + (barHeight / 2) + 20
                     
                     // Calculate x position based on the bar's end (count value)
-                    // We need to estimate the bar width based on the count relative to max count
                     let maxCount = viewModel.subCategoryActivityData.map { $0.count }.max() ?? 1
                     let barWidthRatio = Double(selectedData.count) / Double(maxCount)
-                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50 // Approximate chart area width
+                    let chartAreaWidth = geometry.size.width - 16
+                    let preferredX = chartAreaWidth * 0.75 * barWidthRatio + 60
                     
-                    VStack(alignment: .leading, spacing: 6) {
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 200
+                    let tooltipHeight: CGFloat = 80
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: preferredY,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(selectedCategory)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.primary)
-                        HStack(spacing: 6) {
-                            Text("Expenses:")
+                            .lineLimit(1)
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 10) {
+                            Image(systemName: "list.bullet.rectangle")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+                            Text("Expenses")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
                             Text("\(selectedData.count)")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: min(estimatedBarEndX + 70, geometry.size.width - 80),
-                        y: yPosition
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                 }
                 .frame(minHeight: CGFloat(max(viewModel.subCategoryActivityData.count, 3)) * 50 + 60)
+                .transition(.scale.combined(with: .opacity))
             }
         }
     }
@@ -2926,45 +3170,73 @@ struct MainReportView: View {
             .padding(.vertical, 8)
             .frame(minHeight: 200, maxHeight: 300)
             
-            // Tooltip overlay
+            // Enhanced Tooltip overlay with safe positioning
             if let selectedReason = selectedSuspensionReason,
                let selectedData = viewModel.suspensionReasonData.first(where: { $0.reason == selectedReason }),
                let reasonIndex = viewModel.suspensionReasonData.firstIndex(where: { $0.reason == selectedReason }) {
                 GeometryReader { geometry in
                     let barHeight = max(40.0, (geometry.size.height - 60) / CGFloat(max(viewModel.suspensionReasonData.count, 1)))
-                    let yPosition = (CGFloat(reasonIndex) * barHeight) + (barHeight / 2) + 30
+                    let preferredY = (CGFloat(reasonIndex) * barHeight) + (barHeight / 2) + 30
                     
                     // Calculate x position based on the bar's end (count value)
                     let maxCount = viewModel.suspensionReasonData.map { $0.count }.max() ?? 1
                     let barWidthRatio = Double(selectedData.count) / Double(maxCount)
-                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50
+                    let chartAreaWidth = geometry.size.width - 16
+                    let preferredX = chartAreaWidth * 0.75 * barWidthRatio + 60
                     
-                    VStack(alignment: .leading, spacing: 6) {
+                    // Estimate tooltip size
+                    let tooltipWidth: CGFloat = 220
+                    let tooltipHeight: CGFloat = 80
+                    
+                    // Calculate safe position
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: preferredY,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(selectedReason)
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.primary)
-                        HStack(spacing: 6) {
-                            RoundedRectangle(cornerRadius: 2)
+                            .lineLimit(2)
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 10) {
+                            Circle()
                                 .fill(Color.orange)
-                                .frame(width: 12, height: 12)
-                            Text("Projects: \(selectedData.count)")
-                                .font(.system(size: 12, weight: .medium))
+                                .frame(width: 10, height: 10)
+                            Text("Projects")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(selectedData.count)")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: min(estimatedBarEndX + 80, geometry.size.width - 80),
-                        y: yPosition
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .frame(width: tooltipWidth)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
                 }
                 .frame(minHeight: 200, maxHeight: 300)
+                .transition(.scale.combined(with: .opacity))
             }
         })
     }
