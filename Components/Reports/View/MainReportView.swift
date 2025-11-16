@@ -595,7 +595,8 @@ struct MainReportView: View {
             chartCard(
                 title: "Cost Trend (MoM)",
                 subtitle: "Monthly total cost · ₹ Cr",
-                totalValue: viewModel.costTrendTotal
+                totalValue: viewModel.costTrendTotal,
+                chartId: "costTrend"
             ) {
                 costTrendChart
             }
@@ -604,7 +605,8 @@ struct MainReportView: View {
             if viewModel.stageBudgetData.count > 1 {
                 chartCard(
                     title: "Stage Budget vs Actual",
-                    subtitle: "₹ Cr · Budget vs Actuals"
+                    subtitle: "₹ Cr · Budget vs Actuals",
+                    chartId: "stageBudget"
                 ) {
                     stageBudgetChart
                 }
@@ -614,7 +616,8 @@ struct MainReportView: View {
             if viewModel.projectWiseData.count > 1 {
                 chartCard(
                     title: "Project-wise Budget vs Actual",
-                    subtitle: "Total project budget vs total spend"
+                    subtitle: "Total project budget vs total spend",
+                    chartId: "projectWise"
                 ) {
                     projectWiseBudgetChart
                 }
@@ -623,7 +626,8 @@ struct MainReportView: View {
             // Projects at Selected Stage
             chartCard(
                 title: "Projects at Selected Stage",
-                subtitle: "Budget vs Actual at this stage across projects"
+                subtitle: "Budget vs Actual at this stage across projects",
+                chartId: "stageAcrossProjects"
             ) {
                 stageAcrossProjectsChart
             }
@@ -631,7 +635,8 @@ struct MainReportView: View {
             // Cost by Project Status
             chartCard(
                 title: "Cost by Project Status",
-                subtitle: "₹ Cr · Portfolio split"
+                subtitle: "₹ Cr · Portfolio split",
+                chartId: "statusCost"
             ) {
                 statusCostChart
             }
@@ -639,7 +644,8 @@ struct MainReportView: View {
             // Sub-Category Spend
             chartCard(
                 title: "Sub-Category Spend",
-                subtitle: "Filtered by Project · Department"
+                subtitle: "Filtered by Project · Department",
+                chartId: "subCategorySpend"
             ) {
                 subCategorySpendChart
             }
@@ -647,7 +653,8 @@ struct MainReportView: View {
             // Cost Overrun vs Stage Progress
             chartCard(
                 title: "Cost Overrun vs Stage Progress",
-                subtitle: "Variance % vs Progress %"
+                subtitle: "Variance % vs Progress %",
+                chartId: "overrun"
             ) {
                 overrunScatterChart
             }
@@ -655,7 +662,8 @@ struct MainReportView: View {
             // Burn Rate by Project
             chartCard(
                 title: "Burn Rate by Project",
-                subtitle: "₹ Cr/day · last 30 days"
+                subtitle: "₹ Cr/day · last 30 days",
+                chartId: "burnRate"
             ) {
                 burnRateChart
             }
@@ -668,7 +676,8 @@ struct MainReportView: View {
             // Active Projects (MoM)
             chartCard(
                 title: "Active Projects (MoM)",
-                subtitle: "Count of active projects"
+                subtitle: "Count of active projects",
+                chartId: "activeProjects"
             ) {
                 activeProjectsChart
             }
@@ -676,7 +685,8 @@ struct MainReportView: View {
             // Stage Progress Status
             chartCard(
                 title: "Stage Progress Status",
-                subtitle: "% share of stages"
+                subtitle: "% share of stages",
+                chartId: "stageProgress"
             ) {
                 stageProgressChart
             }
@@ -684,7 +694,8 @@ struct MainReportView: View {
             // Sub-Category Activity
             chartCard(
                 title: "Sub-Category Activity",
-                subtitle: "# of expenses · last 30 days"
+                subtitle: "# of expenses · last 30 days",
+                chartId: "subCategoryActivity"
             ) {
                 subCategoryActivityChart
             }
@@ -692,7 +703,8 @@ struct MainReportView: View {
             // Delay Days vs Extra Cost
             chartCard(
                 title: "Delay Days vs Extra Cost",
-                subtitle: "Project-level correlation"
+                subtitle: "Project-level correlation",
+                chartId: "delayCorrelation"
             ) {
                 delayCorrelationChart
             }
@@ -700,58 +712,100 @@ struct MainReportView: View {
             // Suspended Projects by Reason
             chartCard(
                 title: "Suspended Projects by Reason",
-                subtitle: "Current FY"
+                subtitle: "Current FY",
+                chartId: "suspensionReason"
             ) {
                 suspensionReasonChart
             }
         }
     }
     
-    // MARK: - Chart Card Helper
+    // MARK: - Chart Card Helper with Full-Screen Support
+    @State private var expandedChartId: String? = nil
+    
     private func chartCard<Content: View>(
         title: String,
         subtitle: String,
         totalValue: String? = nil,
+        chartId: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+        let id = chartId ?? title
+        let isExpanded = expandedChartId == id
+        
+        return VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Header with expand button
             HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.small) {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
                     Text(title)
-                        .font(.system(size: 15, weight: .semibold, design: .default))
+                        .font(.system(size: 17, weight: .semibold, design: .default))
                         .foregroundStyle(.primary)
                         .accessibilityAddTraits(.isHeader)
                     
                     Text(subtitle)
-                        .font(.system(size: 12, weight: .regular, design: .default))
+                        .font(.system(size: 13, weight: .regular, design: .default))
                         .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
                 
-                if let totalValue = totalValue {
-                    Text(totalValue)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, DesignSystem.Spacing.small)
-                        .padding(.vertical, 4)
-                        .background(Color(.tertiarySystemFill))
-                        .cornerRadius(DesignSystem.CornerRadius.small)
+                HStack(spacing: DesignSystem.Spacing.small) {
+                    if let totalValue = totalValue {
+                        Text(totalValue)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color.accentColor.opacity(0.1))
+                            )
+                    }
+                    
+                    // Expand/Collapse button
+                    Button {
+                        HapticManager.selection()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            expandedChartId = isExpanded ? nil : id
+                        }
+                    } label: {
+                        Image(systemName: isExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color(.tertiarySystemFill))
+                            )
+                    }
+                    .accessibilityLabel(isExpanded ? "Collapse chart" : "Expand chart")
                 }
             }
             
+            // Chart content with dynamic height
             content()
-                .frame(minHeight: 200, maxHeight: 300)
+                .frame(minHeight: isExpanded ? 400 : 220, maxHeight: isExpanded ? .infinity : 350)
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: isExpanded)
                 .accessibilityElement(children: .contain)
         }
-        .padding(DesignSystem.Spacing.medium)
-        .background(Color(.secondarySystemGroupedBackground))
-        .cornerRadius(DesignSystem.CornerRadius.large)
+        .padding(DesignSystem.Spacing.large)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
+                .fill(Color(.secondarySystemGroupedBackground))
+                .shadow(
+                    color: isExpanded ? .black.opacity(0.1) : .black.opacity(0.04),
+                    radius: isExpanded ? 12 : 8,
+                    x: 0,
+                    y: isExpanded ? 4 : 2
+                )
+        )
         .overlay(
             RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.large)
-                .stroke(Color(.separator).opacity(0.15), lineWidth: 0.5)
+                .stroke(
+                    isExpanded ? Color.accentColor.opacity(0.3) : Color(.separator).opacity(0.15),
+                    lineWidth: isExpanded ? 1 : 0.5
+                )
         )
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(title). \(subtitle)")
     }
@@ -780,7 +834,7 @@ struct MainReportView: View {
                 HStack(alignment: .top, spacing: 0) {
 
                     // -----------------------------
-                    // FIXED Y-AXIS
+                    // FIXED Y-AXIS (Enhanced styling)
                     // -----------------------------
                     Chart {
                         ForEach(viewModel.costTrendData, id: \.month) { data in
@@ -796,12 +850,12 @@ struct MainReportView: View {
                     .chartYAxis {
                         AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(.quaternary)
+                                .foregroundStyle(Color(.separator).opacity(0.3))
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text(formatChartValue(v))
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(.primary)
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -809,16 +863,16 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 60)
-                    .padding(.trailing, 4)
+                    .frame(width: 70)
+                    .padding(.trailing, 8)
 
                     // -----------------------------
-                    // SCROLLABLE CHART
+                    // SCROLLABLE CHART (Enhanced)
                     // -----------------------------
                     ScrollView(.horizontal, showsIndicators: true) {
                         ZStack(alignment: .top) {
                             Chart {
-                                // 1️⃣ AREA FIRST – this fixes the baseline
+                                // 1️⃣ AREA FIRST – this fixes the baseline (Enhanced gradient)
                                 ForEach(viewModel.costTrendData, id: \.month) { data in
                                     AreaMark(
                                         x: .value("Month", data.month),
@@ -827,41 +881,64 @@ struct MainReportView: View {
                                     .foregroundStyle(
                                         LinearGradient(
                                             colors: [
-                                                Color.accentColor.opacity(0.25),
+                                                Color.accentColor.opacity(0.3),
+                                                Color.accentColor.opacity(0.15),
                                                 Color.accentColor.opacity(0)
                                             ],
                                             startPoint: .top,
                                             endPoint: .bottom
                                         )
                                     )
-                                    .interpolationMethod(.linear)
+                                    .interpolationMethod(.catmullRom)
                                 }
 
-                                // 2️⃣ LINE ON TOP
+                                // 2️⃣ LINE ON TOP (Enhanced styling)
                                 ForEach(viewModel.costTrendData, id: \.month) { data in
                                     LineMark(
                                         x: .value("Month", data.month),
                                         y: .value("Cost", max(data.value, 0))
                                     )
-                                    .foregroundStyle(Color.accentColor)
-                                    .symbol(.circle)
-                                    .symbolSize(selectedCostTrendMonth == data.month ? 60 : 40)
-                                    .interpolationMethod(.linear)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                                    .symbol {
+                                        Circle()
+                                            .fill(Color.accentColor)
+                                            .frame(width: selectedCostTrendMonth == data.month ? 8 : 6, height: selectedCostTrendMonth == data.month ? 8 : 6)
+                                            .shadow(color: Color.accentColor.opacity(0.5), radius: 3)
+                                    }
+                                    .symbolSize(selectedCostTrendMonth == data.month ? 80 : 50)
+                                    .interpolationMethod(.catmullRom)
                                 }
                                 
-                                // Show tooltip indicators for selected month
+                                // Show tooltip indicators for selected month (Enhanced)
                                 if let selectedMonth = selectedCostTrendMonth,
                                    let selectedData = viewModel.costTrendData.first(where: { $0.month == selectedMonth }) {
                                     RuleMark(x: .value("Month", selectedMonth))
-                                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                                     
                                     PointMark(
                                         x: .value("Month", selectedMonth),
                                         y: .value("Cost", max(selectedData.value, 0))
                                     )
                                     .foregroundStyle(Color.accentColor)
-                                    .symbolSize(60)
+                                    .symbol {
+                                        Circle()
+                                            .fill(Color.accentColor)
+                                            .frame(width: 10, height: 10)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.white, lineWidth: 2)
+                                            )
+                                            .shadow(color: Color.accentColor.opacity(0.6), radius: 4)
+                                    }
+                                    .symbolSize(100)
                                 }
                             }
                             .chartXSelection(value: $selectedCostTrendMonth)
@@ -870,12 +947,12 @@ struct MainReportView: View {
                             .chartXAxis {
                                 AxisMarks(values: .automatic(desiredCount: 6)) { value in
                                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                        .foregroundStyle(.quaternary)
+                                        .foregroundStyle(Color(.separator).opacity(0.2))
                                     AxisValueLabel {
                                         if let month = value.as(String.self) {
                                             Text(month)
-                                                .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(.primary)
+                                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                                .foregroundStyle(.secondary)
                                         }
                                     }
                                 }
@@ -884,61 +961,78 @@ struct MainReportView: View {
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
                             .frame(
-                                width: max(CGFloat(viewModel.costTrendData.count) * 60,
-                                           geometry.size.width - 60),
+                                width: max(CGFloat(viewModel.costTrendData.count) * 70,
+                                           geometry.size.width - 70),
                                 height: geometry.size.height
                             )
-                            .padding(.bottom, 35)
-                            .padding(.top, 10)
+                            .padding(.bottom, 40)
+                            .padding(.top, 12)
+                            .padding(.leading, 4)
                             
-                            // Tooltip overlay
+                            // Enhanced Tooltip overlay
                             if let selectedMonth = selectedCostTrendMonth,
                                let selectedData = viewModel.costTrendData.first(where: { $0.month == selectedMonth }),
                                let monthIndex = viewModel.costTrendData.firstIndex(where: { $0.month == selectedMonth }) {
                                 GeometryReader { tooltipGeometry in
-                                    let chartWidth = max(CGFloat(viewModel.costTrendData.count) * 60,
-                                                        geometry.size.width - 50)
+                                    let chartWidth = max(CGFloat(viewModel.costTrendData.count) * 70,
+                                                        geometry.size.width - 70)
                                     let dataCount = CGFloat(viewModel.costTrendData.count)
                                     let xPosition = (CGFloat(monthIndex) + 0.5) * (chartWidth / dataCount)
                                     
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 8) {
                                         Text(selectedMonth)
-                                            .font(.system(size: 13, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                                             .foregroundStyle(.primary)
-                                        HStack(spacing: 6) {
-                                            Text("Cost (₹ Cr):")
-                                                .font(.system(size: 12))
+                                        
+                                        Divider()
+                                            .background(Color(.separator).opacity(0.3))
+                                        
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "indianrupeesign.circle.fill")
+                                                .font(.system(size: 14))
                                                 .foregroundStyle(.secondary)
-                                            Text(String(format: "%.1f", selectedData.value / 10000000.0))
-                                                .font(.system(size: 12, weight: .semibold))
+                                            Text("Cost")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
                                     .background {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(Color(.systemBackground))
-                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.regularMaterial)
+                                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                                     }
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                                    )
                                     .position(
                                         x: xPosition,
-                                        y: 20
+                                        y: 24
                                     )
                                 }
                                 .frame(
-                                    width: max(CGFloat(viewModel.costTrendData.count) * 60,
-                                               geometry.size.width - 60),
+                                    width: max(CGFloat(viewModel.costTrendData.count) * 70,
+                                               geometry.size.width - 70),
                                     height: geometry.size.height
                                 )
+                                .transition(.scale.combined(with: .opacity))
                             }
                         }
                     }
                 }
             }
         }
-        .frame(minHeight: 200, maxHeight: 250)
-        .padding(.vertical, 8)
+        .frame(minHeight: 220, maxHeight: 350)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Cost trend chart showing monthly costs")
+        .accessibilityHint("Tap and drag to explore monthly data points")
     }
     
     // Helper function to format chart axis values
@@ -983,7 +1077,7 @@ struct MainReportView: View {
             GeometryReader { geometry in
                 HStack(alignment: .top, spacing: 0) {
                     // -----------------------------
-                    // FIXED Y-AXIS
+                    // FIXED Y-AXIS (Enhanced)
                     // -----------------------------
                     Chart {
                         ForEach(viewModel.stageBudgetData, id: \.stage) { data in
@@ -999,12 +1093,12 @@ struct MainReportView: View {
                     .chartYAxis {
                         AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(.quaternary)
+                                .foregroundStyle(Color(.separator).opacity(0.3))
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text(formatChartValue(v))
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundStyle(.primary)
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -1012,9 +1106,9 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 60)
+                    .frame(width: 70)
                     .frame(height: geometry.size.height)
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 8)
                     
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
@@ -1023,26 +1117,46 @@ struct MainReportView: View {
                         ZStack(alignment: .top) {
                             Chart {
                                 ForEach(viewModel.stageBudgetData, id: \.stage) { data in
+                                    // Budget Bar (Enhanced styling)
                                     BarMark(
                                         x: .value("Stage", data.stage),
                                         y: .value("Amount", data.budget)
                                     )
-                                    .foregroundStyle(selectedStageForTooltip == data.stage ? Color.blue.opacity(0.8) : Color.blue)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: selectedStageForTooltip == data.stage 
+                                                ? [Color.blue.opacity(0.9), Color.blue.opacity(0.7)]
+                                                : [Color.blue.opacity(0.8), Color.blue.opacity(0.6)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .cornerRadius(6)
                                     .position(by: .value("Type", "Budget"))
                                     
+                                    // Actual Bar (Enhanced styling)
                                     BarMark(
                                         x: .value("Stage", data.stage),
                                         y: .value("Amount", data.actual)
                                     )
-                                    .foregroundStyle(selectedStageForTooltip == data.stage ? Color.green.opacity(0.8) : Color.green)
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: selectedStageForTooltip == data.stage
+                                                ? [Color.green.opacity(0.9), Color.green.opacity(0.7)]
+                                                : [Color.green.opacity(0.8), Color.green.opacity(0.6)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .cornerRadius(6)
                                     .position(by: .value("Type", "Actual"))
                                 }
                                 
-                                // Show rule mark for selected stage
+                                // Show rule mark for selected stage (Enhanced)
                                 if let selectedStage = selectedStageForTooltip {
                                     RuleMark(x: .value("Stage", selectedStage))
-                                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                                 }
                             }
                             .chartXSelection(value: $selectedStageForTooltip)
@@ -1055,14 +1169,15 @@ struct MainReportView: View {
                                 "Budget": Color.blue,
                                 "Actual": Color.green
                             ])
-                            .chartLegend(position: .bottom, alignment: .center)
+                            .chartLegend(position: .bottom, alignment: .center, spacing: 16)
                             .chartPlotStyle { plot in
                                 plot.frame(maxHeight: .infinity, alignment: .bottom)
                             }
-                            // Calculate width: each bar pair needs ~80 points (40 per bar + spacing)
-                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60))
-                            .padding(.bottom, 40) // Add padding to prevent scroll indicator from covering labels
-                            .padding(.top, 10)
+                            // Calculate width: each bar pair needs ~90 points for better spacing
+                            .frame(width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70))
+                            .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
+                            .padding(.top, 12)
+                            .padding(.leading, 4)
                             
                             // Tooltip overlay
                             if let selectedStage = selectedStageForTooltip,
@@ -1073,44 +1188,80 @@ struct MainReportView: View {
                                     let dataCount = CGFloat(viewModel.stageBudgetData.count)
                                     let xPosition = (CGFloat(stageIndex) + 0.5) * (chartWidth / dataCount)
                                     
-                                    VStack(alignment: .leading, spacing: 6) {
+                                    VStack(alignment: .leading, spacing: 10) {
                                         Text(truncateName(selectedStage))
-                                            .font(.system(size: 13, weight: .semibold))
+                                            .font(.system(size: 14, weight: .semibold, design: .rounded))
                                             .foregroundStyle(.primary)
                                             .lineLimit(1)
-                                        HStack(spacing: 6) {
-                                            Text("Budget (₹ Cr):")
-                                                .font(.system(size: 12))
+                                        
+                                        Divider()
+                                            .background(Color(.separator).opacity(0.3))
+                                        
+                                        // Budget row
+                                        HStack(spacing: 10) {
+                                            Circle()
+                                                .fill(Color.blue)
+                                                .frame(width: 10, height: 10)
+                                            Text("Budget")
+                                                .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
-                                            Text(String(format: "%.1f", selectedData.budget / 10000000.0))
-                                                .font(.system(size: 12, weight: .semibold))
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
-                                        HStack(spacing: 6) {
-                                            Text("Actual (₹ Cr):")
-                                                .font(.system(size: 12))
+                                        
+                                        // Actual row
+                                        HStack(spacing: 10) {
+                                            Circle()
+                                                .fill(Color.green)
+                                                .frame(width: 10, height: 10)
+                                            Text("Actual")
+                                                .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
-                                            Text(String(format: "%.1f", selectedData.actual / 10000000.0))
-                                                .font(.system(size: 12, weight: .semibold))
+                                            Spacer()
+                                            Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
+                                        }
+                                        
+                                        // Variance row
+                                        let variance = selectedData.actual - selectedData.budget
+                                        let variancePercent = selectedData.budget > 0 ? (variance / selectedData.budget) * 100 : 0
+                                        HStack(spacing: 10) {
+                                            Image(systemName: variance >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundStyle(variance >= 0 ? .red : .green)
+                                            Text("Variance")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                            Spacer()
+                                            Text(String(format: "%.1f%%", abs(variancePercent)))
+                                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                                .foregroundStyle(variance >= 0 ? .red : .green)
                                         }
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 12)
                                     .background {
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .fill(Color(.systemBackground))
-                                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(.regularMaterial)
+                                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                                     }
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                                    )
                                     .position(
                                         x: xPosition,
-                                        y: 20
+                                        y: 28
                                     )
                                 }
                                 .frame(
-                                    width: max(CGFloat(viewModel.stageBudgetData.count) * 80, geometry.size.width - 60),
+                                    width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70),
                                     height: geometry.size.height
                                 )
+                                .transition(.scale.combined(with: .opacity))
                             }
                         }
                     }
@@ -1118,7 +1269,10 @@ struct MainReportView: View {
                 }
             }
         }
-        .frame(height: 200) // Increased height to accommodate rotated labels
+        .frame(minHeight: 220, maxHeight: 350)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Stage budget versus actual chart")
+        .accessibilityHint("Tap on bars to see detailed budget and actual values")
         .sheet(item: Binding(
             get: { selectedPhaseName.map { PhaseNameItem(name: $0) } },
             set: { selectedPhaseName = $0?.name }
@@ -1869,27 +2023,37 @@ struct MainReportView: View {
                         y: .value("Overrun", data.overrun)
                     )
                     .foregroundStyle(
-                        selectedOverrunStage == data.stage
-                        ? Color.red.opacity(0.8)
-                        : Color.red
+                        LinearGradient(
+                            colors: selectedOverrunStage == data.stage
+                                ? [Color.red.opacity(0.9), Color.red.opacity(0.7)]
+                                : [Color.red.opacity(0.8), Color.red.opacity(0.6)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                    .symbolSize(
-                        selectedOverrunStage == data.stage
-                        ? 80
-                        : 60
-                    )
+                    .symbol {
+                        Circle()
+                            .fill(selectedOverrunStage == data.stage ? Color.red : Color.red.opacity(0.8))
+                            .frame(width: selectedOverrunStage == data.stage ? 10 : 8, height: selectedOverrunStage == data.stage ? 10 : 8)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: selectedOverrunStage == data.stage ? 2 : 1.5)
+                            )
+                            .shadow(color: Color.red.opacity(0.4), radius: selectedOverrunStage == data.stage ? 4 : 2)
+                    }
+                    .symbolSize(selectedOverrunStage == data.stage ? 100 : 70)
                 }
                 
-                // Show rule marks for selected point
+                // Show rule marks for selected point (Enhanced)
                 if let selectedStage = selectedOverrunStage,
                    let selectedData = viewModel.overrunData.first(where: { $0.stage == selectedStage }) {
                     RuleMark(x: .value("Progress", selectedData.progress))
-                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                     
                     RuleMark(y: .value("Overrun", selectedData.overrun))
-                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                        .lineStyle(StrokeStyle(lineWidth: 2, dash: [8, 4]))
                 }
             }
             .chartXSelection(value: Binding(
@@ -1951,12 +2115,12 @@ struct MainReportView: View {
             .chartXAxis {
                 AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(Color(.separator).opacity(0.3))
                     AxisValueLabel {
                         if let progress = value.as(Double.self) {
                             Text("\(Int(progress))%")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1964,23 +2128,25 @@ struct MainReportView: View {
             .chartYAxis {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(Color(.separator).opacity(0.3))
                     AxisValueLabel {
                         if let overrun = value.as(Double.self) {
                             Text("\(Int(overrun))%")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
             }
             .chartXAxisLabel("Stage Progress (%)")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
             .chartYAxisLabel("Cost Overrun (%)")
-                .font(.system(size: 12, weight: .medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .frame(minHeight: 200, maxHeight: 300)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(minHeight: 220, maxHeight: 350)
             
             // Tooltip overlay
             if let selectedStage = selectedOverrunStage,
@@ -2011,30 +2177,59 @@ struct MainReportView: View {
                     let xPosition = chartPadding + (xRatio * chartWidth)
                     let yPosition = chartPadding + ((1 - yRatio) * chartHeight) // Invert Y for screen coordinates
                     
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            // Red square indicator
-                            RoundedRectangle(cornerRadius: 2)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Circle()
                                 .fill(Color.red)
-                                .frame(width: 12, height: 12)
-                            
-                            Text("Stage: \(truncateName(selectedData.stage)) · Progress: \(Int(selectedData.progress))% · Overrun: \(Int(selectedData.overrun))%")
-                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 10, height: 10)
+                            Text(truncateName(selectedData.stage))
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
                         }
+                        
+                        Divider()
+                            .background(Color(.separator).opacity(0.3))
+                        
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Progress")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Text("\(Int(selectedData.progress))%")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.primary)
+                            }
+                            
+                            Divider()
+                                .frame(height: 30)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Overrun")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Text("\(Int(selectedData.overrun))%")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(selectedData.overrun > 0 ? .red : .green)
+                            }
+                        }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .background {
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
                     }
-                    .position(
-                        x: min(max(xPosition, 80), geometry.size.width - 80),
-                        y: max(min(yPosition - 60, geometry.size.height - 80), 60)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
+                    .position(
+                        x: min(max(xPosition, 100), geometry.size.width - 100),
+                        y: max(min(yPosition - 70, geometry.size.height - 100), 80)
+                    )
+                    .transition(.scale.combined(with: .opacity))
                 }
                 .frame(minHeight: 200, maxHeight: 300)
             }
