@@ -909,8 +909,9 @@ struct MainReportView: View {
                     // -----------------------------
                     // SCROLLABLE CHART (Enhanced)
                     // -----------------------------
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        ZStack(alignment: .top) {
+                    ZStack(alignment: .trailing) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ZStack(alignment: .top) {
                             Chart {
                                 // 1️⃣ AREA FIRST – this fixes the baseline (Enhanced gradient)
                                 ForEach(viewModel.costTrendData, id: \.month) { data in
@@ -1077,6 +1078,24 @@ struct MainReportView: View {
                                 .transition(.scale.combined(with: .opacity))
                             }
                         }
+                        }
+                        
+                        // Arrow indicator on right side middle
+                        VStack {
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                )
+                                .padding(.trailing, 12)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                     }
                 }
             }
@@ -1166,8 +1185,9 @@ struct MainReportView: View {
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
                     // -----------------------------
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        ZStack(alignment: .top) {
+                    ZStack(alignment: .trailing) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ZStack(alignment: .top) {
                             Chart {
                                 ForEach(viewModel.stageBudgetData, id: \.stage) { data in
                                     // Budget Bar (Enhanced styling)
@@ -1330,8 +1350,25 @@ struct MainReportView: View {
                                 .transition(.scale.combined(with: .opacity))
                             }
                         }
+                        }
+                        
+                        // Arrow indicator on right side middle
+                        VStack {
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                )
+                                .padding(.trailing, 12)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                     }
-                    .scrollIndicators(.visible)
                 }
             }
         }
@@ -1551,8 +1588,9 @@ struct MainReportView: View {
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
                     // -----------------------------
-                    ScrollView(.horizontal, showsIndicators: true) {
-                        ZStack(alignment: .top) {
+                    ZStack(alignment: .trailing) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            ZStack(alignment: .top) {
                             Chart {
                                 ForEach(viewModel.projectWiseData, id: \.project) { data in
                                     // Budget Bar (Enhanced styling)
@@ -1716,8 +1754,25 @@ struct MainReportView: View {
                                 .transition(.scale.combined(with: .opacity))
                             }
                         }
+                        }
+                        
+                        // Arrow indicator on right side middle
+                        VStack {
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                                .background(
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                )
+                                .padding(.trailing, 12)
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
                     }
-                    .scrollIndicators(.visible)
                 }
             }
         }
@@ -2568,8 +2623,9 @@ struct MainReportView: View {
                         // -----------------------------
                         // SCROLLABLE CHART CONTENT (with Y-axis labels)
                         // -----------------------------
-                        ScrollView(.vertical, showsIndicators: true) {
-                            ZStack(alignment: .topLeading) {
+                        ZStack(alignment: .bottom) {
+                            ScrollView(.vertical, showsIndicators: false) {
+                                ZStack(alignment: .topLeading) {
                                 Chart {
                                     ForEach(viewModel.burnRateData, id: \.project) { data in
                                         BarMark(
@@ -2688,8 +2744,25 @@ struct MainReportView: View {
                                     .transition(.scale.combined(with: .opacity))
                                 }
                             }
+                            }
+                            
+                            // Arrow indicator on bottom middle (for vertical scroll)
+                            HStack {
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(8)
+                                    .background(
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                    )
+                                    .padding(.bottom, 80) // Position above the fixed X-axis
+                                Spacer()
+                            }
+                            .allowsHitTesting(false)
                         }
-                        .scrollIndicators(.visible)
                         
                         // -----------------------------
                         // FIXED X-AXIS (at bottom, showing values)
