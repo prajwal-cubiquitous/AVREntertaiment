@@ -722,13 +722,13 @@ struct MainReportView: View {
                 activeProjectsChart
             }
             
-            // Stage Progress Status
+            // Projects Percentage by Status
             chartCard(
-                title: "Stage Progress Status",
-                subtitle: "% share of stages",
-                chartId: "stageProgress"
+                title: "Projects Percentage by Status",
+                subtitle: "% of projects by status",
+                chartId: "projectStatusPercentage"
             ) {
-                stageProgressChart
+                projectStatusPercentageChart
             }
             
             // Sub-Category Activity
@@ -903,8 +903,10 @@ struct MainReportView: View {
                     .chartPlotStyle { plot in
                         plot.frame(maxHeight: .infinity, alignment: .bottom)
                     }
-                    .frame(width: 70)
-                    .padding(.trailing, 8)
+                    .frame(width: 70, alignment: .leading) // Wider to ensure labels are fully visible
+                    .padding(.trailing, 4)
+                    .padding(.top, 4) // Minimal top padding
+                    .padding(.bottom, 40) // Bottom padding to show 0 at bottom
 
                     // -----------------------------
                     // SCROLLABLE CHART (Enhanced)
@@ -1007,7 +1009,7 @@ struct MainReportView: View {
                                 height: geometry.size.height
                             )
                             .padding(.bottom, 40)
-                            .padding(.top, 12)
+                            .padding(.top, 8) // Reduced top padding
                             .padding(.leading, 4)
                             
                             // Enhanced Tooltip overlay with safe positioning
@@ -1108,6 +1110,48 @@ struct MainReportView: View {
         .accessibilityHint("Tap and drag to explore monthly data points")
     }
     
+    // Helper function to generate Y-axis values that always include 0
+    private func generateYAxisValues(max: Double, desiredCount: Int = 5) -> [Double] {
+        guard max > 0 else { return [0, 1000] }
+        
+        // Calculate a nice step size
+        let range = max
+        let rawStep = range / Double(desiredCount - 1)
+        
+        // Round to a nice number
+        let magnitude = pow(10, floor(log10(rawStep)))
+        let normalizedStep = rawStep / magnitude
+        let niceStep: Double
+        
+        if normalizedStep <= 1 {
+            niceStep = 1 * magnitude
+        } else if normalizedStep <= 2 {
+            niceStep = 2 * magnitude
+        } else if normalizedStep <= 5 {
+            niceStep = 5 * magnitude
+        } else {
+            niceStep = 10 * magnitude
+        }
+        
+        // Generate values starting from 0
+        var values: [Double] = [0]
+        var current = niceStep
+        while current < max * 1.01 { // Add small tolerance to include max
+            values.append(current)
+            current += niceStep
+        }
+        
+        // Ensure max is included if it's not already close to a step
+        if let last = values.last, abs(last - max) > niceStep * 0.1 {
+            values.append(max)
+        }
+        
+        // Sort and remove duplicates
+        values = Array(Set(values)).sorted()
+        
+        return values
+    }
+    
     // Helper function to format chart axis values
     private func formatChartValue(_ value: Double) -> String {
         let absValue = abs(value)
@@ -1146,41 +1190,61 @@ struct MainReportView: View {
             yAxisMax = maxValue + padding
         }
         
+        // Calculate nice step size for Y-axis
+        let rawStep = yAxisMax / 5.0
+        let magnitude = pow(10, floor(log10(rawStep)))
+        let normalizedStep = rawStep / magnitude
+        let niceStep: Double
+        if normalizedStep <= 1 {
+            niceStep = 1 * magnitude
+        } else if normalizedStep <= 2 {
+            niceStep = 2 * magnitude
+        } else if normalizedStep <= 5 {
+            niceStep = 5 * magnitude
+        } else {
+            niceStep = 10 * magnitude
+        }
+        
+        // Fixed Y-axis chart
+        let yAxisChart = Chart {
+            ForEach(viewModel.stageBudgetData, id: \.stage) { data in
+                BarMark(
+                    x: .value("Stage", data.stage),
+                    y: .value("Amount", max(data.budget, data.actual))
+                )
+                .foregroundStyle(.clear) // Invisible, just for axis calculation
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYScale(domain: 0...yAxisMax)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .stride(by: niceStep)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(Color(.separator).opacity(0.3))
+                AxisValueLabel(centered: false) {
+                    if let v = value.as(Double.self) {
+                        Text(formatChartValue(v))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .chartPlotStyle { plot in
+            plot.frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .frame(width: 70, alignment: .leading) // Wider to ensure labels are fully visible
+        .padding(.trailing, 4)
+        .padding(.top, 0) // No top padding to maximize space for labels
+        .padding(.bottom, 50) // Bottom padding to show 0 at bottom
+        
         return ZStack(alignment: .top) {
             GeometryReader { geometry in
                 HStack(alignment: .top, spacing: 0) {
                     // -----------------------------
                     // FIXED Y-AXIS (Enhanced)
                     // -----------------------------
-                    Chart {
-                        ForEach(viewModel.stageBudgetData, id: \.stage) { data in
-                            BarMark(
-                                x: .value("Stage", data.stage),
-                                y: .value("Amount", max(data.budget, data.actual))
-                            )
-                            .foregroundStyle(.clear) // Invisible, just for axis calculation
-                        }
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYScale(domain: 0...yAxisMax)
-                    .chartYAxis {
-                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(Color(.separator).opacity(0.3))
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatChartValue(v))
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .chartPlotStyle { plot in
-                        plot.frame(maxHeight: .infinity, alignment: .bottom)
-                    }
-                    .frame(width: 70)
-                    .padding(.trailing, 8)
+                    yAxisChart
                     
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
@@ -1251,7 +1315,7 @@ struct MainReportView: View {
                                 width: max(CGFloat(viewModel.stageBudgetData.count) * 90, geometry.size.width - 70),
                                 height: geometry.size.height
                             )
-                            .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
+                            .padding(.bottom, 60) // Increased padding for rotated labels
                             .padding(.top, 12)
                             .padding(.leading, 4)
                             
@@ -1401,7 +1465,8 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
                 }
             }
         }
@@ -1492,7 +1557,7 @@ struct MainReportView: View {
     private struct TruncatedPhaseNameView: View {
         let phaseName: String
         let onTap: () -> Void
-        let maxLength: Int = 15
+        let maxLength: Int = 20 // Increased to show more characters
         
         private var truncatedName: String {
             if phaseName.count > maxLength {
@@ -1507,25 +1572,19 @@ struct MainReportView: View {
         
         var body: some View {
             Group {
-                if needsTruncation {
-                    Text(truncatedName)
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: 100)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            HapticManager.selection()
+                Text(truncatedName)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 120) // Increased width for better visibility
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        HapticManager.selection()
+                        if needsTruncation {
                             onTap()
                         }
-                } else {
-                    Text(phaseName)
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 100)
-                }
+                    }
             }
         }
     }
@@ -1552,41 +1611,49 @@ struct MainReportView: View {
             yAxisMax = maxValue + padding
         }
         
+        // Generate Y-axis values that always include 0
+        let yAxisValues = generateYAxisValues(max: yAxisMax, desiredCount: 5)
+        
+        // Fixed Y-axis chart
+        let yAxisChart = Chart {
+            ForEach(viewModel.projectWiseData, id: \.project) { data in
+                BarMark(
+                    x: .value("Project", data.project),
+                    y: .value("Amount", max(data.budget, data.actual))
+                )
+                .foregroundStyle(.clear) // Invisible, just for axis calculation
+            }
+        }
+        .chartXAxis(.hidden)
+        .chartYScale(domain: 0...yAxisMax)
+        .chartYAxis {
+            AxisMarks(position: .leading, values: yAxisValues) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(Color(.separator).opacity(0.3))
+                AxisValueLabel(centered: false) {
+                    if let v = value.as(Double.self) {
+                        Text(formatChartValue(v))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .chartPlotStyle { plot in
+            plot.frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .frame(width: 70, alignment: .leading) // Wider to ensure labels are fully visible
+        .padding(.trailing, 4)
+        .padding(.top, 4) // Minimal top padding
+        .padding(.bottom, 50) // Bottom padding to show 0 at bottom
+        
         return ZStack(alignment: .top) {
             GeometryReader { geometry in
                 HStack(alignment: .top, spacing: 0) {
                     // -----------------------------
                     // FIXED Y-AXIS (Enhanced)
                     // -----------------------------
-                    Chart {
-                        ForEach(viewModel.projectWiseData, id: \.project) { data in
-                            BarMark(
-                                x: .value("Project", data.project),
-                                y: .value("Amount", max(data.budget, data.actual))
-                            )
-                            .foregroundStyle(.clear) // Invisible, just for axis calculation
-                        }
-                    }
-                    .chartXAxis(.hidden)
-                    .chartYScale(domain: 0...yAxisMax)
-                    .chartYAxis {
-                        AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                                .foregroundStyle(Color(.separator).opacity(0.3))
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(formatChartValue(v))
-                                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .chartPlotStyle { plot in
-                        plot.frame(maxHeight: .infinity, alignment: .bottom)
-                    }
-                    .frame(width: 70)
-                    .padding(.trailing, 8)
+                    yAxisChart
                     
                     // -----------------------------
                     // SCROLLABLE CHART CONTENT
@@ -1657,8 +1724,8 @@ struct MainReportView: View {
                                 width: max(CGFloat(viewModel.projectWiseData.count) * 90, geometry.size.width - 70),
                                 height: geometry.size.height
                             )
-                            .padding(.bottom, 50) // Add padding to prevent scroll indicator from covering labels
-                            .padding(.top, 12)
+                            .padding(.bottom, 50) // Reduced padding for rotated labels
+                            .padding(.top, 8) // Reduced top padding
                             .padding(.leading, 4)
                             .padding(.trailing, 8)
                             
@@ -1808,7 +1875,8 @@ struct MainReportView: View {
                         }
                     )
                     .rotationEffect(.degrees(-45), anchor: .center)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
                 }
             }
         }
@@ -1847,7 +1915,7 @@ struct MainReportView: View {
     private struct TruncatedProjectNameView: View {
         let projectName: String
         let onTap: () -> Void
-        let maxLength: Int = 15
+        let maxLength: Int = 20 // Increased to show more characters
         
         private var truncatedName: String {
             if projectName.count > maxLength {
@@ -1862,25 +1930,19 @@ struct MainReportView: View {
         
         var body: some View {
             Group {
-                if needsTruncation {
-                    Text(truncatedName)
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: 100)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            HapticManager.selection()
+                Text(truncatedName)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 120) // Increased width for better visibility
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        HapticManager.selection()
+                        if needsTruncation {
                             onTap()
                         }
-                } else {
-                    Text(projectName)
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 100)
-                }
+                    }
             }
         }
     }
@@ -2222,125 +2284,142 @@ struct MainReportView: View {
         }
         
         return ZStack(alignment: .top) {
+            
+            // MARK: - MAIN CHART
             Chart {
                 ForEach(viewModel.statusCostData, id: \.status) { data in
                     BarMark(
                         x: .value("Status", data.status),
                         y: .value("Cost", data.value)
                     )
-                    .foregroundStyle(selectedStatusForTooltip == data.status ? Color.orange.opacity(0.8) : Color.orange)
+                    .foregroundStyle(
+                        selectedStatusForTooltip == data.status
+                        ? Color.orange.opacity(0.85)
+                        : Color.orange
+                    )
                 }
-                
-                // Show rule mark for selected status
+
+                // Selected Rule
                 if let selectedStatus = selectedStatusForTooltip {
                     RuleMark(x: .value("Status", selectedStatus))
-                        .foregroundStyle(Color.accentColor.opacity(0.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                        .foregroundStyle(Color.accentColor.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
                 }
             }
             .chartXSelection(value: $selectedStatusForTooltip)
             .chartXAxis {
-                AxisMarks(values: .automatic) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                AxisMarks(preset: .aligned, values: .automatic) { value in
+
+                    AxisGridLine()
                         .foregroundStyle(.quaternary)
+
                     AxisValueLabel {
                         if let status = value.as(String.self) {
                             Text(status)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.primary)
-                                .rotationEffect(.degrees(-90))
-                                .offset(x: 0, y: 8)
+                                .rotationEffect(.degrees(-38))
+                                .fixedSize()
+                                .padding(.top, 6)
                         }
                     }
                 }
             }
             .chartYAxis {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    AxisGridLine()
                         .foregroundStyle(.quaternary)
+
                     AxisValueLabel {
                         if let doubleValue = value.as(Double.self) {
                             Text(formatChartValue(doubleValue))
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 11))
                                 .foregroundStyle(.primary)
                         }
                     }
                 }
             }
-            .chartYScale(domain: 0...yAxisMax, type: .linear)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .padding(.bottom, 20) // Extra padding for rotated labels
-            .frame(minHeight: 200, maxHeight: 300)
-            
-            // Enhanced Tooltip overlay with safe positioning
+            .padding(.horizontal, 12)
+            .padding(.bottom, 26)     // Extra for rotated labels
+            .frame(minHeight: 240, maxHeight: 300)
+
+
+
+            // MARK: - TOOLTIP OVERLAY
             if let selectedStatus = selectedStatusForTooltip,
                let selectedData = viewModel.statusCostData.first(where: { $0.status == selectedStatus }),
                let statusIndex = viewModel.statusCostData.firstIndex(where: { $0.status == selectedStatus }) {
+
                 GeometryReader { geometry in
-                    let chartWidth = geometry.size.width - 16 // Account for padding
-                    let dataCount = CGFloat(viewModel.statusCostData.count)
-                    let preferredX = (CGFloat(statusIndex) + 0.5) * (chartWidth / dataCount)
-                    
-                    // Estimate tooltip size
-                    let tooltipWidth: CGFloat = 180
-                    let tooltipHeight: CGFloat = 80
-                    
-                    // Calculate safe position
-                    let safePosition = calculateSafeTooltipPosition(
+
+                    let chartWidth = geometry.size.width - 16
+                    let barWidth = chartWidth / CGFloat(viewModel.statusCostData.count)
+                    let preferredX = (CGFloat(statusIndex) + 0.5) * barWidth
+
+                    let tooltipW: CGFloat = 180
+                    let tooltipH: CGFloat = 82
+
+                    let safe = calculateSafeTooltipPosition(
                         preferredX: preferredX,
-                        preferredY: 28,
-                        tooltipWidth: tooltipWidth,
-                        tooltipHeight: tooltipHeight,
+                        preferredY: 32,
+                        tooltipWidth: tooltipW,
+                        tooltipHeight: tooltipH,
                         containerWidth: geometry.size.width,
                         containerHeight: geometry.size.height,
                         padding: 12
                     )
-                    
+
                     VStack(alignment: .leading, spacing: 8) {
+
+                        // Title Row
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(Color.orange)
                                 .frame(width: 10, height: 10)
                             Text(selectedStatus)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 14, weight: .semibold))
                         }
-                        
-                        Divider()
-                            .background(Color(.separator).opacity(0.3))
-                        
-                        HStack(spacing: 10) {
+
+                        Divider().background(Color(.separator).opacity(0.3))
+
+                        // Cost Row
+                        HStack {
                             Image(systemName: "indianrupeesign.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
+
                             Text("Cost")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
+
                             Spacer()
+
                             Text(formatValue(selectedData.value))
-                                .font(.system(size: 14, weight: .bold, design: .rounded))
-                                .foregroundStyle(.primary)
+                                .font(.system(size: 14, weight: .bold))
                         }
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .background {
+                    .background(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(.regularMaterial)
                             .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
-                    }
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
                     )
-                    .frame(width: tooltipWidth)
-                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
+                    .frame(width: tooltipW, height: tooltipH)
+                    .position(
+                        x: safe.x + tooltipW / 2,
+                        y: safe.y
+                    )
                 }
-                .frame(minHeight: 200, maxHeight: 300)
-                .transition(.scale.combined(with: .opacity))
+                .frame(minHeight: 240, maxHeight: 300)
+                .transition(.opacity.combined(with: .scale))
             }
         }
+
     }
     
     // Overrun Scatter Chart
@@ -2946,76 +3025,212 @@ struct MainReportView: View {
         }
     }
     
-    // Stage Progress Chart
-    private var stageProgressChart: some View {
-        Chart {
-            ForEach(viewModel.stageProgressData, id: \.stage) { data in
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Value", data.inProgress)
-                )
-                .foregroundStyle(Color.blue)
-                .position(by: .value("Type", "In Progress"))
+    // Projects Percentage by Status Chart
+    @State private var selectedStatusForPercentage: String? = nil
+    
+    private var projectStatusPercentageChart: some View {
+        ZStack(alignment: .trailing) {
+            Chart {
+                ForEach(viewModel.projectStatusPercentageData, id: \.status) { data in
+                    BarMark(
+                        x: .value("Percentage", data.percentage),
+                        y: .value("Status", data.status)
+                    )
+                    .foregroundStyle(
+                        selectedStatusForPercentage == data.status
+                        ? getStatusColor(data.status).opacity(0.85)
+                        : getStatusColor(data.status)
+                    )
+                    .cornerRadius(6, style: .continuous)
+                }
                 
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Value", data.handover)
-                )
-                .foregroundStyle(Color.yellow)
-                .position(by: .value("Type", "Handover"))
-                
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Value", data.delayed)
-                )
-                .foregroundStyle(Color.orange)
-                .position(by: .value("Type", "Delayed"))
-                
-                BarMark(
-                    x: .value("Stage", data.stage),
-                    y: .value("Value", data.complete)
-                )
-                .foregroundStyle(Color.gray)
-                .position(by: .value("Type", "Complete"))
+                // Selected Rule
+                if let selectedStatus = selectedStatusForPercentage {
+                    RuleMark(y: .value("Status", selectedStatus))
+                        .foregroundStyle(Color.accentColor.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let stage = value.as(String.self) {
-                        Text(truncateName(stage))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+            .chartYSelection(value: $selectedStatusForPercentage)
+            .chartXAxis {
+                AxisMarks(position: .bottom, values: .stride(by: 25)) { value in
+                    AxisGridLine()
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let doubleValue = value.as(Double.self) {
+                            Text("\(Int(doubleValue))%")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let doubleValue = value.as(Double.self) {
-                        Text("\(Int(doubleValue))%")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.primary)
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic) { value in
+                    AxisGridLine()
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let status = value.as(String.self) {
+                            Text(getStatusDisplayName(status))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
                     }
                 }
             }
+            .chartXScale(domain: 0...100)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(minHeight: CGFloat(max(viewModel.projectStatusPercentageData.count, 3)) * 50 + 40)
+            
+            // Custom scroll indicator
+            if viewModel.projectStatusPercentageData.count > 3 {
+                VStack {
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(Color(.systemBackground))
+                                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        )
+                        .padding(.trailing, 8)
+                        .padding(.bottom, 8)
+                }
+            }
+            
+            // Tooltip overlay
+            if let selectedStatus = selectedStatusForPercentage,
+               let selectedData = viewModel.projectStatusPercentageData.first(where: { $0.status == selectedStatus }) {
+                GeometryReader { geometry in
+                    let barHeight = 50.0
+                    let statusIndex = viewModel.projectStatusPercentageData.firstIndex(where: { $0.status == selectedStatus }) ?? 0
+                    let preferredY = (CGFloat(statusIndex) * barHeight) + (barHeight / 2) + 20
+                    
+                    // Calculate x position based on the bar's end (percentage value)
+                    let maxPercentage = 100.0
+                    let barWidthRatio = selectedData.percentage / maxPercentage
+                    let chartAreaWidth = geometry.size.width - 24
+                    let preferredX = chartAreaWidth * 0.75 * barWidthRatio + 80
+                    
+                    let tooltipWidth: CGFloat = 200
+                    let tooltipHeight: CGFloat = 90
+                    
+                    let safePosition = calculateSafeTooltipPosition(
+                        preferredX: preferredX,
+                        preferredY: preferredY,
+                        tooltipWidth: tooltipWidth,
+                        tooltipHeight: tooltipHeight,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        padding: 12
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Title Row
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(getStatusColor(selectedStatus))
+                                .frame(width: 10, height: 10)
+                            Text(getStatusDisplayName(selectedStatus))
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        
+                        Divider().background(Color(.separator).opacity(0.3))
+                        
+                        // Percentage Row
+                        HStack {
+                            Text("Percentage")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(String(format: "%.1f%%", selectedData.percentage))
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                        
+                        // Count Row
+                        HStack {
+                            Text("Count")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(selectedData.count) projects")
+                                .font(.system(size: 14, weight: .bold))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 4)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                    )
+                    .frame(width: tooltipWidth, height: tooltipHeight)
+                    .position(x: safePosition.x + tooltipWidth / 2, y: safePosition.y)
+                }
+                .frame(minHeight: CGFloat(max(viewModel.projectStatusPercentageData.count, 3)) * 50 + 40)
+                .transition(.opacity.combined(with: .scale))
+            }
         }
-        .chartYScale(domain: 0...100)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .chartForegroundStyleScale([
-            "In Progress": Color.blue,
-            "Handover": Color.yellow,
-            "Delayed": Color.orange,
-            "Complete": Color.gray
-        ])
-        .chartLegend(position: .bottom)
+        .scrollIndicators(.hidden)
+    }
+    
+    // Helper function to get color for status (matching the provided color mapping)
+    private func getStatusColor(_ status: String) -> Color {
+        switch status {
+        case "ACTIVE":
+            return .green
+        case "COMPLETED":
+            return .blue
+        case "HANDOVER":
+            return .yellow
+        case "IN_REVIEW":
+            return .cyan
+        case "LOCKED":
+            return .indigo
+        case "SUSPENDED":
+            return .orange
+        case "REVIEW_REJECTED":
+            return .red
+        case "MAINTENANCE":
+            return .purple
+        case "ARCHIVE":
+            return .gray
+        default:
+            return .accentColor
+        }
+    }
+    
+    // Helper function to get display name for status
+    private func getStatusDisplayName(_ status: String) -> String {
+        switch status {
+        case "ACTIVE":
+            return "Active"
+        case "COMPLETED":
+            return "Completed"
+        case "HANDOVER":
+            return "HandOver"
+        case "IN_REVIEW":
+            return "In Review"
+        case "LOCKED":
+            return "Locked"
+        case "SUSPENDED":
+            return "Suspended"
+        case "REVIEW_REJECTED":
+            return "Review Rejected"
+        case "MAINTENANCE":
+            return "Maintenance"
+        case "ARCHIVE":
+            return "Archive"
+        default:
+            return status
+        }
     }
     
     // Sub-Category Activity Chart

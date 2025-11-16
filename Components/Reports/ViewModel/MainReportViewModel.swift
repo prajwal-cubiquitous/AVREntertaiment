@@ -230,6 +230,13 @@ class MainReportViewModel: ObservableObject {
         let count: Int
     }
     
+    struct ProjectStatusPercentageData: Identifiable {
+        let id = UUID()
+        let status: String
+        let percentage: Double
+        let count: Int
+    }
+    
     // Published chart data
     @Published var costTrendData: [CostTrendData] = []
     @Published var stageBudgetData: [StageBudgetData] = []
@@ -244,6 +251,7 @@ class MainReportViewModel: ObservableObject {
     @Published var subCategoryActivityData: [SubCategoryActivityData] = []
     @Published var delayCorrelationData: [DelayCorrelationData] = []
     @Published var suspensionReasonData: [SuspensionReasonData] = []
+    @Published var projectStatusPercentageData: [ProjectStatusPercentageData] = []
     
     // Computed properties for formatted values
     var totalBudgetFormatted: String {
@@ -338,7 +346,7 @@ class MainReportViewModel: ObservableObject {
                 group.addTask { await self.calculateStageBudgetVsActual() }
                 group.addTask { await self.calculateProjectWiseBudgetVsActual() }
                 group.addTask { await self.calculateActiveProjects() }
-                group.addTask { await self.calculateStageProgressStatus() }
+                group.addTask { await self.calculateProjectStatusPercentage() }
                 group.addTask { await self.calculateSubCategoryActivity() }
                 group.addTask { await self.calculateSubCategorySpend() }
                 group.addTask { await self.calculateSuspensionReasons() }
@@ -1068,7 +1076,7 @@ class MainReportViewModel: ObservableObject {
                 group.addTask { await self.calculateOverrunData() }
                 group.addTask { await self.calculateBurnRate() }
                 group.addTask { await self.calculateActiveProjects() }
-                group.addTask { await self.calculateStageProgressStatus() }
+                group.addTask { await self.calculateProjectStatusPercentage() }
                 group.addTask { await self.calculateSubCategoryActivity() }
                 group.addTask { await self.calculateSubCategorySpend() }
                 group.addTask { await self.calculateSuspensionReasons() }
@@ -1596,6 +1604,76 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             stageProgressData = progressData
+        }
+    }
+    
+    /// Calculate project status percentage - percentage of projects by status
+    private func calculateProjectStatusPercentage() async {
+        // Count projects by status
+        var statusCounts: [String: Int] = [:]
+        var totalCount = 0
+        
+        for project in projects {
+            // Filter by project status if needed
+            if selectedProjectStatuses.count < projectStatusOptions.count {
+                var statusMatches = false
+                if project.isSuspended == true {
+                    if selectedProjectStatuses.contains("SUSPENDED") {
+                        statusMatches = true
+                    }
+                } else {
+                    if project.status == "SUSPENDED" {
+                        if selectedProjectStatuses.contains("SUSPENDED") {
+                            statusMatches = true
+                        }
+                    } else {
+                        if selectedProjectStatuses.contains(project.status) {
+                            statusMatches = true
+                        }
+                    }
+                }
+                if !statusMatches {
+                    continue
+                }
+            }
+            
+            // Skip INACTIVE status
+            if project.status == "INACTIVE" {
+                continue
+            }
+            
+            totalCount += 1
+            
+            // Use the actual status name (will be mapped to colors in the view)
+            let status: String
+            if project.isSuspended == true {
+                status = "SUSPENDED"
+            } else {
+                status = project.status
+            }
+            
+            statusCounts[status, default: 0] += 1
+        }
+        
+        // Calculate percentages
+        guard totalCount > 0 else {
+            await MainActor.run {
+                projectStatusPercentageData = []
+            }
+            return
+        }
+        
+        // Create data array with percentages
+        let percentageData = statusCounts.map { (status, count) in
+            ProjectStatusPercentageData(
+                status: status,
+                percentage: (Double(count) / Double(totalCount)) * 100.0,
+                count: count
+            )
+        }.sorted { $0.percentage > $1.percentage } // Sort by percentage descending
+        
+        await MainActor.run {
+            projectStatusPercentageData = percentageData
         }
     }
     
