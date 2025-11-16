@@ -417,12 +417,14 @@ struct ProjectListView: View {
         do {
             // When approver accepts, always set status to LOCKED
             // The status check logic will automatically transition LOCKED to ACTIVE when planned date or phase start date arrives
+
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": ProjectStatus.LOCKED.rawValue,
-                    "updatedAt": Timestamp()
+                    "status": project.plannedDate < Date() ? ProjectStatus.LOCKED.rawValue : ProjectStatus.ACTIVE.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
                 ])
+
             
             // Post notification to refresh project list
             NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
