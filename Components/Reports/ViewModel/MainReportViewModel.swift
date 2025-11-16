@@ -1844,9 +1844,9 @@ class MainReportViewModel: ObservableObject {
             }
         }
         
-        // Convert to array, only include selected statuses, and sort by status name
-        let statusData = selectedProjectStatuses.compactMap { status -> StatusCostData? in
-            guard let cost = statusCostMap[status], cost > 0 else { return nil }
+        // Convert to array, include all selected statuses (even with 0 cost), and sort by status name
+        let statusData = selectedProjectStatuses.map { status -> StatusCostData in
+            let cost = statusCostMap[status] ?? 0.0
             // Map status names to display names
             let displayName: String
             switch status {
