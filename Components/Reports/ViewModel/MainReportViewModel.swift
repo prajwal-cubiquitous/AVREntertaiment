@@ -319,6 +319,9 @@ class MainReportViewModel: ObservableObject {
             // Calculate initial sub-category spend
             await calculateSubCategorySpend()
             
+            // Calculate initial suspension reasons
+            await calculateSuspensionReasons()
+            
             // Load sample chart data (for now)
             loadSampleChartData()
             
@@ -708,6 +711,8 @@ class MainReportViewModel: ObservableObject {
         // stageProgressData is now calculated from real data in calculateStageProgressStatus()
         // subCategoryActivityData is now calculated from real data in calculateSubCategoryActivity()
         
+        // suspensionReasonData is now calculated from real data in calculateSuspensionReasons()
+        
         delayCorrelationData = [
             DelayCorrelationData(project: "Aurum Heights", delayDays: 18.0, extraCost: 1.8),
             DelayCorrelationData(project: "Tracura Residency", delayDays: 24.0, extraCost: 2.2),
@@ -1006,6 +1011,7 @@ class MainReportViewModel: ObservableObject {
             await calculateStageProgressStatus()
             await calculateSubCategoryActivity()
             await calculateSubCategorySpend()
+            await calculateSuspensionReasons()
         }
     }
     
@@ -2181,6 +2187,33 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             burnRateData = burnRateArray
+        }
+    }
+    
+    /// Calculate suspended projects by reason - counts projects with isSuspended == true grouped by suspensionReason
+    /// Sorted by count (highest on top)
+    private func calculateSuspensionReasons() async {
+        // Filter projects where isSuspended == true
+        let suspendedProjects = projects.filter { $0.isSuspended == true }
+        
+        // Group by suspensionReason and count
+        var reasonCountMap: [String: Int] = [:]
+        
+        for project in suspendedProjects {
+            // Get suspension reason, use "Unknown" if nil or empty
+            let reason = project.suspensionReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown"
+            let finalReason = reason.isEmpty ? "Unknown" : reason
+            
+            reasonCountMap[finalReason, default: 0] += 1
+        }
+        
+        // Convert to array and sort by count (descending - highest on top)
+        let suspensionReasonArray = reasonCountMap.map { reason, count in
+            SuspensionReasonData(reason: reason, count: count)
+        }.sorted { $0.count > $1.count }
+        
+        await MainActor.run {
+            suspensionReasonData = suspensionReasonArray
         }
     }
 }

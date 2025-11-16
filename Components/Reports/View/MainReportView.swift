@@ -2517,27 +2517,133 @@ struct MainReportView: View {
     }
     
     // Suspension Reason Chart
+    @State private var selectedSuspensionReason: String? = nil
+    
     private var suspensionReasonChart: some View {
-        Chart {
-            ForEach(viewModel.suspensionReasonData, id: \.reason) { data in
-                BarMark(
-                    x: .value("Count", data.count),
-                    y: .value("Reason", data.reason)
-                )
-                .foregroundStyle(Color.orange)
-            }
+        // Handle empty state
+        if viewModel.suspensionReasonData.isEmpty {
+            return AnyView(
+                VStack(spacing: 12) {
+                    Image(systemName: "chart.bar.fill")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+                    Text("No Data Available")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("No suspended projects found")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 40)
+            )
         }
-        .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine()
-                AxisValueLabel()
-            }
+        
+        // Calculate X-axis max value
+        let maxCount = viewModel.suspensionReasonData.map { $0.count }.max() ?? 0
+        let xAxisMax: Double
+        if maxCount == 0 {
+            xAxisMax = 1.0
+        } else {
+            // Add 10% padding and round up to next 0.5
+            let padding = max(Double(maxCount) * 0.1, 0.5)
+            xAxisMax = ceil((Double(maxCount) + padding) * 2) / 2.0
         }
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisValueLabel()
+        
+        return AnyView(ZStack(alignment: .topLeading) {
+            Chart {
+                ForEach(viewModel.suspensionReasonData, id: \.reason) { data in
+                    BarMark(
+                        x: .value("Count", Double(data.count)),
+                        y: .value("Reason", data.reason)
+                    )
+                    .foregroundStyle(selectedSuspensionReason == data.reason ? Color.orange.opacity(0.8) : Color.orange)
+                }
+                
+                // Show rule mark for selected reason
+                if let selectedReason = selectedSuspensionReason {
+                    RuleMark(y: .value("Reason", selectedReason))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                }
             }
-        }
+            .chartYSelection(value: $selectedSuspensionReason)
+            .chartXScale(domain: 0...xAxisMax, type: .linear)
+            .chartXAxis {
+                AxisMarks(position: .bottom, values: .stride(by: 0.5)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let count = value.as(Double.self) {
+                            Text(String(format: "%.1f", count))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 10)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let reason = value.as(String.self) {
+                            Text(reason)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .chartXAxisLabel("Count")
+                .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(minHeight: 200, maxHeight: 300)
+            
+            // Tooltip overlay
+            if let selectedReason = selectedSuspensionReason,
+               let selectedData = viewModel.suspensionReasonData.first(where: { $0.reason == selectedReason }),
+               let reasonIndex = viewModel.suspensionReasonData.firstIndex(where: { $0.reason == selectedReason }) {
+                GeometryReader { geometry in
+                    let barHeight = max(40.0, (geometry.size.height - 60) / CGFloat(max(viewModel.suspensionReasonData.count, 1)))
+                    let yPosition = (CGFloat(reasonIndex) * barHeight) + (barHeight / 2) + 30
+                    
+                    // Calculate x position based on the bar's end (count value)
+                    let maxCount = viewModel.suspensionReasonData.map { $0.count }.max() ?? 1
+                    let barWidthRatio = Double(selectedData.count) / Double(maxCount)
+                    let estimatedBarEndX = geometry.size.width * 0.7 * barWidthRatio + 50
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(selectedReason)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.orange)
+                                .frame(width: 12, height: 12)
+                            Text("Projects: \(selectedData.count)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: min(estimatedBarEndX + 80, geometry.size.width - 80),
+                        y: yPosition
+                    )
+                }
+                .frame(minHeight: 200, maxHeight: 300)
+            }
+        })
     }
     
     // Helper function to format currency with appropriate units
