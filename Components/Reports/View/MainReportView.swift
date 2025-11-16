@@ -174,25 +174,31 @@ struct MainReportView: View {
             
             // Second row: Project, Stage, Department
             HStack(spacing: DesignSystem.Spacing.small) {
-                // Project Filter
-                filterDropdown(
+                // Project Filter - Multi-select
+                MultiSelectDropdown(
                     label: "Project",
-                    selection: $viewModel.selectedProject,
-                    options: viewModel.projectOptions
+                    displayText: viewModel.selectedProjectsDisplayText,
+                    options: viewModel.projectOptions.filter { $0 != "All Projects" },
+                    selectedItems: $viewModel.selectedProjects,
+                    allOptionText: "All Projects"
                 )
                 
-                // Stage Filter
-                filterDropdown(
+                // Stage Filter - Multi-select
+                MultiSelectDropdown(
                     label: "Stage",
-                    selection: $viewModel.selectedStage,
-                    options: viewModel.stageOptions
+                    displayText: viewModel.selectedStagesDisplayText,
+                    options: viewModel.stageOptions.filter { $0 != "All Stages" },
+                    selectedItems: $viewModel.selectedStages,
+                    allOptionText: "All Stages"
                 )
                 
-                // Department Filter
-                filterDropdown(
+                // Department Filter - Multi-select
+                MultiSelectDropdown(
                     label: "Department",
-                    selection: $viewModel.selectedDepartment,
-                    options: viewModel.departmentOptions
+                    displayText: viewModel.selectedDepartmentsDisplayText,
+                    options: viewModel.departmentOptions.filter { $0 != "All Departments" },
+                    selectedItems: $viewModel.selectedDepartments,
+                    allOptionText: "All Departments"
                 )
             }
         }
@@ -282,84 +288,147 @@ struct MainReportView: View {
     
     @State private var showingDateRangePicker = false
     
-    // MARK: - Project Status Multi-Select Filter
-    private var projectStatusMultiSelectFilter: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-            Text("Project Status")
-                .font(.system(size: 12, weight: .medium, design: .default))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-            
-            Menu {
-                // "ALL Status" option
-                Button {
-                    HapticManager.selection()
-                    if viewModel.selectedProjectStatuses.count == viewModel.projectStatusOptions.count {
-                        // If all are selected, deselect all
-                        viewModel.selectedProjectStatuses = []
-                    } else {
-                        // Select all statuses
-                        viewModel.selectedProjectStatuses = Set(viewModel.projectStatusOptions)
-                    }
-                } label: {
-                    HStack {
-                        Text("ALL Status")
-                        Spacer()
-                        if viewModel.selectedProjectStatuses.count == viewModel.projectStatusOptions.count {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                    }
-                }
+    // MARK: - Multi-Select Dropdown Component
+    private struct MultiSelectDropdown: View {
+        let label: String
+        let displayText: String
+        let options: [String]
+        @Binding var selectedItems: Set<String>
+        let allOptionText: String
+        @State private var isOpen = false
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium, design: .default))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.5)
                 
-                Divider()
-                
-                // Individual status options
-                ForEach(viewModel.projectStatusOptions, id: \.self) { status in
+                ZStack(alignment: .topLeading) {
+                    // Button to toggle dropdown
                     Button {
                         HapticManager.selection()
-                        if viewModel.selectedProjectStatuses.contains(status) {
-                            viewModel.selectedProjectStatuses.remove(status)
-                        } else {
-                            viewModel.selectedProjectStatuses.insert(status)
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isOpen.toggle()
                         }
                     } label: {
-                        HStack {
-                            Text(status)
-                            Spacer()
-                            if viewModel.selectedProjectStatuses.contains(status) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
+                        HStack(spacing: DesignSystem.Spacing.small) {
+                            Text(displayText)
+                                .font(.system(size: 14, weight: .regular, design: .default))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            Image(systemName: isOpen ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                                .symbolEffect(.bounce, value: selectedItems)
                         }
+                        .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                        .padding(.vertical, DesignSystem.Spacing.small)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
+                        )
+                    }
+                    .zIndex(isOpen ? 2 : 1)
+                    
+                    // Dropdown menu
+                    if isOpen {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    // "All" option
+                                    Button {
+                                        HapticManager.selection()
+                                        if selectedItems.count == options.count {
+                                            selectedItems = []
+                                        } else {
+                                            selectedItems = Set(options)
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(allOptionText)
+                                                .font(.system(size: 14, weight: .regular))
+                                                .foregroundStyle(.primary)
+                                            Spacer()
+                                            if selectedItems.count == options.count {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 12, weight: .semibold))
+                                                    .foregroundStyle(.blue)
+                                            }
+                                        }
+                                        .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                                        .padding(.vertical, DesignSystem.Spacing.small)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    Divider()
+                                    
+                                    // Individual options
+                                    ForEach(options, id: \.self) { option in
+                                        Button {
+                                            HapticManager.selection()
+                                            if selectedItems.contains(option) {
+                                                selectedItems.remove(option)
+                                            } else {
+                                                selectedItems.insert(option)
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text(option)
+                                                    .font(.system(size: 14, weight: .regular))
+                                                    .foregroundStyle(.primary)
+                                                Spacer()
+                                                if selectedItems.contains(option) {
+                                                    Image(systemName: "checkmark")
+                                                        .font(.system(size: 12, weight: .semibold))
+                                                        .foregroundStyle(.blue)
+                                                }
+                                            }
+                                            .padding(.horizontal, DesignSystem.Spacing.small + 2)
+                                            .padding(.vertical, DesignSystem.Spacing.small)
+                                            .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        
+                                        if option != options.last {
+                                            Divider()
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 300)
+                        }
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
+                        )
+                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+                        .padding(.top, 44)
+                        .zIndex(3)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                     }
                 }
-            } label: {
-                HStack(spacing: DesignSystem.Spacing.small) {
-                    Text(viewModel.selectedStatusesDisplayText)
-                        .font(.system(size: 14, weight: .regular, design: .default))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                        .symbolEffect(.bounce, value: viewModel.selectedProjectStatuses)
-                }
-                .padding(.horizontal, DesignSystem.Spacing.small + 2)
-                .padding(.vertical, DesignSystem.Spacing.small)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(DesignSystem.CornerRadius.medium)
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
-                        .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
-                )
             }
-            .accessibilityLabel("Project Status filter")
-            .accessibilityValue(viewModel.selectedStatusesDisplayText)
         }
+    }
+    
+    // MARK: - Project Status Multi-Select Filter
+    private var projectStatusMultiSelectFilter: some View {
+        MultiSelectDropdown(
+            label: "Project Status",
+            displayText: viewModel.selectedStatusesDisplayText,
+            options: viewModel.projectStatusOptions,
+            selectedItems: $viewModel.selectedProjectStatuses,
+            allOptionText: "ALL Status"
+        )
     }
     
     // MARK: - Date Range Display Text
@@ -1438,7 +1507,7 @@ struct MainReportView: View {
     // Stage Across Projects Chart
     private var stageAcrossProjectsChart: some View {
         Group {
-            if viewModel.selectedStage == "All Stages" {
+            if viewModel.selectedStages.isEmpty {
                 VStack(spacing: DesignSystem.Spacing.small) {
                     Image(systemName: "chart.bar.doc.horizontal")
                         .font(.system(size: 32, weight: .light))

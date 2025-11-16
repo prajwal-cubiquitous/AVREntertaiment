@@ -11,8 +11,8 @@ import FirebaseFirestore
 
 @MainActor
 class MainReportViewModel: ObservableObject {
-    // Filter selections
-    @Published var selectedProject: String = "All Projects" {
+    // Filter selections - now using Set for multiple selection
+    @Published var selectedProjects: Set<String> = [] {
         didSet {
             Task {
                 await loadStagesForProject()
@@ -20,7 +20,7 @@ class MainReportViewModel: ObservableObject {
             }
         }
     }
-    @Published var selectedStage: String = "All Stages" {
+    @Published var selectedStages: Set<String> = [] {
         didSet {
             Task {
                 await loadDepartmentsForStage()
@@ -28,7 +28,7 @@ class MainReportViewModel: ObservableObject {
             }
         }
     }
-    @Published var selectedDepartment: String = "All Departments" {
+    @Published var selectedDepartments: Set<String> = [] {
         didSet {
             updateDataBasedOnFilters()
         }
@@ -68,7 +68,7 @@ class MainReportViewModel: ObservableObject {
     @Published var departmentOptions: [String] = ["All Departments"]
     @Published var projectStatusOptions: [String] = ["ACTIVE", "COMPLETED", "MAINTENANCE", "ARCHIVE", "SUSPENDED"]
     
-    // Computed property for display text
+    // Computed properties for display text
     var selectedStatusesDisplayText: String {
         if selectedProjectStatuses.count == projectStatusOptions.count {
             return "ALL Status"
@@ -78,6 +78,36 @@ class MainReportViewModel: ObservableObject {
             return selectedProjectStatuses.first ?? "No Status"
         } else {
             return "\(selectedProjectStatuses.count) Selected"
+        }
+    }
+    
+    var selectedProjectsDisplayText: String {
+        if selectedProjects.isEmpty {
+            return "All Projects"
+        } else if selectedProjects.count == 1 {
+            return selectedProjects.first ?? "All Projects"
+        } else {
+            return "\(selectedProjects.count) Selected"
+        }
+    }
+    
+    var selectedStagesDisplayText: String {
+        if selectedStages.isEmpty {
+            return "All Stages"
+        } else if selectedStages.count == 1 {
+            return selectedStages.first ?? "All Stages"
+        } else {
+            return "\(selectedStages.count) Selected"
+        }
+    }
+    
+    var selectedDepartmentsDisplayText: String {
+        if selectedDepartments.isEmpty {
+            return "All Departments"
+        } else if selectedDepartments.count == 1 {
+            return selectedDepartments.first ?? "All Departments"
+        } else {
+            return "\(selectedDepartments.count) Selected"
         }
     }
     
@@ -397,14 +427,12 @@ class MainReportViewModel: ObservableObject {
                 self.projectOptions = projectNames
                 self.projectIdMap = projectMap
                 
-                // Reset project selection if current selection is not in the filtered list
-                if !projectNames.contains(selectedProject) {
-                    self.selectedProject = "All Projects"
-                } else {
-                    // Reload stages for the currently selected project
-                    Task {
-                        await loadStagesForProject()
-                    }
+                // Remove any selected projects that are no longer in the filtered list
+                self.selectedProjects = self.selectedProjects.filter { projectNames.contains($0) }
+                
+                // Reload stages for the currently selected projects
+                Task {
+                    await loadStagesForProject()
                 }
             }
         } catch {
@@ -421,7 +449,7 @@ class MainReportViewModel: ObservableObject {
             var allPhases: [Phase] = []
             var uniqueStageNames: Set<String> = []
             
-            if selectedProject == "All Projects" {
+            if selectedProjects.isEmpty {
                 // Load phases from all projects
                 for project in projects {
                     guard let projectId = project.id else { continue }
@@ -439,21 +467,23 @@ class MainReportViewModel: ObservableObject {
                     }
                 }
             } else {
-                // Load phases from selected project only
-                guard let projectId = projectIdMap[selectedProject] else {
-                    print("Error: Project ID not found for \(selectedProject)")
-                    return
-                }
-                
-                let snapshot = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .order(by: "phaseNumber")
-                    .getDocuments()
-                
-                for doc in snapshot.documents {
-                    if let phase = try? doc.data(as: Phase.self) {
-                        allPhases.append(phase)
-                        uniqueStageNames.insert(phase.phaseName)
+                // Load phases from selected projects only
+                for selectedProjectName in selectedProjects {
+                    guard let projectId = projectIdMap[selectedProjectName] else {
+                        print("Error: Project ID not found for \(selectedProjectName)")
+                        continue
+                    }
+                    
+                    let snapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .order(by: "phaseNumber")
+                        .getDocuments()
+                    
+                    for doc in snapshot.documents {
+                        if let phase = try? doc.data(as: Phase.self) {
+                            allPhases.append(phase)
+                            uniqueStageNames.insert(phase.phaseName)
+                        }
                     }
                 }
             }
@@ -465,10 +495,8 @@ class MainReportViewModel: ObservableObject {
             await MainActor.run {
                 self.phases = allPhases
                 self.stageOptions = stageNames
-                // Reset stage selection if current stage is not in the new list
-                if !stageNames.contains(selectedStage) {
-                    self.selectedStage = "All Stages"
-                }
+                // Remove any selected stages that are no longer in the filtered list
+                self.selectedStages = self.selectedStages.filter { stageNames.contains($0) }
             }
         } catch {
             print("Error loading stages: \(error)")
@@ -481,7 +509,7 @@ class MainReportViewModel: ObservableObject {
         // Extract department names from phases
         var uniqueDepartmentNames: Set<String> = []
         
-        if selectedStage == "All Stages" {
+        if selectedStages.isEmpty {
             // Extract departments from all phases
             for phase in phases {
                 for deptKey in phase.departments.keys {
@@ -497,8 +525,8 @@ class MainReportViewModel: ObservableObject {
                 }
             }
         } else {
-            // Extract departments from selected stage only
-            let selectedPhases = phases.filter { $0.phaseName == selectedStage }
+            // Extract departments from selected stages only
+            let selectedPhases = phases.filter { selectedStages.contains($0.phaseName) }
             
             for phase in selectedPhases {
                 for deptKey in phase.departments.keys {
@@ -521,10 +549,8 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             self.departmentOptions = sortedDepartments
-            // Reset department selection if current department is not in the new list
-            if !sortedDepartments.contains(selectedDepartment) {
-                self.selectedDepartment = "All Departments"
-            }
+            // Remove any selected departments that are no longer in the filtered list
+            self.selectedDepartments = self.selectedDepartments.filter { sortedDepartments.contains($0) }
         }
     }
     
@@ -539,10 +565,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         // Date formatter for parsing expense dates
@@ -593,9 +619,9 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by stage (phase name)
-                    if selectedStage != "All Stages" {
+                    if !selectedStages.isEmpty {
                         if let expensePhaseName = expense.phaseName {
-                            if expensePhaseName != selectedStage {
+                            if !selectedStages.contains(expensePhaseName) {
                                 continue
                             }
                         } else {
@@ -612,7 +638,7 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by department
-                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
                     
@@ -733,11 +759,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            // Find the selected project
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         var calculatedBudget: Double = 0
@@ -759,7 +784,7 @@ class MainReportViewModel: ObservableObject {
                     let phaseId = phaseDoc.documentID
                     
                     // Filter by stage (phase name)
-                    if selectedStage != "All Stages" && phase.phaseName != selectedStage {
+                    if !selectedStages.isEmpty && !selectedStages.contains(phase.phaseName) {
                         continue
                     }
                     
@@ -776,7 +801,7 @@ class MainReportViewModel: ObservableObject {
                         }
                         
                         // Filter by department
-                        if selectedDepartment != "All Departments" && departmentName != selectedDepartment {
+                        if !selectedDepartments.isEmpty && !selectedDepartments.contains(departmentName) {
                             continue
                         }
                         
@@ -796,10 +821,10 @@ class MainReportViewModel: ObservableObject {
                     guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
-                    if selectedStage != "All Stages" {
+                    if !selectedStages.isEmpty {
                         // Use phaseName from expense if available, otherwise skip if stage filter is active
                         if let expensePhaseName = expense.phaseName {
-                            if expensePhaseName != selectedStage {
+                            if !selectedStages.contains(expensePhaseName) {
                                 continue
                             }
                         } else {
@@ -819,7 +844,7 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by department
-                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
                     
@@ -851,10 +876,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         // Date formatter for parsing expense dates
@@ -881,7 +906,7 @@ class MainReportViewModel: ObservableObject {
                     let phaseName = phase.phaseName
                     
                     // Filter by stage (phase name) - if a specific stage is selected, only include that
-                    if selectedStage != "All Stages" && phaseName != selectedStage {
+                    if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
                         continue
                     }
                     
@@ -889,7 +914,7 @@ class MainReportViewModel: ObservableObject {
                     var phaseBudget: Double = 0
                     for (deptKey, budgetAmount) in phase.departments {
                         // Filter by department if specific department is selected
-                        if selectedDepartment != "All Departments" {
+                        if !selectedDepartments.isEmpty {
                             let departmentName: String
                             if let underscoreIndex = deptKey.firstIndex(of: "_") {
                                 departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
@@ -897,7 +922,7 @@ class MainReportViewModel: ObservableObject {
                                 departmentName = deptKey
                             }
                             
-                            if departmentName != selectedDepartment {
+                            if !selectedDepartments.contains(departmentName) {
                                 continue
                             }
                         }
@@ -932,7 +957,7 @@ class MainReportViewModel: ObservableObject {
                         }
                         
                         // Filter by department
-                        if selectedDepartment != "All Departments" {
+                        if !selectedDepartments.isEmpty {
                             let expenseDepartmentName: String
                             if let underscoreIndex = expense.department.firstIndex(of: "_") {
                                 expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
@@ -940,7 +965,7 @@ class MainReportViewModel: ObservableObject {
                                 expenseDepartmentName = expense.department
                             }
                             
-                            if expenseDepartmentName != selectedDepartment {
+                            if !selectedDepartments.contains(expenseDepartmentName) {
                                 continue
                             }
                         }
@@ -994,7 +1019,7 @@ class MainReportViewModel: ObservableObject {
         }
         
         // Update stage across projects data when stage is selected
-        if selectedStage != "All Stages" {
+        if !selectedStages.isEmpty {
             stageAcrossProjectsData = [
                 StageAcrossProjectsData(project: "Aurum Heights", budget: 2.0, actual: 1.8),
                 StageAcrossProjectsData(project: "Tracura Residency", budget: 1.5, actual: 1.6),
@@ -1016,11 +1041,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            // If a specific project is selected, only show that one (but we need > 1 to show chart)
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         // Only calculate if we have more than 1 project
@@ -1058,14 +1082,14 @@ class MainReportViewModel: ObservableObject {
                     let phaseName = phase.phaseName
                     
                     // Filter by stage (phase name) - if a specific stage is selected, only include that
-                    if selectedStage != "All Stages" && phaseName != selectedStage {
+                    if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
                         continue
                     }
                     
                     // Calculate budget for this phase (sum of all departments)
                     for (deptKey, budgetAmount) in phase.departments {
                         // Filter by department if specific department is selected
-                        if selectedDepartment != "All Departments" {
+                        if !selectedDepartments.isEmpty {
                             let departmentName: String
                             if let underscoreIndex = deptKey.firstIndex(of: "_") {
                                 departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
@@ -1073,7 +1097,7 @@ class MainReportViewModel: ObservableObject {
                                 departmentName = deptKey
                             }
                             
-                            if departmentName != selectedDepartment {
+                            if !selectedDepartments.contains(departmentName) {
                                 continue
                             }
                         }
@@ -1094,9 +1118,9 @@ class MainReportViewModel: ObservableObject {
                     guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
-                    if selectedStage != "All Stages" {
+                    if !selectedStages.isEmpty {
                         if let expensePhaseName = expense.phaseName {
-                            if expensePhaseName != selectedStage {
+                            if !selectedStages.contains(expensePhaseName) {
                                 continue
                             }
                         } else {
@@ -1123,7 +1147,7 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by department
-                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
                     
@@ -1418,10 +1442,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         // Date formatter for parsing expense dates
@@ -1465,9 +1489,9 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
-                    if selectedStage != "All Stages" {
+                    if !selectedStages.isEmpty {
                         if let expensePhaseName = expense.phaseName {
-                            if expensePhaseName != selectedStage {
+                            if !selectedStages.contains(expensePhaseName) {
                                 continue
                             }
                         } else {
@@ -1484,7 +1508,7 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by department
-                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
                     
@@ -1520,10 +1544,10 @@ class MainReportViewModel: ObservableObject {
         
         // Determine which projects to include
         let projectsToProcess: [Project]
-        if selectedProject == "All Projects" {
+        if selectedProjects.isEmpty {
             projectsToProcess = projects
         } else {
-            projectsToProcess = projects.filter { $0.name == selectedProject }
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
         var categorySpend: [String: Double] = [:]
@@ -1544,9 +1568,9 @@ class MainReportViewModel: ObservableObject {
                     guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
-                    if selectedStage != "All Stages" {
+                    if !selectedStages.isEmpty {
                         if let expensePhaseName = expense.phaseName {
-                            if expensePhaseName != selectedStage {
+                            if !selectedStages.contains(expensePhaseName) {
                                 continue
                             }
                         } else {
@@ -1563,7 +1587,7 @@ class MainReportViewModel: ObservableObject {
                     }
                     
                     // Filter by department
-                    if selectedDepartment != "All Departments" && expenseDepartmentName != selectedDepartment {
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
                     
