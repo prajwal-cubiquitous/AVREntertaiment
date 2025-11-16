@@ -634,7 +634,7 @@ struct MainReportView: View {
             // Cost Trend Chart
             chartCard(
                 title: "Cost Trend (MoM)",
-                subtitle: "Monthly total cost · ₹ Cr",
+                subtitle: "Monthly total cost · ₹ ",
                 totalValue: viewModel.costTrendTotal,
                 chartId: "costTrend"
             ) {
@@ -645,7 +645,7 @@ struct MainReportView: View {
             if viewModel.stageBudgetData.count > 1 {
                 chartCard(
                     title: "Stage Budget vs Actual",
-                    subtitle: "₹ Cr · Budget vs Actuals",
+                    subtitle: "₹  · Budget vs Actuals",
                     chartId: "stageBudget"
                 ) {
                     stageBudgetChart
@@ -675,7 +675,7 @@ struct MainReportView: View {
             // Cost by Project Status
             chartCard(
                 title: "Cost by Project Status",
-                subtitle: "₹ Cr · Portfolio split",
+                subtitle: "₹  · Portfolio split",
                 chartId: "statusCost"
             ) {
                 statusCostChart
@@ -1079,6 +1079,7 @@ struct MainReportView: View {
                             }
                         }
                         }
+                        .scrollIndicators(.hidden)
                         
                         // Arrow indicator on right side middle
                         VStack {
@@ -1351,6 +1352,7 @@ struct MainReportView: View {
                             }
                         }
                         }
+                        .scrollIndicators(.hidden)
                         
                         // Arrow indicator on right side middle
                         VStack {
@@ -1364,7 +1366,7 @@ struct MainReportView: View {
                                         .fill(.ultraThinMaterial)
                                         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                                 )
-                                .padding(.trailing, 12)
+                                .padding(.trailing, 6)
                             Spacer()
                         }
                         .allowsHitTesting(false)
@@ -1755,6 +1757,7 @@ struct MainReportView: View {
                             }
                         }
                         }
+                        .scrollIndicators(.hidden)
                         
                         // Arrow indicator on right side middle
                         VStack {
@@ -2745,6 +2748,7 @@ struct MainReportView: View {
                                 }
                             }
                             }
+                            .scrollIndicators(.hidden)
                             
                             // Arrow indicator on bottom middle (for vertical scroll)
                             HStack {
