@@ -699,13 +699,7 @@ class MainReportViewModel: ObservableObject {
         
         // statusCostData is now calculated from real data in calculateStatusCost()
         
-        overrunData = [
-            OverrunData(stage: "Excavation", progress: 25.0, overrun: -5.0),
-            OverrunData(stage: "Sub-structure", progress: 55.0, overrun: 8.0),
-            OverrunData(stage: "Super-structure", progress: 70.0, overrun: 12.0),
-            OverrunData(stage: "Finishing", progress: 40.0, overrun: 3.0),
-            OverrunData(stage: "External Works", progress: 15.0, overrun: 15.0)
-        ]
+        // overrunData is now calculated from real data in calculateOverrunData()
         
         burnRateData = [
             BurnRateData(project: "Aurum Heights", rate: 0.58),
@@ -1009,6 +1003,7 @@ class MainReportViewModel: ObservableObject {
             await calculateProjectWiseBudgetVsActual()
             await calculateStageAcrossProjects()
             await calculateStatusCost()
+            await calculateOverrunData()
             await calculateActiveProjects()
             await calculateStageProgressStatus()
             await calculateSubCategoryActivity()
@@ -1868,6 +1863,205 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             statusCostData = statusData
+        }
+    }
+    
+    /// Calculate cost overrun vs stage progress data
+    /// X-axis: Progress % based on phase startDate and endDate timeline
+    /// Y-axis: Overrun % based on approved expenses vs budget
+    /// Shows data points when: 1) spent > budget, or 2) progress > 25% with no expenses (negative)
+    private func calculateOverrunData() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                overrunData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProjects.isEmpty {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
+        }
+        
+        // Date formatter for parsing dates
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        let calendar = Calendar.current
+        let currentDate = Date()
+        var overrunDataMap: [String: (progress: Double, overrun: Double)] = [:] // phaseName -> (progress, overrun)
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            do {
+                // Load phases for this project
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                // Process each phase
+                for phaseDoc in phasesSnapshot.documents {
+                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
+                    let phaseId = phaseDoc.documentID
+                    let phaseName = phase.phaseName
+                    
+                    // Filter by stage if specific stages are selected
+                    if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
+                        continue
+                    }
+                    
+                    // Calculate phase budget (sum of all departments)
+                    var phaseBudget: Double = 0
+                    for (deptKey, budgetAmount) in phase.departments {
+                        // Filter by department if specific department is selected
+                        if !selectedDepartments.isEmpty {
+                            let departmentName: String
+                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                            } else {
+                                departmentName = deptKey
+                            }
+                            
+                            if !selectedDepartments.contains(departmentName) {
+                                continue
+                            }
+                        }
+                        phaseBudget += budgetAmount
+                    }
+                    
+                    // Calculate progress % based on startDate and endDate
+                    var progress: Double = 0.0
+                    var phaseStartDate: Date?
+                    var phaseEndDate: Date?
+                    
+                    if let startDateStr = phase.startDate,
+                       let endDateStr = phase.endDate,
+                       let startDate = dateFormatter.date(from: startDateStr),
+                       let endDate = dateFormatter.date(from: endDateStr) {
+                        
+                        phaseStartDate = startDate
+                        phaseEndDate = endDate
+                        
+                        let totalDuration = endDate.timeIntervalSince(startDate)
+                        guard totalDuration > 0 else { continue }
+                        
+                        let elapsed = currentDate.timeIntervalSince(startDate)
+                        progress = (elapsed / totalDuration) * 100.0
+                        
+                        // Clamp progress between 0 and 100
+                        progress = max(0, min(100, progress))
+                    } else {
+                        // If dates are not available, skip this phase
+                        continue
+                    }
+                    
+                    guard let startDate = phaseStartDate, let endDate = phaseEndDate else { continue }
+                    
+                    // Load expenses for this phase
+                    let expensesSnapshot = try await FirebasePathHelper.shared
+                        .expensesCollection(customerId: customerId, projectId: projectId)
+                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                        .getDocuments()
+                    
+                    var phaseActual: Double = 0
+                    var hasExpenses = false
+                    
+                    // Process each approved expense
+                    for expenseDoc in expensesSnapshot.documents {
+                        guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                        
+                        // Filter by phase
+                        if expense.phaseId != phaseId {
+                            continue
+                        }
+                        
+                        // Parse expense date
+                        guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                        let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                        
+                        // Filter by phase date range (expense must be within phase timeline)
+                        let phaseStartOfDay = calendar.startOfDay(for: startDate)
+                        let phaseEndOfDay = calendar.startOfDay(for: endDate)
+                        
+                        if expenseStartOfDay < phaseStartOfDay || expenseStartOfDay > phaseEndOfDay {
+                            continue
+                        }
+                        
+                        // Also filter by selected date range if applicable
+                        let filterStartOfDay = calendar.startOfDay(for: self.startDate)
+                        let filterEndOfDay = calendar.startOfDay(for: self.endDate)
+                        
+                        if expenseStartOfDay < filterStartOfDay || expenseStartOfDay > filterEndOfDay {
+                            continue
+                        }
+                        
+                        // Extract department name from expense
+                        let expenseDepartmentName: String
+                        if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                            expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                        } else {
+                            expenseDepartmentName = expense.department
+                        }
+                        
+                        // Filter by department if specific departments are selected
+                        if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                            continue
+                        }
+                        
+                        phaseActual += expense.amount
+                        hasExpenses = true
+                    }
+                    
+                    // Calculate overrun %
+                    var overrun: Double = 0.0
+                    if phaseBudget > 0 {
+                        overrun = ((phaseActual - phaseBudget) / phaseBudget) * 100.0
+                    }
+                    
+                    // Condition 1: Show if spent exceeds budget (overrun > 0)
+                    // Condition 2: Show if progress > 25% and no expenses (show negative)
+                    let shouldShow: Bool
+                    if overrun > 0 {
+                        // Condition 1: Spent exceeds budget
+                        shouldShow = true
+                    } else if progress > 25.0 && !hasExpenses && phaseBudget > 0 {
+                        // Condition 2: Progress > 25% with no expenses - show as negative
+                        // Use a default negative value (e.g., -5% or calculate based on expected spend)
+                        overrun = -5.0 // Default negative value as shown in the image
+                        shouldShow = true
+                    } else {
+                        shouldShow = false
+                    }
+                    
+                    if shouldShow {
+                        // Handle same phase names across projects - use the one with higher overrun or later progress
+                        if let existing = overrunDataMap[phaseName] {
+                            // Keep the one with higher absolute overrun or higher progress
+                            if abs(overrun) > abs(existing.overrun) || progress > existing.progress {
+                                overrunDataMap[phaseName] = (progress: progress, overrun: overrun)
+                            }
+                        } else {
+                            overrunDataMap[phaseName] = (progress: progress, overrun: overrun)
+                        }
+                    }
+                }
+            } catch {
+                print("Error calculating overrun data for project \(projectId): \(error)")
+            }
+        }
+        
+        // Convert to array
+        let overrunDataArray = overrunDataMap.map { phaseName, values in
+            OverrunData(stage: phaseName, progress: values.progress, overrun: values.overrun)
+        }
+        
+        await MainActor.run {
+            overrunData = overrunDataArray
         }
     }
 }

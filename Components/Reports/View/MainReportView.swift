@@ -1846,49 +1846,186 @@ struct MainReportView: View {
     }
     
     // Overrun Scatter Chart
+    @State private var selectedOverrunStage: String? = nil
+    
     private var overrunScatterChart: some View {
-        Chart {
-            ForEach(viewModel.overrunData, id: \.stage) { data in
-                PointMark(
-                    x: .value("Progress", data.progress),
-                    y: .value("Overrun", data.overrun)
-                )
-                .foregroundStyle(Color.red)
-                .symbolSize(60)
+        ZStack(alignment: .top) {
+            Chart {
+                ForEach(viewModel.overrunData, id: \.stage) { data in
+                    PointMark(
+                        x: .value("Progress", data.progress),
+                        y: .value("Overrun", data.overrun)
+                    )
+                    .foregroundStyle(
+                        selectedOverrunStage == data.stage
+                        ? Color.red.opacity(0.8)
+                        : Color.red
+                    )
+                    .symbolSize(
+                        selectedOverrunStage == data.stage
+                        ? 80
+                        : 60
+                    )
+                }
+                
+                // Show rule marks for selected point
+                if let selectedStage = selectedOverrunStage,
+                   let selectedData = viewModel.overrunData.first(where: { $0.stage == selectedStage }) {
+                    RuleMark(x: .value("Progress", selectedData.progress))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                    
+                    RuleMark(y: .value("Overrun", selectedData.overrun))
+                        .foregroundStyle(Color.accentColor.opacity(0.3))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let progress = value.as(Double.self) {
-                        Text("\(Int(progress))%")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.primary)
+            .chartXSelection(value: Binding(
+                get: { 
+                    if let stage = selectedOverrunStage,
+                       let data = viewModel.overrunData.first(where: { $0.stage == stage }) {
+                        return data.progress
+                    }
+                    return nil
+                },
+                set: { newProgress in
+                    if let progress = newProgress {
+                        // Find the closest point to the selected progress
+                        if let closest = viewModel.overrunData.min(by: { 
+                            abs($0.progress - progress) < abs($1.progress - progress) 
+                        }) {
+                            selectedOverrunStage = closest.stage
+                        }
+                    } else {
+                        selectedOverrunStage = nil
+                    }
+                }
+            ))
+            .chartYSelection(value: Binding(
+                get: { 
+                    if let stage = selectedOverrunStage,
+                       let data = viewModel.overrunData.first(where: { $0.stage == stage }) {
+                        return data.overrun
+                    }
+                    return nil
+                },
+                set: { newOverrun in
+                    if let overrun = newOverrun {
+                        // If we already have an X selection, find the point that matches both
+                        if let currentProgress = selectedOverrunStage.flatMap({ stage in
+                            viewModel.overrunData.first(where: { $0.stage == stage })?.progress
+                        }) {
+                            // Find point closest to both current progress and new overrun
+                            if let closest = viewModel.overrunData.min(by: {
+                                let dist1 = sqrt(pow($0.progress - currentProgress, 2) + pow($0.overrun - overrun, 2))
+                                let dist2 = sqrt(pow($1.progress - currentProgress, 2) + pow($1.overrun - overrun, 2))
+                                return dist1 < dist2
+                            }) {
+                                selectedOverrunStage = closest.stage
+                            }
+                        } else {
+                            // Just find closest by overrun
+                            if let closest = viewModel.overrunData.min(by: { 
+                                abs($0.overrun - overrun) < abs($1.overrun - overrun) 
+                            }) {
+                                selectedOverrunStage = closest.stage
+                            }
+                        }
+                    } else {
+                        selectedOverrunStage = nil
+                    }
+                }
+            ))
+            .chartXAxis {
+                AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let progress = value.as(Double.self) {
+                            Text("\(Int(progress))%")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
                     }
                 }
             }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let overrun = value.as(Double.self) {
-                        Text("\(Int(overrun))%")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.primary)
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let overrun = value.as(Double.self) {
+                            Text("\(Int(overrun))%")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
                     }
                 }
             }
+            .chartXAxisLabel("Stage Progress (%)")
+                .font(.system(size: 12, weight: .medium))
+            .chartYAxisLabel("Cost Overrun (%)")
+                .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(minHeight: 200, maxHeight: 300)
+            
+            // Tooltip overlay
+            if let selectedStage = selectedOverrunStage,
+               let selectedData = viewModel.overrunData.first(where: { $0.stage == selectedStage }) {
+                GeometryReader { geometry in
+                    // Calculate position based on chart coordinates
+                    // We need to map the data values to screen coordinates
+                    let progressRange = viewModel.overrunData.map { $0.progress }
+                    let overrunRange = viewModel.overrunData.map { $0.overrun }
+                    
+                    let minProgress = progressRange.min() ?? 0
+                    let maxProgress = progressRange.max() ?? 100
+                    let minOverrun = overrunRange.min() ?? -10
+                    let maxOverrun = overrunRange.max() ?? 20
+                    
+                    let progressRangeSize = max(maxProgress - minProgress, 1)
+                    let overrunRangeSize = max(maxOverrun - minOverrun, 1)
+                    
+                    // Chart area (accounting for padding and axis labels)
+                    let chartPadding: CGFloat = 50
+                    let chartWidth = geometry.size.width - chartPadding * 2
+                    let chartHeight = geometry.size.height - chartPadding * 2
+                    
+                    // Calculate position
+                    let xRatio = (selectedData.progress - minProgress) / progressRangeSize
+                    let yRatio = (selectedData.overrun - minOverrun) / overrunRangeSize
+                    
+                    let xPosition = chartPadding + (xRatio * chartWidth)
+                    let yPosition = chartPadding + ((1 - yRatio) * chartHeight) // Invert Y for screen coordinates
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            // Red square indicator
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.red)
+                                .frame(width: 12, height: 12)
+                            
+                            Text("Stage: \(selectedData.stage) · Progress: \(Int(selectedData.progress))% · Overrun: \(Int(selectedData.overrun))%")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+                    }
+                    .position(
+                        x: min(max(xPosition, 80), geometry.size.width - 80),
+                        y: max(min(yPosition - 60, geometry.size.height - 80), 60)
+                    )
+                }
+                .frame(minHeight: 200, maxHeight: 300)
+            }
         }
-        .chartXAxisLabel("Stage Progress (%)")
-            .font(.system(size: 12, weight: .medium))
-        .chartYAxisLabel("Cost Overrun (%)")
-            .font(.system(size: 12, weight: .medium))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
     }
     
     // Burn Rate Chart
