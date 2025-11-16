@@ -638,13 +638,26 @@ struct CreateProjectView: View {
                         .font(DesignSystem.Typography.headline)
                         .foregroundColor(.primary)
                     
-                    TextField("Enter project name", text: $viewModel.projectName)
-                        .font(DesignSystem.Typography.body)
-                        .fieldStyle()
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
-                                .stroke(viewModel.projectNameError != nil ? Color.red : Color.clear, lineWidth: 1)
-                        )
+                    HStack {
+                        TextField("Enter project name", text: $viewModel.projectName)
+                            .font(DesignSystem.Typography.body)
+                            .fieldStyle()
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                    .stroke(viewModel.projectNameError != nil ? Color.red : Color.clear, lineWidth: 1)
+                            )
+                            .onChange(of: viewModel.projectName) { oldValue, newValue in
+                                // Debounced check for duplicate project names
+                                viewModel.debouncedCheckProjectName()
+                            }
+                        
+                        // Loading indicator while checking
+                        if viewModel.isCheckingProjectName {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .padding(.leading, 8)
+                        }
+                    }
                     
                     if let error = viewModel.projectNameError {
                         InlineErrorMessage(message: error)

@@ -163,6 +163,8 @@ class CreateProjectViewModel: ObservableObject {
     
     // MARK: - Validation State
     @Published var shouldShowValidationErrors: Bool = false
+    @Published var isCheckingProjectName: Bool = false
+    @Published var projectNameExists: Bool = false
     
     // MARK: - Edit Mode State
     @Published var isEditingMode: Bool = false
@@ -450,6 +452,10 @@ class CreateProjectViewModel: ObservableObject {
     // MARK: - Validation Error Messages
     
     var projectNameError: String? {
+        // Always show duplicate error if it exists (even before validation)
+        if projectNameExists {
+            return "A project with this name already exists"
+        }
         guard shouldShowValidationErrors else { return nil }
         if projectName.trimmingCharacters(in: .whitespaces).isEmpty {
             return "Project name is required"
@@ -615,6 +621,10 @@ class CreateProjectViewModel: ObservableObject {
         if projectName.trimmingCharacters(in: .whitespaces).isEmpty {
             return "projectName"
         }
+        // Check if project name already exists
+        if projectNameExists {
+            return "projectName"
+        }
         
         // Check client
         if client.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -709,6 +719,101 @@ class CreateProjectViewModel: ObservableObject {
         return nil
     }
     
+    // MARK: - Project Name Duplicate Check
+    
+    /// Check if a project name already exists in Firestore
+    /// - Parameter name: The project name to check
+    /// - Returns: True if a project with this name exists (excluding the current project being edited)
+    func checkProjectNameExists(_ name: String) async -> Bool {
+        // Don't check if name is empty or just whitespace
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmedName.isEmpty else {
+            await MainActor.run {
+                projectNameExists = false
+                isCheckingProjectName = false
+            }
+            return false
+        }
+        
+        guard let customerId = authService?.currentCustomerId else {
+            await MainActor.run {
+                projectNameExists = false
+                isCheckingProjectName = false
+            }
+            return false
+        }
+        
+        await MainActor.run {
+            isCheckingProjectName = true
+        }
+        
+        do {
+            // Query all projects for this customer (we'll filter case-insensitively in memory)
+            let querySnapshot = try await FirebasePathHelper.shared
+                .projectsCollection(customerId: customerId)
+                .getDocuments()
+            
+            // Filter for projects with the same name (case-insensitive) and exclude current project if editing
+            let existingProjects = querySnapshot.documents.filter { doc in
+                // Exclude current project if editing
+                if let editingId = editingProjectId, doc.documentID == editingId {
+                    return false
+                }
+                
+                // Case-insensitive name comparison
+                if let projectData = try? doc.data(as: Project.self) {
+                    return projectData.name.trimmingCharacters(in: .whitespaces)
+                        .localizedCaseInsensitiveCompare(trimmedName) == .orderedSame
+                }
+                return false
+            }
+            
+            let exists = !existingProjects.isEmpty
+            
+            await MainActor.run {
+                projectNameExists = exists
+                isCheckingProjectName = false
+            }
+            
+            return exists
+        } catch {
+            print("Error checking project name: \(error.localizedDescription)")
+            await MainActor.run {
+                projectNameExists = false
+                isCheckingProjectName = false
+            }
+            return false
+        }
+    }
+    
+    // Debounced check task
+    private var nameCheckTask: Task<Void, Never>?
+    
+    /// Debounced check for project name duplicates
+    func debouncedCheckProjectName() {
+        // Cancel previous task
+        nameCheckTask?.cancel()
+        
+        // Reset state immediately
+        projectNameExists = false
+        
+        let nameToCheck = projectName
+        
+        // Create new task with debounce delay
+        nameCheckTask = Task {
+            // Wait 500ms before checking
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // Check if task was cancelled or name changed
+            guard !Task.isCancelled, nameToCheck == projectName else {
+                return
+            }
+            
+            // Perform the check
+            await checkProjectNameExists(nameToCheck)
+        }
+    }
+    
     func validateAndFindFirstInvalidField() -> String? {
         shouldShowValidationErrors = true
         let fieldId = findFirstInvalidFieldId()
@@ -790,6 +895,10 @@ class CreateProjectViewModel: ObservableObject {
             // Set edit mode
             isEditingMode = true
             editingProjectId = projectId
+            
+            // Reset duplicate check state
+            projectNameExists = false
+            isCheckingProjectName = false
             
             // Load project basic info
             projectName = project.name
