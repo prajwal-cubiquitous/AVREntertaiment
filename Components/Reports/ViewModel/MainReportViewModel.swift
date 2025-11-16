@@ -16,7 +16,7 @@ class MainReportViewModel: ObservableObject {
         didSet {
             Task {
                 await loadStagesForProject()
-                updateDataBasedOnFilters()
+                debouncedUpdateData()
             }
         }
     }
@@ -24,20 +24,21 @@ class MainReportViewModel: ObservableObject {
         didSet {
             Task {
                 await loadDepartmentsForStage()
-                updateDataBasedOnFilters()
+                debouncedUpdateData()
             }
         }
     }
     @Published var selectedDepartments: Set<String> = [] {
         didSet {
-            updateDataBasedOnFilters()
+            debouncedUpdateData()
         }
     }
     @Published var selectedProjectStatuses: Set<String> = ["ACTIVE", "COMPLETED", "MAINTENANCE", "ARCHIVE", "SUSPENDED"] {
         didSet {
             Task {
                 await loadProjects()
-                updateDataBasedOnFilters()
+                invalidateCache() // Invalidate cache when status changes
+                debouncedUpdateData()
             }
         }
     }
@@ -45,7 +46,8 @@ class MainReportViewModel: ObservableObject {
         didSet {
             Task {
                 await loadProjects()
-                updateDataBasedOnFilters()
+                invalidateCache() // Invalidate cache when date range changes
+                debouncedUpdateData()
             }
         }
     }
@@ -57,7 +59,8 @@ class MainReportViewModel: ObservableObject {
             }
             Task {
                 await loadProjects()
-                updateDataBasedOnFilters()
+                invalidateCache() // Invalidate cache when date range changes
+                debouncedUpdateData()
             }
         }
     }
@@ -123,6 +126,16 @@ class MainReportViewModel: ObservableObject {
     
     // Project ID mapping (project name -> project ID)
     private var projectIdMap: [String: String] = [:]
+    
+    // Performance optimization: Data cache
+    private var expensesCache: [String: [Expense]] = [:] // projectId -> expenses
+    private var phasesCache: [String: [Phase]] = [:] // projectId -> phases
+    private var cacheDateRange: (start: Date, end: Date)?
+    private var isCacheValid: Bool = false
+    
+    // Debouncing for filter changes
+    private var filterUpdateTask: Task<Void, Never>?
+    private let debounceDelay: TimeInterval = 0.3 // 300ms debounce
     
     // KPI values (will be calculated based on filters)
     @Published var totalBudget: Double = 0.0
@@ -285,6 +298,24 @@ class MainReportViewModel: ObservableObject {
     
     // MARK: - Data Loading
     
+    /// Debounced update to prevent excessive recalculations
+    private func debouncedUpdateData() {
+        filterUpdateTask?.cancel()
+        filterUpdateTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(debounceDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            updateDataBasedOnFilters()
+        }
+    }
+    
+    /// Invalidate cache when filters change significantly
+    private func invalidateCache() {
+        isCacheValid = false
+        expensesCache.removeAll()
+        phasesCache.removeAll()
+        cacheDateRange = nil
+    }
+    
     /// Load all projects and populate the project dropdown
     func loadData() async {
         isLoading = true
@@ -297,46 +328,104 @@ class MainReportViewModel: ObservableObject {
             // Load projects
             await loadProjects()
             
-            // Calculate initial budget metrics
-            await calculateBudgetMetrics()
+            // Pre-load all expenses and phases in parallel for caching
+            await preloadExpensesAndPhases()
             
-            // Calculate initial cost trend
-            await calculateCostTrend()
-            
-            // Calculate initial stage budget vs actual
-            await calculateStageBudgetVsActual()
-            
-            // Calculate initial project-wise budget vs actual
-            await calculateProjectWiseBudgetVsActual()
-            
-            // Calculate initial active projects and stage progress
-            await calculateActiveProjects()
-            await calculateStageProgressStatus()
-            
-            // Calculate initial sub-category activity
-            await calculateSubCategoryActivity()
-            
-            // Calculate initial sub-category spend
-            await calculateSubCategorySpend()
-            
-            // Calculate initial suspension reasons
-            await calculateSuspensionReasons()
+            // Calculate all metrics in parallel using TaskGroup
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await self.calculateBudgetMetrics() }
+                group.addTask { await self.calculateCostTrend() }
+                group.addTask { await self.calculateStageBudgetVsActual() }
+                group.addTask { await self.calculateProjectWiseBudgetVsActual() }
+                group.addTask { await self.calculateActiveProjects() }
+                group.addTask { await self.calculateStageProgressStatus() }
+                group.addTask { await self.calculateSubCategoryActivity() }
+                group.addTask { await self.calculateSubCategorySpend() }
+                group.addTask { await self.calculateSuspensionReasons() }
+            }
             
             // Load sample chart data (for now)
             loadSampleChartData()
             
         } catch {
-            print("Error loading data: \(error)")
+            Swift.print("Error loading data: \(error)")
             errorMessage = "Failed to load data: \(error.localizedDescription)"
         }
         
         isLoading = false
     }
     
+    /// Pre-load expenses and phases for all projects in parallel
+    private func preloadExpensesAndPhases() async {
+        guard let customerId = customerId else { return }
+        
+        // Check if cache is still valid
+        if isCacheValid,
+           let cachedRange = cacheDateRange,
+           cachedRange.start == startDate,
+           cachedRange.end == endDate {
+            return // Cache is valid, skip reloading
+        }
+        
+        // Clear old cache
+        expensesCache.removeAll()
+        phasesCache.removeAll()
+        
+        // Load expenses and phases in parallel for all projects
+        await withTaskGroup(of: Void.self) { group in
+            for project in projects {
+                guard let projectId = project.id else { continue }
+                
+                group.addTask {
+                    // Load expenses
+                    do {
+                        let expensesSnapshot = try await FirebasePathHelper.shared
+                            .expensesCollection(customerId: customerId, projectId: projectId)
+                            .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                            .getDocuments()
+                        
+                        let projectExpenses = expensesSnapshot.documents.compactMap { doc -> Expense? in
+                            try? doc.data(as: Expense.self)
+                        }
+                        
+                        await MainActor.run {
+                            self.expensesCache[projectId] = projectExpenses
+                        }
+                    } catch {
+                        Swift.print("Error loading expenses for project \(projectId): \(error)")
+                    }
+                    
+                    // Load phases
+                    do {
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerId, projectId: projectId)
+                            .getDocuments()
+                        
+                        let projectPhases = phasesSnapshot.documents.compactMap { doc -> Phase? in
+                            try? doc.data(as: Phase.self)
+                        }
+                        
+                        await MainActor.run {
+                            self.phasesCache[projectId] = projectPhases
+                        }
+                    } catch {
+                        Swift.print("Error loading phases for project \(projectId): \(error)")
+                    }
+                }
+            }
+        }
+        
+        // Mark cache as valid
+        await MainActor.run {
+            isCacheValid = true
+            cacheDateRange = (start: startDate, end: endDate)
+        }
+    }
+    
     /// Load projects from Firestore with status and date filtering
     private func loadProjects() async {
         guard let customerId = customerId else {
-            print("Error: Customer ID not available")
+            Swift.print("Error: Customer ID not available")
             return
         }
         
@@ -440,7 +529,7 @@ class MainReportViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("Error loading projects: \(error)")
+            Swift.print("Error loading projects: \(error)")
             errorMessage = "Failed to load projects"
         }
     }
@@ -474,7 +563,7 @@ class MainReportViewModel: ObservableObject {
                 // Load phases from selected projects only
                 for selectedProjectName in selectedProjects {
                     guard let projectId = projectIdMap[selectedProjectName] else {
-                        print("Error: Project ID not found for \(selectedProjectName)")
+                        Swift.print("Error: Project ID not found for \(selectedProjectName)")
                         continue
                     }
                     
@@ -503,7 +592,7 @@ class MainReportViewModel: ObservableObject {
                 self.selectedStages = self.selectedStages.filter { stageNames.contains($0) }
             }
         } catch {
-            print("Error loading stages: \(error)")
+            Swift.print("Error loading stages: \(error)")
             errorMessage = "Failed to load stages"
         }
     }
@@ -595,63 +684,54 @@ class MainReportViewModel: ObservableObject {
         
         var monthlyTotals: [String: Double] = [:]
         
-        // Process each project
+        // Process each project using cached expenses
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
             
-            do {
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            // Process each approved expense
+            for expense in projectExpenses {
+                // Parse expense date
+                guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
                 
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
-                    
-                    // Parse expense date
-                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
-                    
-                    // Filter by date range
-                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
-                    let startOfDay = calendar.startOfDay(for: startDate)
-                    let endOfDay = calendar.startOfDay(for: endDate)
-                    
-                    if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
-                        continue
-                    }
-                    
-                    // Filter by stage (phase name)
-                    if !selectedStages.isEmpty {
-                        if let expensePhaseName = expense.phaseName {
-                            if !selectedStages.contains(expensePhaseName) {
-                                continue
-                            }
-                        } else {
+                // Filter by date range
+                let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                let startOfDay = calendar.startOfDay(for: startDate)
+                let endOfDay = calendar.startOfDay(for: endDate)
+                
+                if expenseStartOfDay < startOfDay || expenseStartOfDay > endOfDay {
+                    continue
+                }
+                
+                // Filter by stage (phase name)
+                if !selectedStages.isEmpty {
+                    if let expensePhaseName = expense.phaseName {
+                        if !selectedStages.contains(expensePhaseName) {
                             continue
                         }
-                    }
-                    
-                    // Extract department name from expense
-                    let expenseDepartmentName: String
-                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
-                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
                     } else {
-                        expenseDepartmentName = expense.department
-                    }
-                    
-                    // Filter by department
-                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
-                    
-                    // Group by month using the same formatter as we'll use for display
-                    let monthKey = formatterToUse.string(from: expenseDate)
-                    monthlyTotals[monthKey, default: 0] += expense.amount
                 }
-            } catch {
-                print("Error calculating cost trend for project \(projectId): \(error)")
+                
+                // Extract department name from expense
+                let expenseDepartmentName: String
+                if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                    expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                } else {
+                    expenseDepartmentName = expense.department
+                }
+                
+                // Filter by department
+                if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                    continue
+                }
+                
+                // Group by month using the same formatter as we'll use for display
+                let monthKey = formatterToUse.string(from: expenseDate)
+                monthlyTotals[monthKey, default: 0] += expense.amount
             }
         }
         
@@ -680,9 +760,9 @@ class MainReportViewModel: ObservableObject {
         }
         
         // Debug: Print the data to verify values
-        print("📊 Cost Trend Data:")
+        Swift.print("📊 Cost Trend Data:")
         for data in trendData {
-            print("  \(data.month): ₹\(data.value)")
+            Swift.print("  \(data.month): ₹\(data.value)")
         }
         
         await MainActor.run {
@@ -759,57 +839,47 @@ class MainReportViewModel: ObservableObject {
         var calculatedBudget: Double = 0
         var calculatedSpent: Double = 0
         
-        // Process each project
+        // Process each project using cached data
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
             
-            // Load phases for this project
-            do {
-                let phasesSnapshot = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .getDocuments()
+            // Use cached phases instead of querying Firestore
+            let projectPhases = phasesCache[projectId] ?? []
+            
+            // Process each phase
+            for phase in projectPhases {
+                // Filter by stage (phase name)
+                if !selectedStages.isEmpty && !selectedStages.contains(phase.phaseName) {
+                    continue
+                }
                 
-                // Process each phase
-                for phaseDoc in phasesSnapshot.documents {
-                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
-                    let phaseId = phaseDoc.documentID
+                // Process departments in this phase
+                for (deptKey, budgetAmount) in phase.departments {
+                    // Extract department name (handle both "phaseId_departmentName" and "departmentName" formats)
+                    let departmentName: String
+                    if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                        // New format: remove "phaseId_" prefix
+                        departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                    } else {
+                        // Old format: use as is
+                        departmentName = deptKey
+                    }
                     
-                    // Filter by stage (phase name)
-                    if !selectedStages.isEmpty && !selectedStages.contains(phase.phaseName) {
+                    // Filter by department
+                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(departmentName) {
                         continue
                     }
                     
-                    // Process departments in this phase
-                    for (deptKey, budgetAmount) in phase.departments {
-                        // Extract department name (handle both "phaseId_departmentName" and "departmentName" formats)
-                        let departmentName: String
-                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
-                            // New format: remove "phaseId_" prefix
-                            departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
-                        } else {
-                            // Old format: use as is
-                            departmentName = deptKey
-                        }
-                        
-                        // Filter by department
-                        if !selectedDepartments.isEmpty && !selectedDepartments.contains(departmentName) {
-                            continue
-                        }
-                        
-                        // Add to total budget
-                        calculatedBudget += budgetAmount
-                    }
+                    // Add to total budget
+                    calculatedBudget += budgetAmount
                 }
-                
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
-                
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+            }
+            
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            // Process each approved expense
+            for expense in projectExpenses {
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
                     if !selectedStages.isEmpty {
@@ -842,9 +912,6 @@ class MainReportViewModel: ObservableObject {
                     // Add to total spent
                     calculatedSpent += expense.amount
                 }
-            } catch {
-                print("Error calculating budget metrics for project \(projectId): \(error)")
-            }
         }
         
         // Update published properties on main thread
@@ -880,62 +947,52 @@ class MainReportViewModel: ObservableObject {
         let calendar = Calendar.current
         var phaseDataMap: [String: (budget: Double, actual: Double)] = [:] // phaseName -> (budget, actual)
         
-        // Process each project
+        // Process each project using cached data
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
             
-            do {
-                // Load phases for this project
-                let phasesSnapshot = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .getDocuments()
+            // Use cached phases instead of querying Firestore
+            let projectPhases = phasesCache[projectId] ?? []
+            
+            // Process each phase
+            for phase in projectPhases {
+                let phaseName = phase.phaseName
                 
-                // Process each phase
-                for phaseDoc in phasesSnapshot.documents {
-                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
-                    let phaseId = phaseDoc.documentID
-                    let phaseName = phase.phaseName
-                    
-                    // Filter by stage (phase name) - if a specific stage is selected, only include that
-                    if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
-                        continue
-                    }
-                    
-                    // Calculate budget for this phase (sum of all departments)
-                    var phaseBudget: Double = 0
-                    for (deptKey, budgetAmount) in phase.departments {
-                        // Filter by department if specific department is selected
-                        if !selectedDepartments.isEmpty {
-                            let departmentName: String
-                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
-                                departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
-                            } else {
-                                departmentName = deptKey
-                            }
-                            
-                            if !selectedDepartments.contains(departmentName) {
-                                continue
-                            }
+                // Filter by stage (phase name) - if a specific stage is selected, only include that
+                if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
+                    continue
+                }
+                
+                // Calculate budget for this phase (sum of all departments)
+                var phaseBudget: Double = 0
+                for (deptKey, budgetAmount) in phase.departments {
+                    // Filter by department if specific department is selected
+                    if !selectedDepartments.isEmpty {
+                        let departmentName: String
+                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                            departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                        } else {
+                            departmentName = deptKey
                         }
-                        phaseBudget += budgetAmount
-                    }
-                    
-                    // Load expenses for this phase
-                    let expensesSnapshot = try await FirebasePathHelper.shared
-                        .expensesCollection(customerId: customerId, projectId: projectId)
-                        .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                        .getDocuments()
-                    
-                    var phaseActual: Double = 0
-                    
-                    // Process each approved expense
-                    for expenseDoc in expensesSnapshot.documents {
-                        guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
                         
-                        // Filter by phase
-                        if expense.phaseId != phaseId {
+                        if !selectedDepartments.contains(departmentName) {
                             continue
                         }
+                    }
+                    phaseBudget += budgetAmount
+                }
+                
+                // Use cached expenses instead of querying Firestore
+                let projectExpenses = expensesCache[projectId] ?? []
+                
+                var phaseActual: Double = 0
+                
+                // Process each approved expense
+                for expense in projectExpenses {
+                    // Filter by phase - match by phaseName since both have this field
+                    if expense.phaseName != phaseName {
+                        continue
+                    }
                         
                         // Parse expense date and filter by date range
                         guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
@@ -974,9 +1031,6 @@ class MainReportViewModel: ObservableObject {
                         phaseDataMap[phaseName] = (budget: phaseBudget, actual: phaseActual)
                     }
                 }
-            } catch {
-                print("Error calculating stage budget vs actual for project \(projectId): \(error)")
-            }
         }
         
         // Convert to array and only show if more than 1 phase
@@ -998,20 +1052,27 @@ class MainReportViewModel: ObservableObject {
         // Update chart data based on selected filters
         updateKPIs()
         
-        // Calculate cost trend based on filters
+        // Re-validate cache if date range changed
         Task {
-            await calculateCostTrend()
-            await calculateStageBudgetVsActual()
-            await calculateProjectWiseBudgetVsActual()
-            await calculateStageAcrossProjects()
-            await calculateStatusCost()
-            await calculateOverrunData()
-            await calculateBurnRate()
-            await calculateActiveProjects()
-            await calculateStageProgressStatus()
-            await calculateSubCategoryActivity()
-            await calculateSubCategorySpend()
-            await calculateSuspensionReasons()
+            if !isCacheValid || cacheDateRange?.start != startDate || cacheDateRange?.end != endDate {
+                await preloadExpensesAndPhases()
+            }
+            
+            // Calculate all metrics in parallel using TaskGroup
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { await self.calculateCostTrend() }
+                group.addTask { await self.calculateStageBudgetVsActual() }
+                group.addTask { await self.calculateProjectWiseBudgetVsActual() }
+                group.addTask { await self.calculateStageAcrossProjects() }
+                group.addTask { await self.calculateStatusCost() }
+                group.addTask { await self.calculateOverrunData() }
+                group.addTask { await self.calculateBurnRate() }
+                group.addTask { await self.calculateActiveProjects() }
+                group.addTask { await self.calculateStageProgressStatus() }
+                group.addTask { await self.calculateSubCategoryActivity() }
+                group.addTask { await self.calculateSubCategorySpend() }
+                group.addTask { await self.calculateSuspensionReasons() }
+            }
         }
     }
     
@@ -1052,74 +1113,60 @@ class MainReportViewModel: ObservableObject {
             guard let projectId = project.id else { continue }
             let projectName = project.name
             
-            do {
-                // Load phases for this project
-                let phasesSnapshot = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .getDocuments()
+            // Use cached phases instead of querying Firestore
+            let projectPhases = phasesCache[projectId] ?? []
+            
+            var stageBudget: Double = 0
+            var hasSelectedStage = false
+            
+            // Find the selected stage in this project's phases
+            for phase in projectPhases {
+                let phaseName = phase.phaseName
                 
-                var stageBudget: Double = 0
-                var hasSelectedStage = false
-                var matchingPhaseId: String? = nil
-                
-                // Find the selected stage in this project's phases
-                for phaseDoc in phasesSnapshot.documents {
-                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
-                    let phaseId = phaseDoc.documentID
-                    let phaseName = phase.phaseName
+                // Check if this phase matches the selected stage
+                if phaseName == selectedStage {
+                    hasSelectedStage = true
                     
-                    // Check if this phase matches the selected stage
-                    if phaseName == selectedStage {
-                        hasSelectedStage = true
-                        matchingPhaseId = phaseId
-                        
-                        // Calculate budget for this stage (sum of all departments)
-                        for (deptKey, budgetAmount) in phase.departments {
-                            // Filter by department if specific department is selected
-                            if !selectedDepartments.isEmpty {
-                                let departmentName: String
-                                if let underscoreIndex = deptKey.firstIndex(of: "_") {
-                                    departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
-                                } else {
-                                    departmentName = deptKey
-                                }
-                                
-                                if !selectedDepartments.contains(departmentName) {
-                                    continue
-                                }
+                    // Calculate budget for this stage (sum of all departments)
+                    for (deptKey, budgetAmount) in phase.departments {
+                        // Filter by department if specific department is selected
+                        if !selectedDepartments.isEmpty {
+                            let departmentName: String
+                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                                departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                            } else {
+                                departmentName = deptKey
                             }
-                            stageBudget += budgetAmount
+                            
+                            if !selectedDepartments.contains(departmentName) {
+                                continue
+                            }
                         }
-                        break // Found the stage, no need to continue
+                        stageBudget += budgetAmount
                     }
+                    break // Found the stage, no need to continue
                 }
-                
-                // Only process expenses if this project has the selected stage
-                guard hasSelectedStage, let phaseId = matchingPhaseId else { continue }
-                
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
-                
-                var stageActual: Double = 0
-                
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
-                    
-                    // Filter by stage (phase name or phaseId) - must match the selected stage
-                    if let expensePhaseName = expense.phaseName {
-                        if expensePhaseName != selectedStage {
-                            continue
-                        }
-                    } else {
-                        // If expense doesn't have phaseName, check by phaseId
-                        if expense.phaseId != phaseId {
-                            continue
-                        }
+            }
+            
+            // Only process expenses if this project has the selected stage
+            guard hasSelectedStage else { continue }
+            
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            var stageActual: Double = 0
+            
+            // Process each approved expense
+            for expense in projectExpenses {
+                // Filter by stage (phase name) - must match the selected stage
+                if let expensePhaseName = expense.phaseName {
+                    if expensePhaseName != selectedStage {
+                        continue
                     }
+                } else {
+                    // If expense doesn't have phaseName, skip it
+                    continue
+                }
                     
                     // Parse expense date and filter by date range
                     guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
@@ -1151,9 +1198,6 @@ class MainReportViewModel: ObservableObject {
                 if hasSelectedStage {
                     projectDataMap[projectName] = (budget: stageBudget, actual: stageActual)
                 }
-            } catch {
-                print("Error calculating stage across projects for project \(projectId): \(error)")
-            }
         }
         
         // Convert to array and sort by project name
@@ -1203,55 +1247,46 @@ class MainReportViewModel: ObservableObject {
             guard let projectId = project.id else { continue }
             let projectName = project.name
             
-            do {
-                // Load phases for this project
-                let phasesSnapshot = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .getDocuments()
+            // Use cached phases instead of querying Firestore
+            let projectPhases = phasesCache[projectId] ?? []
+            
+            var projectBudget: Double = 0
+            
+            // Process each phase
+            for phase in projectPhases {
+                let phaseName = phase.phaseName
                 
-                var projectBudget: Double = 0
-                
-                // Process each phase
-                for phaseDoc in phasesSnapshot.documents {
-                    guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
-                    let phaseId = phaseDoc.documentID
-                    let phaseName = phase.phaseName
-                    
-                    // Filter by stage (phase name) - if a specific stage is selected, only include that
-                    if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
-                        continue
-                    }
-                    
-                    // Calculate budget for this phase (sum of all departments)
-                    for (deptKey, budgetAmount) in phase.departments {
-                        // Filter by department if specific department is selected
-                        if !selectedDepartments.isEmpty {
-                            let departmentName: String
-                            if let underscoreIndex = deptKey.firstIndex(of: "_") {
-                                departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
-                            } else {
-                                departmentName = deptKey
-                            }
-                            
-                            if !selectedDepartments.contains(departmentName) {
-                                continue
-                            }
-                        }
-                        projectBudget += budgetAmount
-                    }
+                // Filter by stage (phase name) - if a specific stage is selected, only include that
+                if !selectedStages.isEmpty && !selectedStages.contains(phaseName) {
+                    continue
                 }
                 
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
-                
-                var projectActual: Double = 0
-                
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
+                // Calculate budget for this phase (sum of all departments)
+                for (deptKey, budgetAmount) in phase.departments {
+                    // Filter by department if specific department is selected
+                    if !selectedDepartments.isEmpty {
+                        let departmentName: String
+                        if let underscoreIndex = deptKey.firstIndex(of: "_") {
+                            departmentName = String(deptKey[deptKey.index(after: underscoreIndex)...])
+                        } else {
+                            departmentName = deptKey
+                        }
+                        
+                        if !selectedDepartments.contains(departmentName) {
+                            continue
+                        }
+                    }
+                    projectBudget += budgetAmount
+                }
+            }
+            
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            var projectActual: Double = 0
+            
+            // Process each approved expense
+            for expense in projectExpenses {
                     
                     // Filter by stage (phase name) - use phaseName from expense if available
                     if !selectedStages.isEmpty {
@@ -1292,9 +1327,6 @@ class MainReportViewModel: ObservableObject {
                 
                 // Store data for this project
                 projectDataMap[projectName] = (budget: projectBudget, actual: projectActual)
-            } catch {
-                print("Error calculating project-wise budget vs actual for project \(projectId): \(error)")
-            }
         }
         
         // Convert to array
@@ -1600,61 +1632,52 @@ class MainReportViewModel: ObservableObject {
         
         var categoryCounts: [String: Int] = [:]
         
-        // Process each project
+        // Process each project using cached expenses
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
             
-            do {
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            // Process each approved expense
+            for expense in projectExpenses {
+                // Parse expense date and filter by last 30 days
+                guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
+                let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
+                let thirtyDaysAgoStartOfDay = calendar.startOfDay(for: thirtyDaysAgo)
                 
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
-                    
-                    // Parse expense date and filter by last 30 days
-                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
-                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
-                    let thirtyDaysAgoStartOfDay = calendar.startOfDay(for: thirtyDaysAgo)
-                    
-                    if expenseStartOfDay < thirtyDaysAgoStartOfDay {
-                        continue
-                    }
-                    
-                    // Filter by stage (phase name) - use phaseName from expense if available
-                    if !selectedStages.isEmpty {
-                        if let expensePhaseName = expense.phaseName {
-                            if !selectedStages.contains(expensePhaseName) {
-                                continue
-                            }
-                        } else {
+                if expenseStartOfDay < thirtyDaysAgoStartOfDay {
+                    continue
+                }
+                
+                // Filter by stage (phase name) - use phaseName from expense if available
+                if !selectedStages.isEmpty {
+                    if let expensePhaseName = expense.phaseName {
+                        if !selectedStages.contains(expensePhaseName) {
                             continue
                         }
-                    }
-                    
-                    // Extract department name from expense
-                    let expenseDepartmentName: String
-                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
-                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
                     } else {
-                        expenseDepartmentName = expense.department
-                    }
-                    
-                    // Filter by department
-                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
-                    
-                    // Extract categories from expense (categories is a list, but typically has one value)
-                    for category in expense.categories {
-                        categoryCounts[category, default: 0] += 1
-                    }
                 }
-            } catch {
-                print("Error calculating sub-category activity for project \(projectId): \(error)")
+                
+                // Extract department name from expense
+                let expenseDepartmentName: String
+                if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                    expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                } else {
+                    expenseDepartmentName = expense.department
+                }
+                
+                // Filter by department
+                if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                    continue
+                }
+                
+                // Extract categories from expense (categories is a list, but typically has one value)
+                for category in expense.categories {
+                    categoryCounts[category, default: 0] += 1
+                }
             }
         }
         
@@ -1688,52 +1711,43 @@ class MainReportViewModel: ObservableObject {
         
         var categorySpend: [String: Double] = [:]
         
-        // Process each project
+        // Process each project using cached expenses
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
             
-            do {
-                // Load expenses for this project
-                let expensesSnapshot = try await FirebasePathHelper.shared
-                    .expensesCollection(customerId: customerId, projectId: projectId)
-                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-                    .getDocuments()
-                
-                // Process each approved expense
-                for expenseDoc in expensesSnapshot.documents {
-                    guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
-                    
-                    // Filter by stage (phase name) - use phaseName from expense if available
-                    if !selectedStages.isEmpty {
-                        if let expensePhaseName = expense.phaseName {
-                            if !selectedStages.contains(expensePhaseName) {
-                                continue
-                            }
-                        } else {
+            // Use cached expenses instead of querying Firestore
+            let projectExpenses = expensesCache[projectId] ?? []
+            
+            // Process each approved expense
+            for expense in projectExpenses {
+                // Filter by stage (phase name) - use phaseName from expense if available
+                if !selectedStages.isEmpty {
+                    if let expensePhaseName = expense.phaseName {
+                        if !selectedStages.contains(expensePhaseName) {
                             continue
                         }
-                    }
-                    
-                    // Extract department name from expense
-                    let expenseDepartmentName: String
-                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
-                        expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
                     } else {
-                        expenseDepartmentName = expense.department
-                    }
-                    
-                    // Filter by department
-                    if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
                         continue
                     }
-                    
-                    // Extract categories from expense and sum amounts
-                    for category in expense.categories {
-                        categorySpend[category, default: 0] += expense.amount
-                    }
                 }
-            } catch {
-                print("Error calculating sub-category spend for project \(projectId): \(error)")
+                
+                // Extract department name from expense
+                let expenseDepartmentName: String
+                if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                    expenseDepartmentName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                } else {
+                    expenseDepartmentName = expense.department
+                }
+                
+                // Filter by department
+                if !selectedDepartments.isEmpty && !selectedDepartments.contains(expenseDepartmentName) {
+                    continue
+                }
+                
+                // Extract categories from expense and sum amounts
+                for category in expense.categories {
+                    categorySpend[category, default: 0] += expense.amount
+                }
             }
         }
         
@@ -1839,7 +1853,7 @@ class MainReportViewModel: ObservableObject {
                     statusCostMap[status, default: 0] += expense.amount
                 }
             } catch {
-                print("Error calculating status cost for project \(projectId): \(error)")
+                Swift.print("Error calculating status cost for project \(projectId): \(error)")
             }
         }
         
@@ -2055,7 +2069,7 @@ class MainReportViewModel: ObservableObject {
                     }
                 }
             } catch {
-                print("Error calculating overrun data for project \(projectId): \(error)")
+                Swift.print("Error calculating overrun data for project \(projectId): \(error)")
             }
         }
         
@@ -2176,7 +2190,7 @@ class MainReportViewModel: ObservableObject {
                     projectSpendMap[projectName] = (rate: burnRate, totalSpend: totalSpend)
                 }
             } catch {
-                print("Error calculating burn rate for project \(projectId): \(error)")
+                Swift.print("Error calculating burn rate for project \(projectId): \(error)")
             }
         }
         
