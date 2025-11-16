@@ -2184,8 +2184,10 @@ struct MainReportView: View {
                     AxisValueLabel {
                         if let status = value.as(String.self) {
                             Text(status)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
                                 .foregroundStyle(.primary)
+                                .rotationEffect(.degrees(-90))
+                                .offset(x: 0, y: 8)
                         }
                     }
                 }
@@ -2206,6 +2208,7 @@ struct MainReportView: View {
             .chartYScale(domain: 0...yAxisMax, type: .linear)
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
+            .padding(.bottom, 20) // Extra padding for rotated labels
             .frame(minHeight: 200, maxHeight: 300)
             
             // Enhanced Tooltip overlay with safe positioning
@@ -2611,12 +2614,12 @@ struct MainReportView: View {
                                 }
                                 .frame(
                                     width: geometry.size.width,
-                                    height: max(chartHeight, geometry.size.height - 50)
+                                    height: max(chartHeight, geometry.size.height - 70)
                                 )
                                 .padding(.leading, 4)
                                 .padding(.trailing, 12)
                                 .padding(.top, 12)
-                                .padding(.bottom, 50) // Space for fixed X-axis
+                                .padding(.bottom, 70) // Space for fixed X-axis with rotated labels
                                 
                                 // Enhanced Tooltip overlay with safe positioning
                                 if let selectedProject = selectedBurnRateProject,
@@ -2656,10 +2659,10 @@ struct MainReportView: View {
                                                 .background(Color(.separator).opacity(0.3))
                                             
                                             HStack(spacing: 8) {
-                                                Text("₹ Cr/day:")
+                                                Text("₹ Cr/30 days:")
                                                     .font(.system(size: 12, weight: .medium))
                                                     .foregroundStyle(.secondary)
-                                                Text(String(format: "%.2f", selectedData.rate))
+                                                Text(String(format: "%.2f", selectedData.rate * 30))
                                                     .font(.system(size: 13, weight: .bold, design: .rounded))
                                                     .foregroundStyle(.primary)
                                             }
@@ -2680,7 +2683,7 @@ struct MainReportView: View {
                                     }
                                     .frame(
                                         width: geometry.size.width,
-                                        height: max(chartHeight, geometry.size.height - 50)
+                                        height: max(chartHeight, geometry.size.height - 70)
                                     )
                                     .transition(.scale.combined(with: .opacity))
                                 }
@@ -2711,6 +2714,8 @@ struct MainReportView: View {
                                         Text(String(format: "%.1f", rate))
                                             .font(.system(size: 11, weight: .medium, design: .rounded))
                                             .foregroundStyle(.secondary)
+                                            .rotationEffect(.degrees(-90))
+                                            .offset(x: 0, y: 8)
                                     }
                                 }
                             }
@@ -2718,7 +2723,7 @@ struct MainReportView: View {
                         .chartPlotStyle { plot in
                             plot.frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(height: 50) // Fixed height for X-axis
+                        .frame(height: 70) // Increased height for rotated labels
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                     }
