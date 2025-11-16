@@ -8,15 +8,18 @@
 import SwiftUI
 import Charts
 import Accessibility
+import FirebaseFirestore
 
 struct MainReportView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = MainReportViewModel()
+    @EnvironmentObject var authService: FirebaseAuthService
     @State private var selectedTab: ReportTab = .cost
+    @State private var businessName: String = "Portfolio Insights"
     
     enum ReportTab: String, CaseIterable {
-        case cost = "COST INSIGHTS"
-        case project = "PROJECT INSIGHTS"
+        case cost = "Cost Insights"
+        case project = "Project Insights"
     }
     
     var body: some View {
@@ -85,64 +88,101 @@ struct MainReportView: View {
         }
         .task {
             await viewModel.loadData()
+            await loadBusinessName()
+        }
+    }
+    
+    // MARK: - Load Business Name
+    private func loadBusinessName() async {
+        guard let customerId = authService.currentCustomerId else {
+            await MainActor.run {
+                businessName = "Portfolio Insights"
+            }
+            return
+        }
+        
+        do {
+            let customerDoc = try await Firestore.firestore()
+                .collection("customers")
+                .document(customerId)
+                .getDocument()
+            
+            if customerDoc.exists,
+               let customer = try? customerDoc.data(as: Customer.self) {
+                await MainActor.run {
+                    businessName = customer.businessName.isEmpty ? "Portfolio Insights" : customer.businessName
+                }
+            } else {
+                await MainActor.run {
+                    businessName = "Portfolio Insights"
+                }
+            }
+        } catch {
+            Swift.print("Error loading business name: \(error.localizedDescription)")
+            await MainActor.run {
+                businessName = "Portfolio Insights"
+            }
         }
     }
     
     // MARK: - Header View
     private var headerView: some View {
         VStack(spacing: 0) {
-            // Title Section
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text("Tracura")
-                    .font(.system(size: 22, weight: .bold, design: .default))
-                    .foregroundStyle(.primary)
-                    .accessibilityAddTraits(.isHeader)
+            // Business Name Header - Following Apple Design Guidelines
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(businessName)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    
+                    Text("Reports & Analytics")
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
                 
-                Text("Portfolio · Cost & Project Insights")
-                    .font(.system(size: 13, weight: .regular, design: .default))
-                    .foregroundStyle(.secondary)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.top, DesignSystem.Spacing.medium)
-            .padding(.bottom, DesignSystem.Spacing.small)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 20)
             
-            // Tabs with improved styling
-            HStack(spacing: 0) {
+            // Segmented Control Style Tabs - Apple Design Pattern
+            HStack(spacing: 8) {
                 ForEach(ReportTab.allCases, id: \.self) { tab in
                     Button {
                         HapticManager.selection()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             selectedTab = tab
                         }
                     } label: {
-                        VStack(spacing: 0) {
-                            Text(tab.rawValue)
-                                .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .medium, design: .default))
-                                .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-                                .padding(.vertical, DesignSystem.Spacing.small + 2)
-                            
-                            // Active indicator with animation
-                            Rectangle()
-                                .fill(selectedTab == tab ? Color.accentColor : Color.clear)
-                                .frame(height: 3)
-                                .cornerRadius(1.5)
-                        }
-                        .contentShape(Rectangle())
+                        Text(tab.rawValue)
+                            .font(.system(size: 15, weight: selectedTab == tab ? .semibold : .medium, design: .rounded))
+                            .foregroundStyle(selectedTab == tab ? .white : .primary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .background {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(selectedTab == tab ? Color.accentColor : Color(.systemGray6))
+                            }
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
                     .accessibilityLabel(tab.rawValue)
                     .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 }
             }
-            .background(
-                Divider()
-                    .background(Color(.separator))
-            )
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
-        .background(.regularMaterial)
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .background {
+            // Subtle background with proper material
+            Rectangle()
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.03), radius: 1, x: 0, y: 1)
+        }
     }
     
     // MARK: - Loading View

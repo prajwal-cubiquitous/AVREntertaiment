@@ -402,6 +402,7 @@ struct ProjectListView: View {
         }
         .sheet(isPresented: $showingReports) {
             MainReportView()
+                .environmentObject(authService)
                 .presentationDetents([.large])
         }
     }
