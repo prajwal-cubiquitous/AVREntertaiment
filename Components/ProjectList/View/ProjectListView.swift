@@ -21,6 +21,7 @@ struct ProjectListView: View {
     @State private var businessName: String = "Your Projects"
     @State private var projectToReview: Project?
     @State private var showingReports = false
+    @State private var searchText: String = ""
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -123,16 +124,23 @@ struct ProjectListView: View {
                     .padding(.top, DesignSystem.Spacing.medium)
                     
                     if !viewModel.projects.isEmpty {
-                        let filteredCount = viewModel.filteredProjectsForTempApprover.count
+                        let filteredCount = filteredProjects.count
                         Text("\(filteredCount) project\(filteredCount == 1 ? "" : "s")")
                             .font(DesignSystem.Typography.callout)
                             .foregroundColor(.secondary)
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.bottom, DesignSystem.Spacing.small)
+                        
+                        // Search Bar
+                        searchBar
                             .padding(.horizontal, DesignSystem.Spacing.medium)
                             .padding(.bottom, DesignSystem.Spacing.small)
                     }
                     
                     if viewModel.projects.isEmpty {
                         emptyStateView
+                    } else if !searchText.trimmingCharacters(in: .whitespaces).isEmpty && filteredProjects.isEmpty {
+                        searchEmptyStateView
                     } else {
                         projectsListView
                     }
@@ -534,6 +542,38 @@ struct ProjectListView: View {
     }
     
     // MARK: - Empty State
+    private var searchEmptyStateView: some View {
+        VStack(spacing: DesignSystem.Spacing.large) {
+            Spacer()
+            
+            VStack(spacing: DesignSystem.Spacing.medium) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 60))
+                    .foregroundColor(.secondary.opacity(0.6))
+                    .symbolRenderingMode(.hierarchical)
+                
+                Text("No Projects Found")
+                    .font(DesignSystem.Typography.title2)
+                    .foregroundColor(.primary)
+                
+                Text("No projects match \"\(searchText)\"")
+                    .font(DesignSystem.Typography.callout)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, DesignSystem.Spacing.extraLarge)
+            }
+            
+            Button("Clear Search") {
+                HapticManager.selection()
+                searchText = ""
+            }
+            .secondaryButton()
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
     private var emptyStateView: some View {
         VStack(spacing: DesignSystem.Spacing.large) {
             Spacer()
@@ -575,6 +615,51 @@ struct ProjectListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
+    // MARK: - Search Bar
+    
+    private var searchBar: some View {
+        HStack(spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+                .font(.system(size: 16, weight: .medium))
+            
+            TextField("Search projects", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+            
+            if !searchText.isEmpty {
+                Button(action: {
+                    HapticManager.selection()
+                    searchText = ""
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 16))
+                }
+            }
+        }
+        .padding(.horizontal, DesignSystem.Spacing.small + 2)
+        .padding(.vertical, DesignSystem.Spacing.small)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Filtered projects based on search text (case-insensitive search on project name)
+    private var filteredProjects: [Project] {
+        let baseProjects = viewModel.filteredProjectsForTempApprover
+        
+        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return baseProjects
+        }
+        
+        let searchTerm = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        return baseProjects.filter { project in
+            project.name.lowercased().contains(searchTerm)
+        }
+    }
+    
     // MARK: - Helper Properties
     private var emptyStateMessage: String {
         switch role {
@@ -595,7 +680,7 @@ struct ProjectListView: View {
             ScrollView {
                 LazyVStack(spacing: DesignSystem.Spacing.small) {
                     // Project cards
-                    ForEach(viewModel.filteredProjectsForTempApprover) { project in
+                    ForEach(filteredProjects) { project in
                         if role == .APPROVER {
                             Button(action: {
                                 Task {
@@ -687,7 +772,7 @@ struct ProjectListView: View {
                 .padding(.top, DesignSystem.Spacing.small)
                 .padding(.bottom, 80) // Space for FAB
             }
-            .animation(DesignSystem.Animation.standardSpring, value: viewModel.filteredProjectsForTempApprover)
+            .animation(DesignSystem.Animation.standardSpring, value: filteredProjects)
             .navigationDestination(isPresented: $shouldNavigateToDashboard) {
                 if let project = selectedProject {
                     DashboardView(project: project, role: role, phoneNumber: viewModel.phoneNumber, customerId: authService.currentCustomerId, stateManager: sharedStateManager)
