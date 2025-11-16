@@ -1050,7 +1050,7 @@ struct MainReportView: View {
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                                            Text(formatValue(selectedData.value))
                                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
@@ -1274,7 +1274,7 @@ struct MainReportView: View {
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                            Text(formatValue(selectedData.budget))
                                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
@@ -1288,7 +1288,7 @@ struct MainReportView: View {
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                            Text(formatValue(selectedData.actual))
                                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
@@ -1660,7 +1660,7 @@ struct MainReportView: View {
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                            Text(formatValue(selectedData.budget))
                                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
@@ -1674,7 +1674,7 @@ struct MainReportView: View {
                                                 .font(.system(size: 13, weight: .medium))
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                            Text(formatValue(selectedData.actual))
                                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                                 .foregroundStyle(.primary)
                                         }
@@ -1980,7 +1980,7 @@ struct MainReportView: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.secondary)
                                     Spacer()
-                                    Text(String(format: "%.2f Cr", selectedData.budget / 10000000.0))
+                                    Text(formatValue(selectedData.budget))
                                         .font(.system(size: 14, weight: .bold, design: .rounded))
                                         .foregroundStyle(.primary)
                                 }
@@ -1993,7 +1993,7 @@ struct MainReportView: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.secondary)
                                     Spacer()
-                                    Text(String(format: "%.2f Cr", selectedData.actual / 10000000.0))
+                                    Text(formatValue(selectedData.actual))
                                         .font(.system(size: 14, weight: .bold, design: .rounded))
                                         .foregroundStyle(.primary)
                                 }
@@ -2119,7 +2119,7 @@ struct MainReportView: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                            Text(formatValue(selectedData.value))
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
@@ -2256,7 +2256,7 @@ struct MainReportView: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(String(format: "%.2f Cr", selectedData.value / 10000000.0))
+                            Text(formatValue(selectedData.value))
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
@@ -2659,10 +2659,10 @@ struct MainReportView: View {
                                                 .background(Color(.separator).opacity(0.3))
                                             
                                             HStack(spacing: 8) {
-                                                Text("₹ Cr/30 days:")
+                                                Text("30 days:")
                                                     .font(.system(size: 12, weight: .medium))
                                                     .foregroundStyle(.secondary)
-                                                Text(String(format: "%.2f", selectedData.rate * 30))
+                                                Text(formatValue(selectedData.rate * 30))
                                                     .font(.system(size: 13, weight: .bold, design: .rounded))
                                                     .foregroundStyle(.primary)
                                             }
@@ -3265,7 +3265,8 @@ struct MainReportView: View {
         })
     }
     
-    // Helper function to format currency with appropriate units
+    // Helper function to format currency with appropriate units for tooltips
+    // Matches the graph axis formatting logic
     private func formatAmount(_ value: Double) -> String {
         let absValue = abs(value)
         
@@ -3273,17 +3274,39 @@ struct MainReportView: View {
             // 1 to 999: show actual numbers
             return "₹\(String(format: "%.0f", value))"
         } else if absValue < 100000 {
-            // 1000 to 99999: show in thousands (k) with 2 decimals
+            // 1000 to 99999: show in thousands (k) with 2 decimals (e.g., "1.00k")
             let thousands = value / 1000.0
             return "₹\(String(format: "%.2f", thousands))k"
         } else if absValue < 10000000 {
-            // 100000 to 9999999: show in lakhs with 2 decimals
+            // 100000 to 9999999: show in lakhs with 2 decimals (e.g., "9.99 lakhs")
             let lakhs = value / 100000.0
             return "₹\(String(format: "%.2f", lakhs)) lakhs"
         } else {
             // 10000000+: show in crores (Cr) with 2 decimals
             let crores = value / 10000000.0
             return "₹\(String(format: "%.2f", crores)) Cr"
+        }
+    }
+    
+    // Helper function to format values without currency symbol (for tooltip labels)
+    private func formatValue(_ value: Double) -> String {
+        let absValue = abs(value)
+        
+        if absValue < 1000 {
+            // 1 to 999: show actual numbers
+            return String(format: "%.0f", value)
+        } else if absValue < 100000 {
+            // 1000 to 99999: show in thousands (k) with 2 decimals (e.g., "1.00k")
+            let thousands = value / 1000.0
+            return String(format: "%.2fk", thousands)
+        } else if absValue < 10000000 {
+            // 100000 to 9999999: show in lakhs with 2 decimals (e.g., "9.99 lakhs")
+            let lakhs = value / 100000.0
+            return String(format: "%.2f lakhs", lakhs)
+        } else {
+            // 10000000+: show in crores (Cr) with 2 decimals
+            let crores = value / 10000000.0
+            return String(format: "%.2f Cr", crores)
         }
     }
 }
