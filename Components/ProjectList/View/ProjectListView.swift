@@ -409,7 +409,7 @@ struct ProjectListView: View {
             )
         }
         .sheet(isPresented: $showingReports) {
-            MainReportView()
+            MainReportView(searchTextBinding: $searchText)
                 .environmentObject(authService)
                 .presentationDetents([.large])
         }

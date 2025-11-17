@@ -16,6 +16,7 @@ struct MainReportView: View {
     @EnvironmentObject var authService: FirebaseAuthService
     @State private var selectedTab: ReportTab = .cost
     @State private var businessName: String = "Portfolio Insights"
+    @Binding var searchTextBinding: String
     
     enum ReportTab: String, CaseIterable {
         case cost = "Cost Insights"
@@ -3393,7 +3394,9 @@ struct MainReportView: View {
                 ProjectListModalView(
                     category: category,
                     projectNames: categoryData.projectNames,
-                    expenseCount: categoryData.count
+                    expenseCount: categoryData.count,
+                    searchTextBinding: $searchTextBinding,
+                    dismissReports: { dismiss() }
                 )
             }
         }
@@ -3445,6 +3448,8 @@ struct MainReportView: View {
         let category: String
         let projectNames: [String]
         let expenseCount: Int
+        @Binding var searchTextBinding: String
+        let dismissReports: () -> Void
         @Environment(\.dismiss) private var dismiss
         
         var body: some View {
@@ -3508,25 +3513,37 @@ struct MainReportView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(projectNames, id: \.self) { projectName in
-                                    HStack {
-                                        Image(systemName: "building.2.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundStyle(.blue)
-                                            .frame(width: 24)
-                                        
-                                        Text(projectName)
-                                            .font(.system(size: 16, weight: .regular))
-                                            .foregroundStyle(.primary)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.tertiary)
+                                    Button {
+                                        HapticManager.selection()
+                                        // Set search text and dismiss both modals
+                                        searchTextBinding = projectName
+                                        dismiss()
+                                        // Small delay to ensure modal dismisses before reports dismisses
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            dismissReports()
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "building.2.fill")
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(.blue)
+                                                .frame(width: 24)
+                                            
+                                            Text(projectName)
+                                                .font(.system(size: 16, weight: .regular))
+                                                .foregroundStyle(.primary)
+                                            
+                                            Spacer()
+                                            
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 16)
+                                        .background(Color(.systemBackground))
                                     }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 16)
-                                    .background(Color(.systemBackground))
+                                    .buttonStyle(.plain)
                                     
                                     if projectName != projectNames.last {
                                         Divider()
@@ -3846,7 +3863,9 @@ struct MainReportView: View {
                 SuspensionProjectListModalView(
                     reason: reason,
                     projectNames: reasonData.projectNames,
-                    projectCount: reasonData.count
+                    projectCount: reasonData.count,
+                    searchTextBinding: $searchTextBinding,
+                    dismissReports: { dismiss() }
                 )
             }
         })
@@ -3898,6 +3917,8 @@ struct MainReportView: View {
         let reason: String
         let projectNames: [String]
         let projectCount: Int
+        @Binding var searchTextBinding: String
+        let dismissReports: () -> Void
         @Environment(\.dismiss) private var dismiss
         
         var body: some View {
@@ -3950,25 +3971,37 @@ struct MainReportView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(projectNames, id: \.self) { projectName in
-                                    HStack {
-                                        Image(systemName: "building.2.fill")
-                                            .font(.system(size: 16))
-                                            .foregroundStyle(.orange)
-                                            .frame(width: 24)
-                                        
-                                        Text(projectName)
-                                            .font(.system(size: 16, weight: .regular))
-                                            .foregroundStyle(.primary)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundStyle(.tertiary)
+                                    Button {
+                                        HapticManager.selection()
+                                        // Set search text and dismiss both modals
+                                        searchTextBinding = projectName
+                                        dismiss()
+                                        // Small delay to ensure modal dismisses before reports dismisses
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            dismissReports()
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "building.2.fill")
+                                                .font(.system(size: 16))
+                                                .foregroundStyle(.orange)
+                                                .frame(width: 24)
+                                            
+                                            Text(projectName)
+                                                .font(.system(size: 16, weight: .regular))
+                                                .foregroundStyle(.primary)
+                                            
+                                            Spacer()
+                                            
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 16)
+                                        .background(Color(.systemBackground))
                                     }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 16)
-                                    .background(Color(.systemBackground))
+                                    .buttonStyle(.plain)
                                     
                                     if projectName != projectNames.last {
                                         Divider()
@@ -4046,6 +4079,6 @@ struct MainReportView: View {
 
 // MARK: - Preview
 #Preview {
-    MainReportView()
+    MainReportView(searchTextBinding: .constant(""))
 }
 
