@@ -229,6 +229,7 @@ class MainReportViewModel: ObservableObject {
         let id = UUID()
         let reason: String
         let count: Int
+        let projectNames: [String] // List of unique project names that have this suspension reason
     }
     
     struct ProjectStatusPercentageData: Identifiable {
@@ -830,13 +831,6 @@ class MainReportViewModel: ObservableObject {
         // suspensionReasonData is now calculated from real data in calculateSuspensionReasons()
         
         // delayCorrelationData is now calculated from real data in calculateDelayCorrelation()
-        
-        suspensionReasonData = [
-            SuspensionReasonData(reason: "Payment Milestone Delay", count: 5),
-            SuspensionReasonData(reason: "Design Change", count: 3),
-            SuspensionReasonData(reason: "Material Shortage", count: 4),
-            SuspensionReasonData(reason: "Approval Pending", count: 2)
-        ]
         
         // Update KPI values based on filters
         updateKPIs()
@@ -2323,8 +2317,9 @@ class MainReportViewModel: ObservableObject {
         // Filter projects where isSuspended == true
         let suspendedProjects = projects.filter { $0.isSuspended == true }
         
-        // Group by suspensionReason and count
+        // Group by suspensionReason and count, also track project names
         var reasonCountMap: [String: Int] = [:]
+        var reasonProjects: [String: Set<String>] = [:] // Track unique project names per reason
         
         for project in suspendedProjects {
             // Get suspension reason, use "Unknown" if nil or empty
@@ -2332,11 +2327,17 @@ class MainReportViewModel: ObservableObject {
             let finalReason = reason.isEmpty ? "Unknown" : reason
             
             reasonCountMap[finalReason, default: 0] += 1
+            reasonProjects[finalReason, default: Set<String>()].insert(project.name)
         }
         
         // Convert to array and sort by count (descending - highest on top)
         let suspensionReasonArray = reasonCountMap.map { reason, count in
-            SuspensionReasonData(reason: reason, count: count)
+            let projectNames = Array(reasonProjects[reason] ?? Set<String>()).sorted()
+            return SuspensionReasonData(
+                reason: reason,
+                count: count,
+                projectNames: projectNames
+            )
         }.sorted { $0.count > $1.count }
         
         await MainActor.run {
