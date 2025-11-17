@@ -9,6 +9,7 @@
 import SwiftUI
 import FirebaseFirestore
 
+
 struct ProjectListView: View {
     
     @State private var isShowingCreateSheet = false
@@ -22,6 +23,7 @@ struct ProjectListView: View {
     @State private var projectToReview: Project?
     @State private var showingReports = false
     @State private var searchText: String = ""
+    @State private var showingBusinessNameAlert = false
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -44,13 +46,24 @@ struct ProjectListView: View {
                 VStack {
                     // Common Header with menu button
                     HStack(spacing: 8) {
-                        Text(businessName)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.5)
-                            .multilineTextAlignment(.leading)
+                        HStack(spacing: 0) {
+                            Text(truncatedBusinessName)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            
+                            if shouldShowTruncation {
+                                Text("...")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.accentColor)
+                                    .onTapGesture {
+                                        HapticManager.selection()
+                                        showingBusinessNameAlert = true
+                                    }
+                            }
+                        }
                         
                         Spacer(minLength: 4)
                         
@@ -413,6 +426,11 @@ struct ProjectListView: View {
                 .environmentObject(authService)
                 .presentationDetents([.large])
         }
+        .alert("Business Name", isPresented: $showingBusinessNameAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(businessName)
+        }
     }
     
     // MARK: - Project Approval/Rejection
@@ -645,6 +663,19 @@ struct ProjectListView: View {
     }
     
     // MARK: - Computed Properties
+    
+    /// Truncated business name (23 characters max)
+    private var truncatedBusinessName: String {
+        if businessName.count > 23 {
+            return String(businessName.prefix(23))
+        }
+        return businessName
+    }
+    
+    /// Whether to show truncation dots
+    private var shouldShowTruncation: Bool {
+        businessName.count > 23
+    }
     
     /// Filtered projects based on search text (case-insensitive search on project name)
     private var filteredProjects: [Project] {
@@ -962,6 +993,7 @@ struct ProjectListView: View {
             }
         }
     }
+    
 }
 
 // MARK: - Menu Sheet View
