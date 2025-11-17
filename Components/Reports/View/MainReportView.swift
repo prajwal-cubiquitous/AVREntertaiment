@@ -740,9 +740,9 @@ struct MainReportView: View {
                 subCategoryActivityChart
             }
             
-            // Delay Days vs Extra Cost
+            // Extended Days vs Extra Cost
             chartCard(
-                title: "Delay Days vs Extra Cost",
+                title: "Extended Days vs Extra Cost",
                 subtitle: "Project-level correlation",
                 chartId: "delayCorrelation"
             ) {
@@ -3357,16 +3357,41 @@ struct MainReportView: View {
         }
     }
     
-    // Delay Correlation Chart
+    // Delay Correlation Chart (Extended Days vs Extra Cost)
+    @State private var selectedDelayCorrelationItem: MainReportViewModel.DelayCorrelationData? = nil
+    
     private var delayCorrelationChart: some View {
         Chart {
-            ForEach(viewModel.delayCorrelationData, id: \.project) { data in
+            ForEach(viewModel.delayCorrelationData, id: \.id) { data in
                 PointMark(
-                    x: .value("Delay Days", data.delayDays),
+                    x: .value("Extended Days", data.delayDays),
                     y: .value("Extra Cost", data.extraCost)
                 )
-                .foregroundStyle(Color.cyan)
-                .symbolSize(60)
+                .foregroundStyle(selectedDelayCorrelationItem?.id == data.id ? Color.blue : Color.cyan)
+                .symbolSize(selectedDelayCorrelationItem?.id == data.id ? 80 : 60)
+                .opacity(selectedDelayCorrelationItem?.id == data.id ? 1.0 : 0.7)
+                .annotation(position: .top, alignment: .center, spacing: 0) {
+                    if selectedDelayCorrelationItem?.id == data.id {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(data.project)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                            Text("Extended: \(Int(data.delayDays)) days")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundStyle(.secondary)
+                            Text("Extra: \(viewModel.formatChartNumber(data.extraCost))")
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemBackground))
+                                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        )
+                        .offset(y: -8)
+                    }
+                }
             }
         }
         .chartXAxis {
@@ -3388,17 +3413,43 @@ struct MainReportView: View {
                     .foregroundStyle(.quaternary)
                 AxisValueLabel {
                     if let cost = value.as(Double.self) {
-                        Text(String(format: "%.1f", cost))
+                        Text(viewModel.formatChartNumber(cost))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.primary)
                     }
                 }
             }
         }
-        .chartXAxisLabel("Delay Days")
+        .chartXAxisLabel("Extended Days")
             .font(.system(size: 12, weight: .medium))
-        .chartYAxisLabel("Extra Cost (₹ Cr)")
+        .chartYAxisLabel("Extra Cost")
             .font(.system(size: 12, weight: .medium))
+        .chartXSelection(value: Binding(
+            get: { selectedDelayCorrelationItem?.delayDays },
+            set: { newValue in
+                if let newValue = newValue {
+                    // Find the closest data point to the selected X value
+                    selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                        abs($0.delayDays - newValue) < abs($1.delayDays - newValue) 
+                    })
+                } else {
+                    selectedDelayCorrelationItem = nil
+                }
+            }
+        ))
+        .chartYSelection(value: Binding(
+            get: { selectedDelayCorrelationItem?.extraCost },
+            set: { newValue in
+                if let newValue = newValue {
+                    // Find the closest data point to the selected Y value
+                    selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                        abs($0.extraCost - newValue) < abs($1.extraCost - newValue) 
+                    })
+                } else {
+                    selectedDelayCorrelationItem = nil
+                }
+            }
+        ))
         .padding(.horizontal, 8)
         .padding(.vertical, 8)
     }

@@ -304,6 +304,32 @@ class MainReportViewModel: ObservableObject {
         }
     }
     
+    // Helper function to format numbers for chart display (without currency symbol)
+    // 1-999: actual numbers
+    // 1000-99999: "1.00k" format (two decimals)
+    // 100000-9999999: "9.99 lakhs" format (two decimals)
+    // 10000000+: "cr" format (two decimals)
+    func formatChartNumber(_ value: Double) -> String {
+        let absValue = abs(value)
+        
+        if absValue < 1000 {
+            // 1 to 999: show actual numbers
+            return String(format: "%.0f", value)
+        } else if absValue < 100000 {
+            // 1000 to 99999: show in thousands (k) with 2 decimals
+            let thousands = value / 1000.0
+            return String(format: "%.2fk", thousands)
+        } else if absValue < 10000000 {
+            // 100000 to 9999999: show in lakhs with 2 decimals
+            let lakhs = value / 100000.0
+            return String(format: "%.2f lakhs", lakhs)
+        } else {
+            // 10000000+: show in crores (cr) with 2 decimals
+            let crores = value / 10000000.0
+            return String(format: "%.2f cr", crores)
+        }
+    }
+    
     // MARK: - Data Loading
     
     /// Debounced update to prevent excessive recalculations
@@ -343,6 +369,7 @@ class MainReportViewModel: ObservableObject {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await self.calculateBudgetMetrics() }
                 group.addTask { await self.calculateCostTrend() }
+                group.addTask { await self.calculateDelayCorrelation() }
                 group.addTask { await self.calculateStageBudgetVsActual() }
                 group.addTask { await self.calculateProjectWiseBudgetVsActual() }
                 group.addTask { await self.calculateActiveProjects() }
@@ -801,11 +828,7 @@ class MainReportViewModel: ObservableObject {
         
         // suspensionReasonData is now calculated from real data in calculateSuspensionReasons()
         
-        delayCorrelationData = [
-            DelayCorrelationData(project: "Aurum Heights", delayDays: 18.0, extraCost: 1.8),
-            DelayCorrelationData(project: "Tracura Residency", delayDays: 24.0, extraCost: 2.2),
-            DelayCorrelationData(project: "Lotus Enclave", delayDays: 10.0, extraCost: 0.7)
-        ]
+        // delayCorrelationData is now calculated from real data in calculateDelayCorrelation()
         
         suspensionReasonData = [
             SuspensionReasonData(reason: "Payment Milestone Delay", count: 5),
@@ -1080,6 +1103,7 @@ class MainReportViewModel: ObservableObject {
                 group.addTask { await self.calculateSubCategoryActivity() }
                 group.addTask { await self.calculateSubCategorySpend() }
                 group.addTask { await self.calculateSuspensionReasons() }
+                group.addTask { await self.calculateDelayCorrelation() }
             }
         }
     }
@@ -2306,6 +2330,139 @@ class MainReportViewModel: ObservableObject {
         
         await MainActor.run {
             suspensionReasonData = suspensionReasonArray
+        }
+    }
+    
+    /// Calculate delay correlation data (Extended Days vs Extra Cost)
+    /// Shows projects that satisfy either:
+    /// 1. estimatedBudget > budget (extra cost condition)
+    /// 2. Has phases with extended keyword (extended days condition)
+    private func calculateDelayCorrelation() async {
+        guard let customerId = customerId else {
+            await MainActor.run {
+                delayCorrelationData = []
+            }
+            return
+        }
+        
+        // Determine which projects to include
+        let projectsToProcess: [Project]
+        if selectedProjects.isEmpty {
+            projectsToProcess = projects
+        } else {
+            projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        let calendar = Calendar.current
+        
+        var correlationData: [DelayCorrelationData] = []
+        
+        // Process each project
+        for project in projectsToProcess {
+            guard let projectId = project.id else { continue }
+            
+            var extendedDays: Double = 0.0
+            var extraCost: Double = 0.0
+            var hasCondition1 = false
+            var hasCondition2 = false
+            
+            // Condition 1: Check if estimatedBudget > budget
+            if let estimatedBudget = project.estimatedBudget, estimatedBudget > project.budget {
+                extraCost = estimatedBudget - project.budget
+                hasCondition1 = true
+            }
+            
+            // Condition 2: Calculate extended days from phase requests with "extended" keyword
+            do {
+                // Load all phases for this project
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var totalExtendedDays: Double = 0.0
+                
+                // Process each phase
+                for phaseDoc in phasesSnapshot.documents {
+                    let phaseId = phaseDoc.documentID
+                    
+                    // Get phase end date (current end date, which might already be extended)
+                    guard let phaseData = phaseDoc.data() as? [String: Any],
+                          let phaseEndDateStr = phaseData["endDate"] as? String,
+                          let phaseEndDate = dateFormatter.date(from: phaseEndDateStr) else {
+                        continue
+                    }
+                    
+                    // Query requests collection for approved requests with extendedDate
+                    let requestsSnapshot = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .document(phaseId)
+                        .collection("requests")
+                        .whereField("status", isEqualTo: "APPROVED")
+                        .getDocuments()
+                    
+                    // Check if any approved request has extendedDate (indicates extension)
+                    for requestDoc in requestsSnapshot.documents {
+                        let requestData = requestDoc.data()
+                        let requestId = requestDoc.documentID
+                        
+                        if let extendedDateStr = requestData["extendedDate"] as? String,
+                           let extendedDate = dateFormatter.date(from: extendedDateStr) {
+                            
+                            // Try to get the original end date from PhaseTimelineChange
+                            var originalEndDate: Date? = nil
+                            
+                            // Query PhaseTimelineChange collection for this phase
+                            let changesSnapshot = try? await FirebasePathHelper.shared
+                                .phasesCollection(customerId: customerId, projectId: projectId)
+                                .document(phaseId)
+                                .collection("changes")
+                                .whereField("requestID", isEqualTo: requestId)
+                                .order(by: "updatedAt", descending: false)
+                                .limit(to: 1)
+                                .getDocuments()
+                            
+                            if let changesSnapshot = changesSnapshot, !changesSnapshot.documents.isEmpty {
+                                // Found a timeline change entry for this request
+                                if let changeDoc = changesSnapshot.documents.first,
+                                   let change = try? changeDoc.data(as: PhaseTimelineChange.self),
+                                   let previousEndDateStr = change.previousEndDate,
+                                   let previousEndDate = dateFormatter.date(from: previousEndDateStr) {
+                                    originalEndDate = previousEndDate
+                                }
+                            }
+                            
+                            // Use original end date if found, otherwise use current phase end date as fallback
+                            let baselineDate = originalEndDate ?? phaseEndDate
+                            
+                            // Calculate days extended (difference between extended date and original end date)
+                            let daysExtended = calendar.dateComponents([.day], from: baselineDate, to: extendedDate).day ?? 0
+                            if daysExtended > 0 {
+                                totalExtendedDays += Double(daysExtended)
+                                hasCondition2 = true
+                            }
+                        }
+                    }
+                }
+                
+                extendedDays = totalExtendedDays
+            } catch {
+                print("Error calculating extended days for project \(project.name): \(error)")
+            }
+            
+            // Only include projects that satisfy at least one condition
+            if hasCondition1 || hasCondition2 {
+                correlationData.append(DelayCorrelationData(
+                    project: project.name,
+                    delayDays: extendedDays,
+                    extraCost: extraCost
+                ))
+            }
+        }
+        
+        await MainActor.run {
+            delayCorrelationData = correlationData
         }
     }
 }
