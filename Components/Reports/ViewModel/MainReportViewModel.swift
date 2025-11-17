@@ -192,8 +192,7 @@ class MainReportViewModel: ObservableObject {
     struct BurnRateData: Identifiable {
         let id = UUID()
         let project: String
-        let rate: Double // Burn rate in ₹ Cr/day
-        let totalSpend: Double // Actual amount spent in last 30 days (in ₹)
+        let totalSpend: Double // Total approved expenses in last 30 days (in ₹)
     }
     
     struct ActiveProjectsData: Identifiable {
@@ -2205,8 +2204,9 @@ class MainReportViewModel: ObservableObject {
         }
     }
     
-    /// Calculate burn rate by project - shows daily spend rate (₹ Cr/day) for last 30 days
-    /// Sorted by amount (top spent on top)
+    /// Calculate total approved expenses by project for last 30 days
+    /// Shows total spend amount, sorted by amount (highest on top, lowest on bottom)
+    /// Only includes projects with totalSpend > 0
     private func calculateBurnRate() async {
         guard let customerId = customerId else {
             await MainActor.run {
@@ -2223,14 +2223,10 @@ class MainReportViewModel: ObservableObject {
             projectsToProcess = projects.filter { selectedProjects.contains($0.name) }
         }
         
-        // Date formatter for parsing expense dates
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "dd/MM/yyyy"
-        
         let calendar = Calendar.current
         let now = Date()
         
-        // Get date 30 days ago
+        // Get date 30 days ago (using createdAt timestamp)
         guard let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) else {
             await MainActor.run {
                 burnRateData = []
@@ -2238,7 +2234,9 @@ class MainReportViewModel: ObservableObject {
             return
         }
         
-        var projectSpendMap: [String: (rate: Double, totalSpend: Double)] = [:] // projectName -> (burn rate, total spend)
+        let thirtyDaysAgoTimestamp = Timestamp(date: thirtyDaysAgo)
+        
+        var projectSpendMap: [String: Double] = [:] // projectName -> totalSpend
         
         // Process each project
         for project in projectsToProcess {
@@ -2258,10 +2256,11 @@ class MainReportViewModel: ObservableObject {
             }
             
             do {
-                // Load expenses for this project
+                // Load expenses for this project that are APPROVED and created within last 30 days
                 let expensesSnapshot = try await FirebasePathHelper.shared
                     .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .whereField("createdAt", isGreaterThanOrEqualTo: thirtyDaysAgoTimestamp)
                     .getDocuments()
                 
                 var totalSpend: Double = 0
@@ -2270,12 +2269,9 @@ class MainReportViewModel: ObservableObject {
                 for expenseDoc in expensesSnapshot.documents {
                     guard let expense = try? expenseDoc.data(as: Expense.self) else { continue }
                     
-                    // Parse expense date and filter by last 30 days
-                    guard let expenseDate = dateFormatter.date(from: expense.date) else { continue }
-                    let expenseStartOfDay = calendar.startOfDay(for: expenseDate)
-                    let thirtyDaysAgoStartOfDay = calendar.startOfDay(for: thirtyDaysAgo)
-                    
-                    if expenseStartOfDay < thirtyDaysAgoStartOfDay {
+                    // Double-check createdAt is within last 30 days (in case of timezone issues)
+                    let expenseCreatedAt = expense.createdAt.dateValue()
+                    if expenseCreatedAt < thirtyDaysAgo {
                         continue
                     }
                     
@@ -2306,20 +2302,19 @@ class MainReportViewModel: ObservableObject {
                     totalSpend += expense.amount
                 }
                 
-                // Calculate burn rate (₹ Cr/day) = total spend / 30 days
+                // Only include projects with totalSpend > 0
                 if totalSpend > 0 {
-                    let burnRate = totalSpend / 30.0 / 10000000.0 // Convert to Cr/day
-                    projectSpendMap[projectName] = (rate: burnRate, totalSpend: totalSpend)
+                    projectSpendMap[projectName] = totalSpend
                 }
             } catch {
                 Swift.print("Error calculating burn rate for project \(projectId): \(error)")
             }
         }
         
-        // Convert to array, sort by rate (descending - top spent on top)
-        let burnRateArray = projectSpendMap.map { projectName, data in
-            BurnRateData(project: projectName, rate: data.rate, totalSpend: data.totalSpend)
-        }.sorted { $0.rate > $1.rate }
+        // Convert to array, sort by totalSpend (descending - highest on top, lowest on bottom)
+        let burnRateArray = projectSpendMap.map { projectName, totalSpend in
+            BurnRateData(project: projectName, totalSpend: totalSpend)
+        }.sorted { $0.totalSpend > $1.totalSpend }
         
         await MainActor.run {
             burnRateData = burnRateArray

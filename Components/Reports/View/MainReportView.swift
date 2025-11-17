@@ -703,7 +703,7 @@ struct MainReportView: View {
             // Burn Rate by Project
             chartCard(
                 title: "Burn Rate by Project",
-                subtitle: "₹ Cr/day · last 30 days",
+                subtitle: "Total approved expenses · last 30 days",
                 chartId: "burnRate"
             ) {
                 burnRateChart
@@ -2701,15 +2701,14 @@ struct MainReportView: View {
             )
         }
         
-        // Calculate X-axis max value - round up to next 0.1 increment
-        let maxRate = viewModel.burnRateData.map { $0.rate }.max() ?? 0
+        // Calculate X-axis max value based on totalSpend
+        let maxSpend = viewModel.burnRateData.map { $0.totalSpend }.max() ?? 0
         let xAxisMax: Double
-        if maxRate == 0 {
-            xAxisMax = 0.1
+        if maxSpend == 0 {
+            xAxisMax = 1000 // Default minimum
         } else {
-            // Round up to next 0.1 and add padding
-            let rounded = ceil(maxRate * 10) / 10.0
-            xAxisMax = max(rounded + 0.1, 0.6) // Minimum 0.6 for better visibility
+            // Add 10% padding
+            xAxisMax = maxSpend * 1.1
         }
         
         // Calculate chart height for vertical scrolling
@@ -2731,7 +2730,7 @@ struct MainReportView: View {
                                 Chart {
                                     ForEach(viewModel.burnRateData, id: \.project) { data in
                                         BarMark(
-                                            x: .value("Rate", data.rate),
+                                            x: .value("Total Spend", data.totalSpend),
                                             y: .value("Project", data.project)
                                         )
                                         .foregroundStyle(
@@ -2787,14 +2786,14 @@ struct MainReportView: View {
                                         // Calculate Y position based on bar position
                                         let preferredY = CGFloat(projectIndex) * totalBarHeight + (barHeight / 2) + 12
                                         
-                                        // Calculate X position based on the bar's end (rate value)
-                                        let barWidthRatio = Double(selectedData.rate) / Double(xAxisMax)
+                                        // Calculate X position based on the bar's end (totalSpend value)
+                                        let barWidthRatio = Double(selectedData.totalSpend) / Double(xAxisMax)
                                         let chartAreaWidth = tooltipGeometry.size.width - 16 // Account for padding
                                         let preferredX = chartAreaWidth * 0.85 * barWidthRatio + 80
                                         
                                         // Estimate tooltip size
-                                        let tooltipWidth: CGFloat = 180
-                                        let tooltipHeight: CGFloat = 60
+                                        let tooltipWidth: CGFloat = 200
+                                        let tooltipHeight: CGFloat = 80
                                         
                                         // Calculate safe position
                                         let safePosition = calculateSafeTooltipPosition(
@@ -2817,10 +2816,14 @@ struct MainReportView: View {
                                                 .background(Color(.separator).opacity(0.3))
                                             
                                             HStack(spacing: 8) {
-                                                Text("30 days:")
+                                                Image(systemName: "indianrupeesign.circle.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(.secondary)
+                                                Text("Total Spend")
                                                     .font(.system(size: 12, weight: .medium))
                                                     .foregroundStyle(.secondary)
-                                                Text(formatValue(selectedData.rate * 30))
+                                                Spacer()
+                                                Text(formatValue(selectedData.totalSpend))
                                                     .font(.system(size: 13, weight: .bold, design: .rounded))
                                                     .foregroundStyle(.primary)
                                             }
@@ -2873,7 +2876,7 @@ struct MainReportView: View {
                         Chart {
                             ForEach(viewModel.burnRateData, id: \.project) { data in
                                 BarMark(
-                                    x: .value("Rate", data.rate),
+                                    x: .value("Total Spend", data.totalSpend),
                                     y: .value("Project", data.project)
                                 )
                                 .foregroundStyle(.clear) // Invisible, just for axis calculation
@@ -2882,12 +2885,12 @@ struct MainReportView: View {
                         .chartYAxis(.hidden)
                         .chartXScale(domain: 0...xAxisMax, type: .linear)
                         .chartXAxis {
-                            AxisMarks(position: .bottom, values: .stride(by: 0.1)) { value in
+                            AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
                                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                                     .foregroundStyle(Color(.separator).opacity(0.3))
                                 AxisValueLabel {
-                                    if let rate = value.as(Double.self) {
-                                        Text(String(format: "%.1f", rate))
+                                    if let spend = value.as(Double.self) {
+                                        Text(formatChartValue(spend))
                                             .font(.system(size: 11, weight: .medium, design: .rounded))
                                             .foregroundStyle(.secondary)
                                             .rotationEffect(.degrees(-90))
@@ -2907,8 +2910,8 @@ struct MainReportView: View {
             }
             .frame(minHeight: 180, maxHeight: 350)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel("Burn rate chart showing daily spending rate by project")
-            .accessibilityHint("Tap on bars to see detailed burn rate information")
+            .accessibilityLabel("Burn rate chart showing total approved expenses by project for last 30 days")
+            .accessibilityHint("Tap on bars to see detailed spending information")
         )
     }
     
