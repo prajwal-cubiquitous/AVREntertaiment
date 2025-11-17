@@ -215,6 +215,7 @@ class MainReportViewModel: ObservableObject {
         let id = UUID()
         let category: String
         let count: Int
+        let projectNames: [String] // List of unique project names that have expenses in this category
     }
     
     struct DelayCorrelationData: Identifiable {
@@ -1733,10 +1734,12 @@ class MainReportViewModel: ObservableObject {
         }
         
         var categoryCounts: [String: Int] = [:]
+        var categoryProjects: [String: Set<String>] = [:] // Track unique project names per category
         
         // Process each project using cached expenses
         for project in projectsToProcess {
             guard let projectId = project.id else { continue }
+            let projectName = project.name
             
             // Use cached expenses instead of querying Firestore
             let projectExpenses = expensesCache[projectId] ?? []
@@ -1779,6 +1782,7 @@ class MainReportViewModel: ObservableObject {
                 // Extract categories from expense (categories is a list, but typically has one value)
                 for category in expense.categories {
                     categoryCounts[category, default: 0] += 1
+                    categoryProjects[category, default: Set<String>()].insert(projectName)
                 }
             }
         }
@@ -1787,7 +1791,14 @@ class MainReportViewModel: ObservableObject {
         let topCategories = categoryCounts
             .sorted { $0.value > $1.value }
             .prefix(5)
-            .map { SubCategoryActivityData(category: $0.key, count: $0.value) }
+            .map { category, count in
+                let projectNames = Array(categoryProjects[category] ?? Set<String>()).sorted()
+                return SubCategoryActivityData(
+                    category: category,
+                    count: count,
+                    projectNames: projectNames
+                )
+            }
         
         await MainActor.run {
             subCategoryActivityData = Array(topCategories)

@@ -3236,6 +3236,14 @@ struct MainReportView: View {
     // Sub-Category Activity Chart
     @State private var selectedCategory: String? = nil
     
+    // Sub-Category Activity Chart - Press counter and modal states
+    @State private var categoryPressCounts: [String: Int] = [:]
+    @State private var showingProjectModal: Bool = false
+    @State private var selectedCategoryForModal: String? = nil
+    @State private var lastTapTime: Date? = nil
+    @State private var lastTappedCategory: String? = nil
+    @State private var modalTimer: Timer? = nil
+    
     private var subCategoryActivityChart: some View {
         ZStack(alignment: .trailing) {
             Chart {
@@ -3256,6 +3264,11 @@ struct MainReportView: View {
                 }
             }
             .chartYSelection(value: $selectedCategory)
+            .onChange(of: selectedCategory) { newValue in
+                if let category = newValue {
+                    handleCategorySelection(category: category)
+                }
+            }
             .chartXAxis {
                 AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
@@ -3336,6 +3349,25 @@ struct MainReportView: View {
                                 .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(.primary)
                         }
+                        
+                        // Show press count if available
+                        if let pressCount = categoryPressCounts[selectedCategory], pressCount > 0 {
+                            Divider()
+                                .background(Color(.separator).opacity(0.3))
+                            
+                            HStack(spacing: 10) {
+                                Image(systemName: "hand.tap.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.blue)
+                                Text("Presses")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(pressCount)")
+                                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.blue)
+                            }
+                        }
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
@@ -3354,6 +3386,172 @@ struct MainReportView: View {
                 .frame(minHeight: CGFloat(max(viewModel.subCategoryActivityData.count, 3)) * 50 + 60)
                 .transition(.scale.combined(with: .opacity))
             }
+        }
+        .sheet(isPresented: $showingProjectModal) {
+            if let category = selectedCategoryForModal,
+               let categoryData = viewModel.subCategoryActivityData.first(where: { $0.category == category }) {
+                ProjectListModalView(
+                    category: category,
+                    projectNames: categoryData.projectNames,
+                    expenseCount: categoryData.count
+                )
+            }
+        }
+    }
+    
+    // Handler for category selection - handles press counting and single click modal
+    private func handleCategorySelection(category: String) {
+        let now = Date()
+        
+        // Cancel previous timer if it exists
+        modalTimer?.invalidate()
+        
+        // Increment press counter
+        categoryPressCounts[category, default: 0] += 1
+        
+        // Check if this is the same category as last tap
+        if let lastCategory = lastTappedCategory, lastCategory == category {
+            // Same category - check if it's a rapid press or single click
+            if let lastTime = lastTapTime, now.timeIntervalSince(lastTime) < 0.3 {
+                // Rapid press - just update counter, don't show modal yet
+                lastTapTime = now
+                return
+            }
+        }
+        
+        // New category or gap > 300ms - set up timer to show modal after 300ms of inactivity
+        lastTapTime = now
+        lastTappedCategory = category
+        
+        modalTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { timer in
+            DispatchQueue.main.async {
+                // After 300ms of no activity, show modal if counter is 1 (single click)
+                // or just show the counter if multiple presses
+                if self.categoryPressCounts[category] == 1 {
+                    // Single click - show modal
+                    self.selectedCategoryForModal = category
+                    self.showingProjectModal = true
+                    // Reset press count after showing modal
+                    self.categoryPressCounts[category] = 0
+                }
+                // If counter > 1, just keep showing the counter in the tooltip
+            }
+        }
+        RunLoop.main.add(modalTimer!, forMode: .common)
+    }
+    
+    // Modal view for displaying project names
+    private struct ProjectListModalView: View {
+        let category: String
+        let projectNames: [String]
+        let expenseCount: Int
+        @Environment(\.dismiss) private var dismiss
+        
+        var body: some View {
+            NavigationView {
+                VStack(spacing: 0) {
+                    // Header info
+                    VStack(spacing: 12) {
+                        Text(category)
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.center)
+                        
+                        HStack(spacing: 16) {
+                            VStack(spacing: 4) {
+                                Text("\(expenseCount)")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(.blue)
+                                Text("Expenses")
+                                    .font(.system(size: 12, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Divider()
+                                .frame(height: 40)
+                            
+                            VStack(spacing: 4) {
+                                Text("\(projectNames.count)")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundStyle(.green)
+                                Text("Projects")
+                                    .font(.system(size: 12, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
+                    .background(Color(.systemGroupedBackground))
+                    
+                    Divider()
+                    
+                    // Scrollable project list
+                    if projectNames.isEmpty {
+                        VStack(spacing: 16) {
+                            Spacer()
+                            Image(systemName: "folder.badge.questionmark")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            Text("No Projects")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                            Text("No projects found for this category")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(projectNames, id: \.self) { projectName in
+                                    HStack {
+                                        Image(systemName: "building.2.fill")
+                                            .font(.system(size: 16))
+                                            .foregroundStyle(.blue)
+                                            .frame(width: 24)
+                                        
+                                        Text(projectName)
+                                            .font(.system(size: 16, weight: .regular))
+                                            .foregroundStyle(.primary)
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 16)
+                                    .background(Color(.systemBackground))
+                                    
+                                    if projectName != projectNames.last {
+                                        Divider()
+                                            .padding(.leading, 44)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                }
+                .background(Color(.systemGroupedBackground))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                        .foregroundStyle(.blue)
+                        .fontWeight(.semibold)
+                    }
+                }
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
     
