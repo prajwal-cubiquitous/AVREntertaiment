@@ -1111,6 +1111,9 @@ struct DashboardView: View {
                                                 .font(.headline)
                                                 .fontWeight(.bold)
                                                 .foregroundColor(.purple)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.5)
+                                                .fixedSize(horizontal: false, vertical: true)
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
@@ -3563,6 +3566,9 @@ private struct AllPhasesView: View {
                 .font(.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.purple)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
