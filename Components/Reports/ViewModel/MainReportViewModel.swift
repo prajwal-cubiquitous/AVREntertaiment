@@ -298,7 +298,7 @@ class MainReportViewModel: ObservableObject {
         } else if absValue < 10000000 {
             // 100000 to 9999999: show in lakhs with 2 decimals
             let lakhs = value / 100000.0
-            return "₹\(String(format: "%.2f", lakhs)) lakhs"
+            return "₹\(String(format: "%.2f", lakhs)) L"
         } else {
             // 10000000+: show in crores (Cr) with 2 decimals
             let crores = value / 10000000.0
