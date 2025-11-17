@@ -3576,97 +3576,142 @@ struct MainReportView: View {
     @State private var selectedDelayCorrelationItem: MainReportViewModel.DelayCorrelationData? = nil
     
     private var delayCorrelationChart: some View {
-        Chart {
-            ForEach(viewModel.delayCorrelationData, id: \.id) { data in
-                PointMark(
-                    x: .value("Extended Days", data.delayDays),
-                    y: .value("Extra Cost", data.extraCost)
-                )
-                .foregroundStyle(selectedDelayCorrelationItem?.id == data.id ? Color.blue : Color.cyan)
-                .symbolSize(selectedDelayCorrelationItem?.id == data.id ? 80 : 60)
-                .opacity(selectedDelayCorrelationItem?.id == data.id ? 1.0 : 0.7)
-                .annotation(position: .top, alignment: .center, spacing: 0) {
-                    if selectedDelayCorrelationItem?.id == data.id {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(data.project)
-                                .font(.system(size: 12, weight: .semibold))
+        // Calculate axis domains to ensure 0 is at the start
+        let maxExtendedDays = viewModel.delayCorrelationData.map { $0.delayDays }.max() ?? 1.0
+        let maxExtraCost = viewModel.delayCorrelationData.map { $0.extraCost }.max() ?? 1.0
+        
+        // Add padding to max values (10% padding)
+        let xAxisMax = max(maxExtendedDays * 1.1, 1.0)
+        let yAxisMax = max(maxExtraCost * 1.1, 1.0)
+        
+        return ZStack(alignment: .topLeading) {
+            Chart {
+                ForEach(viewModel.delayCorrelationData, id: \.id) { data in
+                    PointMark(
+                        x: .value("Extended Days", data.delayDays),
+                        y: .value("Extra Cost", data.extraCost)
+                    )
+                    .foregroundStyle(selectedDelayCorrelationItem?.id == data.id ? Color.blue : Color.cyan)
+                    .symbolSize(selectedDelayCorrelationItem?.id == data.id ? 80 : 60)
+                    .opacity(selectedDelayCorrelationItem?.id == data.id ? 1.0 : 0.7)
+                }
+            }
+            .chartXScale(domain: 0...xAxisMax)
+            .chartYScale(domain: 0...yAxisMax)
+            .chartXAxis {
+                AxisMarks(position: .bottom, values: .stride(by: max(1.0, xAxisMax / 5))) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let days = value.as(Double.self) {
+                            Text("\(Int(days))")
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.primary)
-                            Text("Extended: \(Int(data.delayDays)) days")
-                                .font(.system(size: 10, weight: .regular))
-                                .foregroundStyle(.secondary)
-                            Text("Extra: \(viewModel.formatChartNumber(data.extraCost))")
-                                .font(.system(size: 10, weight: .regular))
-                                .foregroundStyle(.secondary)
                         }
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.systemBackground))
-                                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-                        )
-                        .offset(y: -8)
                     }
                 }
             }
-        }
-        .chartXAxis {
-            AxisMarks(position: .bottom, values: .automatic(desiredCount: 6)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let days = value.as(Double.self) {
-                        Text("\(Int(days))")
-                            .font(.system(size: 11, weight: .medium))
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                        .foregroundStyle(.quaternary)
+                    AxisValueLabel {
+                        if let cost = value.as(Double.self) {
+                            Text(viewModel.formatChartNumber(cost))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .chartXAxisLabel("Extended Days")
+                .font(.system(size: 12, weight: .medium))
+            .chartYAxisLabel("Extra Cost")
+                .font(.system(size: 12, weight: .medium))
+            .chartXSelection(value: Binding(
+                get: { selectedDelayCorrelationItem?.delayDays },
+                set: { newValue in
+                    if let newValue = newValue {
+                        // Find the closest data point to the selected X value
+                        selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                            abs($0.delayDays - newValue) < abs($1.delayDays - newValue) 
+                        })
+                    } else {
+                        selectedDelayCorrelationItem = nil
+                    }
+                }
+            ))
+            .chartYSelection(value: Binding(
+                get: { selectedDelayCorrelationItem?.extraCost },
+                set: { newValue in
+                    if let newValue = newValue {
+                        // Find the closest data point to the selected Y value
+                        selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                            abs($0.extraCost - newValue) < abs($1.extraCost - newValue) 
+                        })
+                    } else {
+                        selectedDelayCorrelationItem = nil
+                    }
+                }
+            ))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .frame(minHeight: 220, maxHeight: 350)
+            
+            // Tooltip overlay - positioned outside chart to prevent layout shifts
+            if let selectedItem = selectedDelayCorrelationItem {
+                GeometryReader { geometry in
+                    // Calculate position based on data point location
+                    let xRange = xAxisMax - 0
+                    let yRange = yAxisMax - 0
+                    
+                    // Chart area dimensions (accounting for padding and axis labels)
+                    let chartPadding: CGFloat = 50
+                    let chartWidth = geometry.size.width - chartPadding * 2
+                    let chartHeight = geometry.size.height - chartPadding * 2
+                    
+                    // Calculate data point position
+                    let xRatio = (selectedItem.delayDays - 0) / xRange
+                    let yRatio = (selectedItem.extraCost - 0) / yRange
+                    
+                    let pointX = chartPadding + (xRatio * chartWidth)
+                    let pointY = chartPadding + ((1 - yRatio) * chartHeight) // Invert Y for screen coordinates
+                    
+                    // Position tooltip above the point
+                    let tooltipWidth: CGFloat = 180
+                    let tooltipHeight: CGFloat = 80
+                    let tooltipX = max(chartPadding, min(pointX - tooltipWidth / 2, geometry.size.width - tooltipWidth - chartPadding))
+                    let tooltipY = max(8, pointY - tooltipHeight - 12)
+                    
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(selectedItem.project)
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        Text("Extended: \(Int(selectedItem.delayDays)) days")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.secondary)
+                        Text("Extra: \(viewModel.formatChartNumber(selectedItem.extraCost))")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(8)
+                    .frame(width: tooltipWidth, height: tooltipHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(.regularMaterial)
+                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+                    )
+                    .position(x: tooltipX + tooltipWidth / 2, y: tooltipY + tooltipHeight / 2)
                 }
+                .frame(minHeight: 220, maxHeight: 350)
+                .transition(.scale.combined(with: .opacity))
             }
         }
-        .chartYAxis {
-            AxisMarks(position: .leading, values: .automatic(desiredCount: 5)) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(.quaternary)
-                AxisValueLabel {
-                    if let cost = value.as(Double.self) {
-                        Text(viewModel.formatChartNumber(cost))
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
-        }
-        .chartXAxisLabel("Extended Days")
-            .font(.system(size: 12, weight: .medium))
-        .chartYAxisLabel("Extra Cost")
-            .font(.system(size: 12, weight: .medium))
-        .chartXSelection(value: Binding(
-            get: { selectedDelayCorrelationItem?.delayDays },
-            set: { newValue in
-                if let newValue = newValue {
-                    // Find the closest data point to the selected X value
-                    selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
-                        abs($0.delayDays - newValue) < abs($1.delayDays - newValue) 
-                    })
-                } else {
-                    selectedDelayCorrelationItem = nil
-                }
-            }
-        ))
-        .chartYSelection(value: Binding(
-            get: { selectedDelayCorrelationItem?.extraCost },
-            set: { newValue in
-                if let newValue = newValue {
-                    // Find the closest data point to the selected Y value
-                    selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
-                        abs($0.extraCost - newValue) < abs($1.extraCost - newValue) 
-                    })
-                } else {
-                    selectedDelayCorrelationItem = nil
-                }
-            }
-        ))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
     }
     
     // Suspension Reason Chart

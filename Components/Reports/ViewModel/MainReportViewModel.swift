@@ -2347,7 +2347,7 @@ class MainReportViewModel: ObservableObject {
     
     /// Calculate delay correlation data (Extended Days vs Extra Cost)
     /// Shows projects that satisfy either:
-    /// 1. estimatedBudget > budget (extra cost condition)
+    /// 1. budget > estimatedBudget (extra cost condition)
     /// 2. Has phases with extended keyword (extended days condition)
     private func calculateDelayCorrelation() async {
         guard let customerId = customerId else {
@@ -2380,9 +2380,9 @@ class MainReportViewModel: ObservableObject {
             var hasCondition1 = false
             var hasCondition2 = false
             
-            // Condition 1: Check if estimatedBudget > budget
-            if let estimatedBudget = project.estimatedBudget, estimatedBudget > project.budget {
-                extraCost = estimatedBudget - project.budget
+            // Condition 1: Check if budget > estimatedBudget
+            if let estimatedBudget = project.estimatedBudget, project.budget > estimatedBudget {
+                extraCost = project.budget - estimatedBudget
                 hasCondition1 = true
             }
             
