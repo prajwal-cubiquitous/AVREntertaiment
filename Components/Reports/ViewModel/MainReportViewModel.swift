@@ -268,7 +268,15 @@ class MainReportViewModel: ObservableObject {
     }
     
     var costTrendTotal: String {
-        let total = costTrendData.reduce(0) { $0 + $1.value }
+        // Safety check to prevent crashes during initialization or concurrent access
+        // Access the array count first to ensure it's safe to iterate
+        let dataCount = costTrendData.count
+        guard dataCount > 0 else {
+            return formatCr(0)
+        }
+        // Use a local copy to avoid potential concurrent modification issues
+        let data = costTrendData
+        let total = data.reduce(0) { $0 + $1.value }
         return formatCr(total)
     }
     
