@@ -308,9 +308,9 @@ class MainReportViewModel: ObservableObject {
     
     // Helper function to format numbers for chart display (without currency symbol)
     // 1-999: actual numbers
-    // 1000-99999: "1.00k" format (two decimals)
-    // 100000-9999999: "9.99 lakhs" format (two decimals)
-    // 10000000+: "cr" format (two decimals)
+    // 1000-99999: "1k" or "1.25k" format (removes .00 for whole numbers)
+    // 100000-9999999: "1 lakhs" or "9.99 lakhs" format (removes .00 for whole numbers)
+    // 10000000+: "1 cr" or "9.99 cr" format (removes .00 for whole numbers)
     func formatChartNumber(_ value: Double) -> String {
         let absValue = abs(value)
         
@@ -318,17 +318,32 @@ class MainReportViewModel: ObservableObject {
             // 1 to 999: show actual numbers
             return String(format: "%.0f", value)
         } else if absValue < 100000 {
-            // 1000 to 99999: show in thousands (k) with 2 decimals
+            // 1000 to 99999: show in thousands (k)
             let thousands = value / 1000.0
-            return String(format: "%.2fk", thousands)
+            // Remove .00 if it's a whole number
+            if thousands.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0fk", thousands)
+            } else {
+                return String(format: "%.2fk", thousands)
+            }
         } else if absValue < 10000000 {
-            // 100000 to 9999999: show in lakhs with 2 decimals
+            // 100000 to 9999999: show in lakhs
             let lakhs = value / 100000.0
-            return String(format: "%.2f lakhs", lakhs)
+            // Remove .00 if it's a whole number
+            if lakhs.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0f lakhs", lakhs)
+            } else {
+                return String(format: "%.2f lakhs", lakhs)
+            }
         } else {
-            // 10000000+: show in crores (cr) with 2 decimals
+            // 10000000+: show in crores (cr)
             let crores = value / 10000000.0
-            return String(format: "%.2f cr", crores)
+            // Remove .00 if it's a whole number
+            if crores.truncatingRemainder(dividingBy: 1) == 0 {
+                return String(format: "%.0f cr", crores)
+            } else {
+                return String(format: "%.2f cr", crores)
+            }
         }
     }
     
