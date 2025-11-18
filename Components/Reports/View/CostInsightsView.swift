@@ -1463,6 +1463,24 @@ struct CostInsightsView: View {
         }
     }
     
+    // Helper function to get color for status based on display name
+    private func getStatusColor(_ status: String) -> Color {
+        switch status {
+        case "Active":
+            return .green
+        case "Completed":
+            return .blue
+        case "Suspended":
+            return .orange
+        case "Maintenance":
+            return .purple
+        case "Archive":
+            return .gray
+        default:
+            return .accentColor
+        }
+    }
+    
     // Status Cost Chart
     private var statusCostChart: some View {
         // Calculate Y-axis max value
@@ -1487,8 +1505,8 @@ struct CostInsightsView: View {
                     )
                     .foregroundStyle(
                         selectedStatusForTooltip == data.status
-                        ? Color.orange.opacity(0.85)
-                        : Color.orange
+                        ? getStatusColor(data.status).opacity(0.85)
+                        : getStatusColor(data.status)
                     )
                 }
 
