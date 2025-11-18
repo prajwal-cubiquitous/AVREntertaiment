@@ -940,10 +940,11 @@ struct DashboardView: View {
                 Text("Project Details")
                     .font(DesignSystem.Typography.subheadline)
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.accentColor.opacity(0.1))
-                    .cornerRadius(12)
+                    .cornerRadius(8)
+
             }
             
             LazyVGrid(columns: [
@@ -999,7 +1000,7 @@ struct DashboardView: View {
                                 .foregroundColor(.primary)
                                 .contentTransition(.numericText())
                             
-                            Text("Team Members")
+                            Text("View Team Members")
                                 .font(DesignSystem.Typography.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -1419,7 +1420,7 @@ struct DashboardView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(.tertiarySystemFill))
+                    .background(Color.accentColor.opacity(0.1))
                     .cornerRadius(8)
             }
             
@@ -4316,6 +4317,11 @@ struct TotalBudgetCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             VStack(alignment: .leading, spacing: 2) {
+                
+                Text("Total Budget")
+                    .font(DesignSystem.Typography.subheadline)
+                    .foregroundColor(.secondary)
+                
                 Text(totalBudget.formattedCurrency)
                     .font(DesignSystem.Typography.title2)
                     .fontWeight(.bold)
@@ -4325,9 +4331,6 @@ struct TotalBudgetCard: View {
                     .minimumScaleFactor(0.6)
                     .fixedSize(horizontal: false, vertical: false)
                 
-                Text("Total Budget")
-                    .font(DesignSystem.Typography.subheadline)
-                    .foregroundColor(.secondary)
                 
                 // Remaining amount
                 Text("Remaining: \(remainingBudget.formattedCurrency)")
