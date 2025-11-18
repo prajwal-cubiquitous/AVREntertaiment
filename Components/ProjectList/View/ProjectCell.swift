@@ -23,7 +23,7 @@ struct ProjectCell: View {
     }
     
     private var daysRemainingText: String {
-        guard let endDateStr = project.endDate else {
+        guard let endDateStr = project.handoverDate else {
             return "No end date"
         }
         

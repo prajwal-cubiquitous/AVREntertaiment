@@ -173,13 +173,13 @@ struct MainReportView: View {
             // Business Name Header - Following Apple Design Guidelines
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(businessName)
+                    Text("Dashboard & Reports")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .accessibilityAddTraits(.isHeader)
                     
-                    Text("Reports & Analytics")
+                   Text(businessName)
                         .font(.system(size: 15, weight: .regular, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
@@ -207,7 +207,7 @@ struct MainReportView: View {
                             .padding(.horizontal, 16)
                             .background {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(selectedTab == tab ? Color.accentColor : Color(.systemGray6))
+                                    .fill(selectedTab == tab ? Color.primary : Color(.systemGray6))
                             }
                             .contentShape(Rectangle())
                     }
@@ -509,7 +509,7 @@ struct MainReportView: View {
             displayText: viewModel.selectedStatusesDisplayText,
             options: viewModel.projectStatusOptions,
             selectedItems: $viewModel.selectedProjectStatuses,
-            allOptionText: "ALL Status"
+            allOptionText: "All Status"
         )
     }
     
@@ -639,7 +639,7 @@ struct MainReportView: View {
     private var kpiSection: some View {
         HStack(spacing: DesignSystem.Spacing.small) {
             kpiCard(label: "Total Budget", value: viewModel.totalBudgetFormatted)
-            kpiCard(label: "Total Spent", value: viewModel.totalSpentFormatted)
+            kpiCard(label: "Total Approved", value: viewModel.totalSpentFormatted)
             kpiCard(label: "Remaining", value: viewModel.remainingFormatted)
         }
     }
@@ -655,6 +655,17 @@ struct MainReportView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .foregroundColor({
+                    switch label {
+                    case "Total Approved":
+                        return .blue
+                    case "Remaining":
+                        return .green
+                    default:
+                        return .primary
+                    }
+                }())
+
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DesignSystem.Spacing.small + 2)
