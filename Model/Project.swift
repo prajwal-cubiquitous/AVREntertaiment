@@ -67,7 +67,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
         let outputFormatter = DateFormatter()
         outputFormatter.dateStyle = .medium
         
-        switch (startDate, endDate) {
+        switch (plannedDate, handoverDate) {
         case let (start?, end?):
             guard let startDateObj = inputFormatter.date(from: start),
                   let endDateObj = inputFormatter.date(from: end) else { 

@@ -2145,7 +2145,7 @@ struct DashboardView: View {
             // Department info
             VStack(alignment: .leading, spacing: 2) {
                 TruncatedTextWithTooltip(
-                    budget.department,
+                    budget.department.displayDepartmentName(),
                     font: DesignSystem.Typography.subheadline,
                     fontWeight: .semibold,
                     foregroundColor: .primary,
@@ -4383,8 +4383,7 @@ struct ProjectDatesCard: View {
     
     private var displayDateFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
+        formatter.dateFormat = "dd MMM yyyy"
         return formatter
     }
     
@@ -4419,69 +4418,62 @@ struct ProjectDatesCard: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-            HStack {
-                Image(systemName: "calendar")
-                    .font(DesignSystem.Typography.title3)
-                    .foregroundColor(.blue)
-                    .symbolRenderingMode(.hierarchical)
-                
-                Spacer()
+        VStack(alignment: .leading, spacing: 6) {
+            // Planned Date
+            if let planned = plannedDate {
+                DateRow(
+                    label: "Planned",
+                    date: planned,
+                    icon: "calendar.badge.clock",
+                    iconColor: .blue
+                )
             }
             
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                // Planned Date
-                if let planned = plannedDate {
-                    DateRow(
-                        label: "Planned Date",
-                        date: planned,
-                        icon: "calendar.badge.clock",
-                        iconColor: .blue
-                    )
-                }
-                
-                // Handover Date with extension indicator
-                if let handover = handoverDate {
-                    VStack(alignment: .leading, spacing: 4) {
-                        DateRow(
-                            label: "Handover Date",
-                            date: handover,
-                            icon: "calendar.badge.checkmark",
-                            iconColor: .green
-                        )
-                        
-                        // Days Extended Badge
-                        if let days = daysExtended {
-                            HStack(spacing: 4) {
-                                Image(systemName: "calendar.badge.plus")
-                                    .font(.caption2)
-                                    .foregroundColor(.orange)
-                                Text("\(days) day\(days == 1 ? "" : "s") extended")
-                                    .font(DesignSystem.Typography.caption2)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.orange)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+            // Handover Date with extension indicator inline
+            if let handover = handoverDate {
+                HStack(spacing: 8) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.caption2)
+                        .foregroundColor(.green)
+                        .frame(width: 14)
+                    
+                    Text("Handover")
+                        .font(DesignSystem.Typography.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    // Days Extended Badge - inline
+                    if let days = daysExtended {
+                        Text("\(days) days extended")
+                            .font(DesignSystem.Typography.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(Color.orange.opacity(0.1))
                             .clipShape(Capsule())
-                            .padding(.leading, 24) // Align with date text
-                        }
                     }
-                }
-                
-                // Maintenance Date
-                if let maintenance = maintenanceDate {
-                    DateRow(
-                        label: "Maintenance Date",
-                        date: maintenance,
-                        icon: "wrench.and.screwdriver.fill",
-                        iconColor: .purple
-                    )
+                    
+                    Text(displayDateFormatter.string(from: handover))
+                        .font(DesignSystem.Typography.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+
                 }
             }
+            
+            // Maintenance Date
+            if let maintenance = maintenanceDate {
+                DateRow(
+                    label: "Maintenance",
+                    date: maintenance,
+                    icon: "wrench.and.screwdriver.fill",
+                    iconColor: .purple
+                )
+            }
         }
-        .padding(DesignSystem.Spacing.medium)
+        .padding(.horizontal, DesignSystem.Spacing.medium)
+        .padding(.vertical, DesignSystem.Spacing.small)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
@@ -4496,26 +4488,25 @@ struct ProjectDatesCard: View {
         
         private var displayDateFormatter: DateFormatter {
             let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
+            formatter.dateFormat = "dd MMM yyyy"
             return formatter
         }
         
         var body: some View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(iconColor)
-                    .frame(width: 16)
+                    .frame(width: 14)
                 
                 Text(label)
-                    .font(DesignSystem.Typography.caption1)
+                    .font(DesignSystem.Typography.caption2)
                     .foregroundColor(.secondary)
                 
                 Spacer()
                 
                 Text(displayDateFormatter.string(from: date))
-                    .font(DesignSystem.Typography.caption1)
+                    .font(DesignSystem.Typography.caption2)
                     .fontWeight(.medium)
                     .foregroundColor(.primary)
             }
