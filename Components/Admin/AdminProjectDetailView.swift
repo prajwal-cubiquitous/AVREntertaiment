@@ -726,7 +726,12 @@ struct ModernStatusCard: View {
             }
             
             Menu {
-                ForEach(ProjectStatus.allCases, id: \.self) { projectStatus in
+                // Filter out automatic statuses that shouldn't be manually selectable
+                let allowedStatuses = ProjectStatus.allCases.filter { status in
+                    status != .IN_REVIEW && status != .LOCKED && status != .REVIEW_REJECTED
+                }
+                
+                ForEach(allowedStatuses, id: \.self) { projectStatus in
                     Button {
                         HapticManager.selection()
                         onStatusChange(projectStatus)
