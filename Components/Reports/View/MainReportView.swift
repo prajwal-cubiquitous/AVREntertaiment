@@ -291,7 +291,7 @@ struct MainReportView: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
             Text("Date Range")
                 .font(.system(size: 12, weight: .medium, design: .default))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .textCase(.uppercase)
                 .tracking(0.5)
             
@@ -343,7 +343,7 @@ struct MainReportView: View {
                     
                     Text(dateRangeDisplayText)
                         .font(.system(size: 14, weight: .regular, design: .default))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(isDateRangeCustom ? .blue : .primary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
@@ -379,11 +379,23 @@ struct MainReportView: View {
         let allOptionText: String
         @State private var isOpen = false
         
+        // Check if a specific filter is selected (not "All")
+        private var isSpecificFilterSelected: Bool {
+            // Check if display text is different from "All" option (case-insensitive)
+            let displayLower = displayText.lowercased()
+            let allOptionLower = allOptionText.lowercased()
+            
+            // Return true if display text doesn't match "All" option and doesn't contain "All"
+            return displayText != allOptionText && 
+                   !displayLower.contains("all") &&
+                   !displayLower.contains("no status")
+        }
+        
         var body: some View {
             VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
                 Text(label)
                     .font(.system(size: 12, weight: .medium, design: .default))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .textCase(.uppercase)
                     .tracking(0.5)
                 
@@ -398,7 +410,7 @@ struct MainReportView: View {
                         HStack(spacing: DesignSystem.Spacing.small) {
                             Text(displayText)
                                 .font(.system(size: 14, weight: .regular, design: .default))
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(isSpecificFilterSelected ? .blue : .primary)
                                 .lineLimit(1)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             
@@ -522,6 +534,21 @@ struct MainReportView: View {
         let endText = formatter.string(from: viewModel.endDate)
         
         return "\(startText) - \(endText)"
+    }
+    
+    // Check if date range is custom (not default 6 months)
+    private var isDateRangeCustom: Bool {
+        let calendar = Calendar.current
+        let defaultStartDate = calendar.date(byAdding: .month, value: -6, to: Date()) ?? Date()
+        let defaultEndDate = Date()
+        
+        // Compare dates ignoring time
+        let currentStart = calendar.startOfDay(for: viewModel.startDate)
+        let currentEnd = calendar.startOfDay(for: viewModel.endDate)
+        let defaultStart = calendar.startOfDay(for: defaultStartDate)
+        let defaultEnd = calendar.startOfDay(for: defaultEndDate)
+        
+        return currentStart != defaultStart || currentEnd != defaultEnd
     }
     
     private var dateRangePickerSheet: some View {
