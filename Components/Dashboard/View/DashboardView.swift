@@ -947,6 +947,11 @@ struct DashboardView: View {
 
             }
             
+            // Project Dates Card - Full width above the grid
+            if let project = project {
+                ProjectDatesCard(project: project)
+            }
+            
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
@@ -4363,6 +4368,158 @@ struct TotalBudgetCard: View {
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+}
+
+// MARK: - Project Dates Card
+struct ProjectDatesCard: View {
+    let project: Project
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy"
+        return formatter
+    }
+    
+    private var displayDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+    
+    private var plannedDate: Date? {
+        guard let plannedDateStr = project.plannedDate else { return nil }
+        return dateFormatter.date(from: plannedDateStr)
+    }
+    
+    private var handoverDate: Date? {
+        guard let handoverDateStr = project.handoverDate else { return nil }
+        return dateFormatter.date(from: handoverDateStr)
+    }
+    
+    private var initialHandOverDate: Date? {
+        guard let initialHandOverDateStr = project.initialHandOverDate else { return nil }
+        return dateFormatter.date(from: initialHandOverDateStr)
+    }
+    
+    private var maintenanceDate: Date? {
+        guard let maintenanceDateStr = project.maintenanceDate else { return nil }
+        return dateFormatter.date(from: maintenanceDateStr)
+    }
+    
+    private var daysExtended: Int? {
+        guard let handover = handoverDate,
+              let initial = initialHandOverDate else { return nil }
+        let calendar = Calendar.current
+        let handoverStart = calendar.startOfDay(for: handover)
+        let initialStart = calendar.startOfDay(for: initial)
+        let days = calendar.dateComponents([.day], from: initialStart, to: handoverStart).day
+        return days != nil && days! > 0 ? days : nil
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            HStack {
+                Image(systemName: "calendar")
+                    .font(DesignSystem.Typography.title3)
+                    .foregroundColor(.blue)
+                    .symbolRenderingMode(.hierarchical)
+                
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                // Planned Date
+                if let planned = plannedDate {
+                    DateRow(
+                        label: "Planned Date",
+                        date: planned,
+                        icon: "calendar.badge.clock",
+                        iconColor: .blue
+                    )
+                }
+                
+                // Handover Date with extension indicator
+                if let handover = handoverDate {
+                    VStack(alignment: .leading, spacing: 4) {
+                        DateRow(
+                            label: "Handover Date",
+                            date: handover,
+                            icon: "calendar.badge.checkmark",
+                            iconColor: .green
+                        )
+                        
+                        // Days Extended Badge
+                        if let days = daysExtended {
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                                Text("\(days) day\(days == 1 ? "" : "s") extended")
+                                    .font(DesignSystem.Typography.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.orange)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.1))
+                            .clipShape(Capsule())
+                            .padding(.leading, 24) // Align with date text
+                        }
+                    }
+                }
+                
+                // Maintenance Date
+                if let maintenance = maintenanceDate {
+                    DateRow(
+                        label: "Maintenance Date",
+                        date: maintenance,
+                        icon: "wrench.and.screwdriver.fill",
+                        iconColor: .purple
+                    )
+                }
+            }
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.large)
+        .cardStyle(shadow: DesignSystem.Shadow.small)
+    }
+    
+    private struct DateRow: View {
+        let label: String
+        let date: Date
+        let icon: String
+        let iconColor: Color
+        
+        private var displayDateFormatter: DateFormatter {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter
+        }
+        
+        var body: some View {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.caption)
+                    .foregroundColor(iconColor)
+                    .frame(width: 16)
+                
+                Text(label)
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(displayDateFormatter.string(from: date))
+                    .font(DesignSystem.Typography.caption1)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+            }
+        }
     }
 }
 
