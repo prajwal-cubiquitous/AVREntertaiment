@@ -31,6 +31,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let endDate: String?
     let plannedDate: String? // Planned start date - project becomes ACTIVE when this date arrives
     let handoverDate: String? // Highest end date among all phases - automatically calculated
+    let initialHandOverDate: String? // Initial handover date - same as handoverDate on creation, only changes when status is LOCKED or IN_REVIEW
     let maintenanceDate: String? // Maintenance period end date - project becomes COMPLETED when this date arrives
     let isSuspended: Bool? // Whether the project is currently suspended
     let suspendedDate: String? // Date until which the project is suspended
@@ -113,6 +114,7 @@ extension Project {
                 endDate: "",
                 plannedDate: nil,
                 handoverDate: nil,
+                initialHandOverDate: nil,
                 maintenanceDate: nil,
                 isSuspended: nil,
                 suspendedDate: nil,
@@ -137,6 +139,7 @@ extension Project {
                 endDate: "31/12/2024",
                 plannedDate: "01/06/2024",
                 handoverDate: "31/12/2024",
+                initialHandOverDate: "31/12/2024",
                 maintenanceDate: "31/01/2025",
                 isSuspended: nil,
                 suspendedDate: nil,
@@ -161,6 +164,7 @@ extension Project {
                 endDate: "31/05/2024",
                 plannedDate: "01/01/2024",
                 handoverDate: "31/05/2024",
+                initialHandOverDate: "31/05/2024",
                 maintenanceDate: "30/06/2024",
                 isSuspended: nil,
                 suspendedDate: nil,

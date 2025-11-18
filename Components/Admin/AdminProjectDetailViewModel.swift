@@ -14,6 +14,7 @@ class AdminProjectDetailViewModel: ObservableObject {
     @Published var endDate: Date
     @Published var plannedDate: Date
     @Published var handoverDate: Date
+    @Published var initialHandOverDate: Date
     @Published var maintenanceDate: Date
     @Published var isSuspended: Bool
     @Published var suspendedDate: Date?
@@ -113,6 +114,17 @@ class AdminProjectDetailViewModel: ObservableObject {
             handoverDateValue = Date().addingTimeInterval(86400 * 30)
         }
         self.handoverDate = handoverDateValue
+        
+        // Initialize initial handover date
+        let initialHandOverDateValue: Date
+        if let initialHandOverDateStr = project.initialHandOverDate,
+           let initialHandOverDate = dateFormatter.date(from: initialHandOverDateStr) {
+            initialHandOverDateValue = initialHandOverDate
+        } else {
+            // If not set, use handoverDate as fallback
+            initialHandOverDateValue = handoverDateValue
+        }
+        self.initialHandOverDate = initialHandOverDateValue
         
         // Maintenance date defaults to 1 month from handover date
         if let maintenanceDateStr = project.maintenanceDate,
@@ -654,14 +666,27 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 let handoverDateStr = dateFormatter.string(from: newHandoverDate)
                 
+                var updateData: [String: Any] = [
+                    "handoverDate": handoverDateStr,
+                    "updatedAt": Timestamp()
+                ]
+                
+                // Check project status - if LOCKED or IN_REVIEW, update both fields
+                let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .INACTIVE
+                if currentStatus == .LOCKED || currentStatus == .IN_REVIEW {
+                    updateData["initialHandOverDate"] = handoverDateStr
+                }
+                
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
-                    .updateData([
-                        "handoverDate": handoverDateStr,
-                        "updatedAt": Timestamp()
-                    ])
+                    .updateData(updateData)
                 
                 handoverDate = newHandoverDate
+                
+                // Update initialHandOverDate if status is LOCKED or IN_REVIEW
+                if currentStatus == .LOCKED || currentStatus == .IN_REVIEW {
+                    initialHandOverDate = newHandoverDate
+                }
                 
                 // If maintenance date is not set or is before new handover date, update it to 1 month from handover
                 let calendar = Calendar.current
@@ -1126,6 +1151,15 @@ class AdminProjectDetailViewModel: ObservableObject {
                     if let handoverDateStr = updatedProject.handoverDate,
                        let handoverDate = dateFormatter.date(from: handoverDateStr) {
                         self.handoverDate = handoverDate
+                    }
+                    
+                    if let initialHandOverDateStr = updatedProject.initialHandOverDate,
+                       let initialHandOverDate = dateFormatter.date(from: initialHandOverDateStr) {
+                        self.initialHandOverDate = initialHandOverDate
+                    } else if let handoverDateStr = updatedProject.handoverDate,
+                              let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                        // Fallback to handoverDate if initialHandOverDate is not set
+                        self.initialHandOverDate = handoverDate
                     }
                     
                     if let maintenanceDateStr = updatedProject.maintenanceDate,

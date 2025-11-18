@@ -197,6 +197,8 @@ struct AdminProjectDetailView: View {
             HandoverDateCard(
                 title: "Handover Date",
                 date: viewModel.handoverDate,
+                initialHandOverDate: viewModel.initialHandOverDate,
+                projectStatus: viewModel.project.statusType,
                 isEditing: $viewModel.isEditingHandoverDate,
                 icon: "calendar.badge.checkmark",
                 minimumDate: viewModel.highestPhaseEndDate,
@@ -1746,6 +1748,8 @@ struct TeamMemberPreviewRow: View {
 struct HandoverDateCard: View {
     let title: String
     let date: Date
+    let initialHandOverDate: Date
+    let projectStatus: ProjectStatus
     @Binding var isEditing: Bool
     let icon: String
     let minimumDate: Date?
@@ -1759,6 +1763,20 @@ struct HandoverDateCard: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         return formatter.string(from: date)
+    }
+    
+    private var initialHandOverDateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: initialHandOverDate)
+    }
+    
+    private var daysExtended: Int? {
+        let calendar = Calendar.current
+        let initial = calendar.startOfDay(for: initialHandOverDate)
+        let current = calendar.startOfDay(for: date)
+        let days = calendar.dateComponents([.day], from: initial, to: current).day
+        return days != nil && days! > 0 ? days : nil
     }
     
     private var isValidDate: Bool {
@@ -1857,25 +1875,65 @@ struct HandoverDateCard: View {
                     }
                 }
             } else {
-                HStack {
-                    Text(dateFormatted)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                    
-                    Spacer()
-                    
-                    if let statusInfo = statusInfo {
-                        HStack(spacing: 4) {
-                            Image(systemName: statusInfo.icon)
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                    // Initial Handover Date (static display)
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Initial Handover Date")
                                 .font(.caption)
-                            Text(statusInfo.text)
-                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(initialHandOverDateFormatted)
+                                .font(.body)
+                                .foregroundStyle(.primary)
                         }
-                        .foregroundStyle(statusInfo.color)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(statusInfo.color.opacity(0.1))
-                        .clipShape(Capsule())
+                        Spacer()
+                    }
+                    
+                    Divider()
+                    
+                    // Current Handover Date
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Handover Date")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(dateFormatted)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                        }
+                        
+                        Spacer()
+                        
+                        // Days Extended Badge
+                        if let days = daysExtended {
+                            HStack(spacing: 4) {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.caption)
+                                Text("\(days) day\(days == 1 ? "" : "s") extended")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
+                        
+                        // Status Info
+                        if let statusInfo = statusInfo {
+                            HStack(spacing: 4) {
+                                Image(systemName: statusInfo.icon)
+                                    .font(.caption)
+                                Text(statusInfo.text)
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(statusInfo.color)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(statusInfo.color.opacity(0.1))
+                            .clipShape(Capsule())
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

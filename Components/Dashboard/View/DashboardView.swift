@@ -5176,6 +5176,17 @@ private struct AddPhaseSheet: View {
     // Helper function to update handover date (highest end date among all phases)
     private func updateHandoverDate(projectId: String, customerId: String) async {
         do {
+            // First, get the project to check status and current handover dates
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found")
+                return
+            }
+            
             let phasesSnapshot = try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .getDocuments()
@@ -5197,13 +5208,56 @@ private struct AddPhaseSheet: View {
             
             // Update handover date if we found at least one phase with an end date
             if let highestDate = highestEndDate {
-                let handoverDateStr = dateFormatter.string(from: highestDate)
-                try await FirebasePathHelper.shared
-                    .projectDocument(customerId: customerId, projectId: projectId)
-                    .updateData([
+                let calendar = Calendar.current
+                let newHandoverDate = calendar.startOfDay(for: highestDate)
+                
+                // Get current handover date for comparison
+                var currentHandoverDate: Date? = nil
+                if let handoverDateStr = project.handoverDate,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    currentHandoverDate = calendar.startOfDay(for: handoverDate)
+                }
+                
+                // Only update if new date is greater than current handover date
+                if let currentDate = currentHandoverDate, newHandoverDate > currentDate {
+                    let handoverDateStr = dateFormatter.string(from: highestDate)
+                    var updateData: [String: Any] = [
                         "handoverDate": handoverDateStr,
                         "updatedAt": Timestamp()
-                    ])
+                    ]
+                    
+                    // Check project status - if LOCKED or IN_REVIEW, update both fields
+                    let projectStatus = project.statusType
+                    if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                        updateData["initialHandOverDate"] = handoverDateStr
+                    }
+                    
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData(updateData)
+                } else if currentHandoverDate == nil {
+                    // If no current handover date exists, set both
+                    let handoverDateStr = dateFormatter.string(from: highestDate)
+                    var updateData: [String: Any] = [
+                        "handoverDate": handoverDateStr,
+                        "updatedAt": Timestamp()
+                    ]
+                    
+                    // Check project status - if LOCKED or IN_REVIEW, update both fields
+                    let projectStatus = project.statusType
+                    if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                        updateData["initialHandOverDate"] = handoverDateStr
+                    } else {
+                        // For other statuses, set initialHandOverDate only if it doesn't exist
+                        if project.initialHandOverDate == nil {
+                            updateData["initialHandOverDate"] = handoverDateStr
+                        }
+                    }
+                    
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData(updateData)
+                }
             }
         } catch {
             print("Error updating handover date: \(error.localizedDescription)")
@@ -5532,6 +5586,17 @@ private struct EditPhaseSheet: View {
     // Helper function to update handover date (highest end date among all phases)
     private func updateHandoverDate(projectId: String, customerId: String) async {
         do {
+            // First, get the project to check status and current handover dates
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found")
+                return
+            }
+            
             let phasesSnapshot = try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .getDocuments()
@@ -5553,13 +5618,56 @@ private struct EditPhaseSheet: View {
             
             // Update handover date if we found at least one phase with an end date
             if let highestDate = highestEndDate {
-                let handoverDateStr = dateFormatter.string(from: highestDate)
-                try await FirebasePathHelper.shared
-                    .projectDocument(customerId: customerId, projectId: projectId)
-                    .updateData([
+                let calendar = Calendar.current
+                let newHandoverDate = calendar.startOfDay(for: highestDate)
+                
+                // Get current handover date for comparison
+                var currentHandoverDate: Date? = nil
+                if let handoverDateStr = project.handoverDate,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    currentHandoverDate = calendar.startOfDay(for: handoverDate)
+                }
+                
+                // Only update if new date is greater than current handover date
+                if let currentDate = currentHandoverDate, newHandoverDate > currentDate {
+                    let handoverDateStr = dateFormatter.string(from: highestDate)
+                    var updateData: [String: Any] = [
                         "handoverDate": handoverDateStr,
                         "updatedAt": Timestamp()
-                    ])
+                    ]
+                    
+                    // Check project status - if LOCKED or IN_REVIEW, update both fields
+                    let projectStatus = project.statusType
+                    if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                        updateData["initialHandOverDate"] = handoverDateStr
+                    }
+                    
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData(updateData)
+                } else if currentHandoverDate == nil {
+                    // If no current handover date exists, set both
+                    let handoverDateStr = dateFormatter.string(from: highestDate)
+                    var updateData: [String: Any] = [
+                        "handoverDate": handoverDateStr,
+                        "updatedAt": Timestamp()
+                    ]
+                    
+                    // Check project status - if LOCKED or IN_REVIEW, update both fields
+                    let projectStatus = project.statusType
+                    if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                        updateData["initialHandOverDate"] = handoverDateStr
+                    } else {
+                        // For other statuses, set initialHandOverDate only if it doesn't exist
+                        if project.initialHandOverDate == nil {
+                            updateData["initialHandOverDate"] = handoverDateStr
+                        }
+                    }
+                    
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData(updateData)
+                }
             }
         } catch {
             print("Error updating handover date: \(error.localizedDescription)")

@@ -1173,9 +1173,10 @@ class CreateProjectViewModel: ObservableObject {
                         "updatedAt": Timestamp()
                     ]
                     
-                    // Add handoverDate if calculated
+                    // Add handoverDate and initialHandOverDate if calculated
                     if let handoverDateStr = handoverDateStr {
                         updateData["handoverDate"] = handoverDateStr
+                        updateData["initialHandOverDate"] = handoverDateStr // Set initial same as handover on edit
                     }
                     
                     // Add maintenanceDate if calculated
@@ -1211,6 +1212,7 @@ class CreateProjectViewModel: ObservableObject {
                         endDate: nil, // Removed from main project
                         plannedDate: plannedDateStr,
                         handoverDate: handoverDateStr, // Highest end date among all phases
+                        initialHandOverDate: handoverDateStr, // Same as handoverDate on creation
                         maintenanceDate: maintenanceDateStr, // Default: 1 month from handover date
                         isSuspended: nil, // New projects are not suspended
                         suspendedDate: nil, // No suspension date for new projects
