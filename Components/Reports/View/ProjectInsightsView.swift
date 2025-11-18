@@ -26,6 +26,8 @@ struct ProjectInsightsView: View {
     @State private var lastTappedCategory: String? = nil
     @State private var modalTimer: Timer? = nil
     @State private var selectedDelayCorrelationItem: MainReportViewModel.DelayCorrelationData? = nil
+    @State private var lastSelectedX: Double? = nil
+    @State private var lastSelectedY: Double? = nil
     @State private var selectedSuspensionReason: String? = nil
     @State private var suspensionReasonPressCounts: [String: Int] = [:]
     @State private var showingSuspensionProjectModal: Bool = false
@@ -920,27 +922,43 @@ struct ProjectInsightsView: View {
             .chartYAxisLabel("Extra Cost")
                 .font(.system(size: 12, weight: .medium))
             .chartXSelection(value: Binding(
-                get: { selectedDelayCorrelationItem?.delayDays },
+                get: { lastSelectedX },
                 set: { newValue in
-                    if let newValue = newValue {
-                        // Find the closest data point to the selected X value
-                        selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
-                            abs($0.delayDays - newValue) < abs($1.delayDays - newValue) 
-                        })
+                    lastSelectedX = newValue
+                    if let xValue = newValue {
+                        if let yValue = lastSelectedY {
+                            // Both X and Y are available, find closest point using combined distance
+                            selectedDelayCorrelationItem = findClosestPoint(xValue: xValue, yValue: yValue, xAxisMax: xAxisMax, yAxisMax: yAxisMax)
+                        } else {
+                            // Only X is available, find closest by X only
+                            selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                                abs($0.delayDays - xValue) < abs($1.delayDays - xValue) 
+                            })
+                        }
                     } else {
+                        // Selection cleared
+                        lastSelectedY = nil
                         selectedDelayCorrelationItem = nil
                     }
                 }
             ))
             .chartYSelection(value: Binding(
-                get: { selectedDelayCorrelationItem?.extraCost },
+                get: { lastSelectedY },
                 set: { newValue in
-                    if let newValue = newValue {
-                        // Find the closest data point to the selected Y value
-                        selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
-                            abs($0.extraCost - newValue) < abs($1.extraCost - newValue) 
-                        })
+                    lastSelectedY = newValue
+                    if let yValue = newValue {
+                        if let xValue = lastSelectedX {
+                            // Both X and Y are available, find closest point using combined distance
+                            selectedDelayCorrelationItem = findClosestPoint(xValue: xValue, yValue: yValue, xAxisMax: xAxisMax, yAxisMax: yAxisMax)
+                        } else {
+                            // Only Y is available, find closest by Y only
+                            selectedDelayCorrelationItem = viewModel.delayCorrelationData.min(by: { 
+                                abs($0.extraCost - yValue) < abs($1.extraCost - yValue) 
+                            })
+                        }
                     } else {
+                        // Selection cleared
+                        lastSelectedX = nil
                         selectedDelayCorrelationItem = nil
                     }
                 }
@@ -1003,6 +1021,29 @@ struct ProjectInsightsView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
+    }
+    
+    // Helper function to find the closest data point using normalized combined distance
+    private func findClosestPoint(xValue: Double, yValue: Double, xAxisMax: Double, yAxisMax: Double) -> MainReportViewModel.DelayCorrelationData? {
+        guard !viewModel.delayCorrelationData.isEmpty else { return nil }
+        
+        // Normalize the axes to calculate combined distance properly
+        let normalizedX = xValue / max(xAxisMax, 1.0)
+        let normalizedY = yValue / max(yAxisMax, 1.0)
+        
+        return viewModel.delayCorrelationData.min(by: { data1, data2 in
+            // Normalize data points
+            let normX1 = data1.delayDays / max(xAxisMax, 1.0)
+            let normY1 = data1.extraCost / max(yAxisMax, 1.0)
+            let normX2 = data2.delayDays / max(xAxisMax, 1.0)
+            let normY2 = data2.extraCost / max(yAxisMax, 1.0)
+            
+            // Calculate Euclidean distance (squared for comparison, no need to sqrt)
+            let dist1 = (normX1 - normalizedX) * (normX1 - normalizedX) + (normY1 - normalizedY) * (normY1 - normalizedY)
+            let dist2 = (normX2 - normalizedX) * (normX2 - normalizedX) + (normY2 - normalizedY) * (normY2 - normalizedY)
+            
+            return dist1 < dist2
+        })
     }
     
     // Suspension Reason Chart
