@@ -368,35 +368,35 @@ struct DashboardView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: DesignSystem.Spacing.medium) {
                     // FCM Notifications Button (for APPROVER and ADMIN roles)
-                    if role == .APPROVER || role == .ADMIN {
-                        Button {
-                            HapticManager.selection()
-                            showingNotifications = true
-                        } label: {
-                            ZStack(alignment: .topTrailing) {
-                                Image(systemName: "bell")
-                                    .font(.title3)
-                                    .foregroundColor(.primary)
-                                
-                                if notificationViewModel.unreadNotificationCount > 0 {
-                                    Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
-                                        .padding(.vertical, 2)
-                                        .background(Color.red)
-                                        .clipShape(Capsule())
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(Color.white, lineWidth: 1.5)
-                                        )
-                                        .offset(x: 8, y: -8)
-                                        .minimumScaleFactor(0.5)
-                                        .lineLimit(1)
-                                }
-                            }
-                        }
-                    }
+//                    if role == .APPROVER || role == .ADMIN {
+//                        Button {
+//                            HapticManager.selection()
+//                            showingNotifications = true
+//                        } label: {
+//                            ZStack(alignment: .topTrailing) {
+//                                Image(systemName: "bell")
+//                                    .font(.title3)
+//                                    .foregroundColor(.primary)
+//                                
+//                                if notificationViewModel.unreadNotificationCount > 0 {
+//                                    Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
+//                                        .font(.system(size: 11, weight: .bold))
+//                                        .foregroundColor(.white)
+//                                        .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
+//                                        .padding(.vertical, 2)
+//                                        .background(Color.red)
+//                                        .clipShape(Capsule())
+//                                        .overlay(
+//                                            Capsule()
+//                                                .stroke(Color.white, lineWidth: 1.5)
+//                                        )
+//                                        .offset(x: 8, y: -8)
+//                                        .minimumScaleFactor(0.5)
+//                                        .lineLimit(1)
+//                                }
+//                            }
+//                        }
+//                    }
                     
                     // Phase Request Notification Button (Admin only, before pencil)
                     if role == .ADMIN {
@@ -1030,9 +1030,26 @@ struct DashboardView: View {
         }
     }
     
-    // MARK: - Enhanced Department Budget Section
+    // MARK: - Enhanced Department Budget Section (Active Phases)
     private var currentPhasesSection: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+            // Section Header - styled like Project Overview with Project Details
+            if !filteredCurrentPhases.isEmpty{
+                HStack {
+
+                    
+                    Spacer()
+                    
+                    Text("Active Phases")
+                        .font(DesignSystem.Typography.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+            
             if filteredCurrentPhases.isEmpty {
                 VStack(spacing: DesignSystem.Spacing.medium) {
                     Image(systemName: "clock.badge.exclamationmark")
@@ -1064,9 +1081,8 @@ struct DashboardView: View {
                     .secondaryButton()
                 }
                 .frame(maxWidth: .infinity)
-                .padding(DesignSystem.Spacing.large)
-                .background(Color(.secondarySystemGroupedBackground))
-                .cornerRadius(DesignSystem.CornerRadius.medium)
+                .padding(DesignSystem.Spacing.medium)
+                .cardStyle()
             
             } else {
                 VStack(spacing: DesignSystem.Spacing.medium) {
@@ -1355,9 +1371,8 @@ struct DashboardView: View {
                                 .allowsHitTesting(false)
                             }
                         }
-                        .padding(DesignSystem.Spacing.extraSmall)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                        .padding(DesignSystem.Spacing.medium)
+                        .cardStyle()
                     }
                     
                     // View All Phases button under the last scroller
@@ -5675,6 +5690,16 @@ private struct EditPhaseSheet: View {
         } catch {
             print("Error updating handover date: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: - Section Header Component
+private struct SectionHeader: View {
+    let title: String
+    
+    var body: some View {
+        Text(title)
+            .sectionHeaderStyle()
     }
 }
 
