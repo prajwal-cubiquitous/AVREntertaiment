@@ -542,28 +542,60 @@ class MainReportViewModel: ObservableObject {
                         continue
                     }
                     
-                    // Filter by date range (check if plannedDate or maintenanceDate falls within range)
+                    // Filter by date range (check if project timeline overlaps with selected date range)
+                    // Project timeline: plannedDate (start) to maintenanceDate (end)
+                    // Selected date range: startDate to endDate
+                    // Two date ranges overlap if: projectStart <= selectedEnd AND projectEnd >= selectedStart
                     var dateMatches = false
                     
-                    // Check plannedDate
+                    // Get project timeline dates
+                    let projectStartDate: Date?
+                    let projectEndDate: Date?
+                    
                     if let plannedDateStr = project.plannedDate,
                        let plannedDate = dateFormatter.date(from: plannedDateStr) {
-                        let plannedStartOfDay = calendar.startOfDay(for: plannedDate)
-                        if plannedStartOfDay >= startOfDay && plannedStartOfDay <= endOfDay {
-                            dateMatches = true
-                        }
+                        projectStartDate = plannedDate
+                    } else {
+                        projectStartDate = nil
                     }
                     
-                    // Check maintenanceDate
-                    if !dateMatches, let maintenanceDateStr = project.maintenanceDate,
+                    if let maintenanceDateStr = project.maintenanceDate,
                        let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
-                        let maintenanceStartOfDay = calendar.startOfDay(for: maintenanceDate)
-                        if maintenanceStartOfDay >= startOfDay && maintenanceStartOfDay <= endOfDay {
-                            dateMatches = true
-                        }
+                        projectEndDate = maintenanceDate
+                    } else {
+                        projectEndDate = nil
                     }
                     
-                    // If no dates match, skip this project
+                    // Check for overlap between project timeline and selected date range
+                    if let projectStart = projectStartDate, let projectEnd = projectEndDate {
+                        // Both dates available - check for range overlap
+                        let projectStartOfDay = calendar.startOfDay(for: projectStart)
+                        let projectEndOfDay = calendar.startOfDay(for: projectEnd)
+                        
+                        // Two date ranges overlap if: projectStart <= selectedEnd AND projectEnd >= selectedStart
+                        if projectStartOfDay <= endOfDay && projectEndOfDay >= startOfDay {
+                            dateMatches = true
+                        }
+                    } else if let projectStart = projectStartDate {
+                        // Only start date available - check if it's within or overlaps the selected range
+                        let projectStartOfDay = calendar.startOfDay(for: projectStart)
+                        // If project starts before or on the selected end date, it might overlap
+                        if projectStartOfDay <= endOfDay {
+                            dateMatches = true
+                        }
+                    } else if let projectEnd = projectEndDate {
+                        // Only end date available - check if it's within or overlaps the selected range
+                        let projectEndOfDay = calendar.startOfDay(for: projectEnd)
+                        // If project ends on or after the selected start date, it might overlap
+                        if projectEndOfDay >= startOfDay {
+                            dateMatches = true
+                        }
+                    } else {
+                        // No dates available - exclude project
+                        dateMatches = false
+                    }
+                    
+                    // If no date overlap, skip this project
                     if !dateMatches {
                         continue
                     }
