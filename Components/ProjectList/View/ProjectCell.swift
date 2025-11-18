@@ -383,9 +383,7 @@ extension ProjectStatus {
     var color: Color {
         switch self {
         case .ACTIVE: return .green
-        case .INACTIVE: return .gray
         case .COMPLETED: return .blue
-        case .HANDOVER: return .yellow
         case .IN_REVIEW: return .cyan
         case .LOCKED: return .indigo
         case .SUSPENDED: return .orange            
@@ -398,9 +396,7 @@ extension ProjectStatus {
     var displayText: String {
         switch self {
         case .ACTIVE: return "Active"
-        case .INACTIVE: return "Inactive"
         case .COMPLETED: return "Completed"
-        case .HANDOVER: return "Handover"
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
         case .SUSPENDED: return "SUSPENDED"

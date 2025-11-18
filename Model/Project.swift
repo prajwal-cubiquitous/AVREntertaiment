@@ -7,9 +7,7 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case LOCKED
     case ACTIVE
     case SUSPENDED
-    case INACTIVE
     case COMPLETED
-    case HANDOVER
     case REVIEW_REJECTED
     case MAINTENANCE
     case ARCHIVE
@@ -49,7 +47,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     
     // ... (Computed Properties remain the same) ...
     var statusType: ProjectStatus { 
-        ProjectStatus(rawValue: status) ?? .INACTIVE // Default to INACTIVE instead of UNKNOWN
+        ProjectStatus(rawValue: status) ?? .LOCKED // Default to LOCKED if status is unknown
     }
     
     var budgetFormatted: String {

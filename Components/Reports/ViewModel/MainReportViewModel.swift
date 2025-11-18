@@ -1571,7 +1571,6 @@ class MainReportViewModel: ObservableObject {
     private func calculateStageProgressStatus() async {
         // Categorize projects by their current status
         var inProgressCount = 0
-        var handoverCount = 0
         var plannedCount = 0
         var completeCount = 0
         var delayedCount = 0
@@ -1611,14 +1610,12 @@ class MainReportViewModel: ObservableObject {
                 switch project.status {
                 case "ACTIVE":
                     inProgressCount += 1
-                case "HANDOVER":
-                    handoverCount += 1
                 case "LOCKED", "IN_REVIEW":
                     plannedCount += 1
                 case "COMPLETED", "ARCHIVE":
                     completeCount += 1
                 case "MAINTENANCE":
-                    // Maintenance could be considered complete or handover
+                    // Maintenance could be considered complete
                     completeCount += 1
                 default:
                     // Other statuses might be delayed
@@ -1637,7 +1634,6 @@ class MainReportViewModel: ObservableObject {
         }
         
         let inProgressPercent = (Double(inProgressCount) / total) * 100
-        let handoverPercent = (Double(handoverCount) / total) * 100
         let plannedPercent = (Double(plannedCount) / total) * 100
         let completePercent = (Double(completeCount) / total) * 100
         let delayedPercent = (Double(delayedCount) / total) * 100
@@ -1648,29 +1644,29 @@ class MainReportViewModel: ObservableObject {
             StageProgressData(
                 stage: "In Progress",
                 inProgress: inProgressPercent,
-                handover: handoverPercent,
-                delayed: delayedPercent,
-                complete: completePercent
-            ),
-            StageProgressData(
-                stage: "HandOver",
-                inProgress: inProgressPercent,
-                handover: handoverPercent,
+                handover: 0,
                 delayed: delayedPercent,
                 complete: completePercent
             ),
             StageProgressData(
                 stage: "Planned",
-                inProgress: 0,
+                inProgress: inProgressPercent,
                 handover: 0,
-                delayed: 0,
-                complete: plannedPercent
+                delayed: delayedPercent,
+                complete: completePercent
+            ),
+            StageProgressData(
+                stage: "Delayed",
+                inProgress: inProgressPercent,
+                handover: 0,
+                delayed: delayedPercent,
+                complete: completePercent
             ),
             StageProgressData(
                 stage: "Complete",
-                inProgress: 0,
+                inProgress: inProgressPercent,
                 handover: 0,
-                delayed: 0,
+                delayed: delayedPercent,
                 complete: completePercent
             )
         ]
@@ -1708,11 +1704,6 @@ class MainReportViewModel: ObservableObject {
                 if !statusMatches {
                     continue
                 }
-            }
-            
-            // Skip INACTIVE status
-            if project.status == "INACTIVE" {
-                continue
             }
             
             totalCount += 1

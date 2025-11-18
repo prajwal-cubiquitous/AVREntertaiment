@@ -672,7 +672,7 @@ class AdminProjectDetailViewModel: ObservableObject {
                 ]
                 
                 // Check project status - if LOCKED or IN_REVIEW, update both fields
-                let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .INACTIVE
+                let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .LOCKED
                 if currentStatus == .LOCKED || currentStatus == .IN_REVIEW {
                     updateData["initialHandOverDate"] = handoverDateStr
                 }
