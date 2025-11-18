@@ -4745,7 +4745,17 @@ private struct AddPhaseSheet: View {
     @State private var phaseNameError: String?
     @FocusState private var focusedField: Field?
     
+    // Date confirmation alert states
+    @State private var showDateConfirmation = false
+    @State private var dateConfirmationType: DateConfirmationType = .handoverAndMaintenance
+    @State private var pendingEndDate: Date?
+    
     private enum Field { case phaseName, departmentName, departmentBudget }
+    
+    private enum DateConfirmationType {
+        case handoverAndMaintenance
+        case handoverOnly
+    }
     
     private var dateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -5142,6 +5152,22 @@ private struct AddPhaseSheet: View {
                 loadNextPhaseNumber()
                 loadExistingPhaseNames()
             }
+            .alert("Update Project Dates", isPresented: $showDateConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    showDateConfirmation = false
+                    pendingEndDate = nil
+                }
+                Button("Confirm") {
+                    handleDateConfirmation()
+                }
+            } message: {
+                let dateStr = pendingEndDate != nil ? dateFormatter.string(from: pendingEndDate!) : ""
+                if dateConfirmationType == .handoverAndMaintenance {
+                    Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Handover date and maintenance date will be set to \(dateStr).")
+                } else {
+                    Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
+                }
+            }
         }
     }
     
@@ -5242,6 +5268,84 @@ private struct AddPhaseSheet: View {
             return
         }
         
+        // Check dates before saving
+        checkDatesAndConfirm()
+    }
+    
+    private func checkDatesAndConfirm() {
+        Task {
+            do {
+                guard let customerId = Auth.auth().currentUser?.uid else {
+                    await MainActor.run {
+                        errorMessage = "Customer ID not found. Please log in again."
+                    }
+                    return
+                }
+                
+                // Fetch project to get current handover and maintenance dates
+                let projectDoc = try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .getDocument()
+                
+                guard projectDoc.exists,
+                      let project = try? projectDoc.data(as: Project.self) else {
+                    // If project not found, proceed with normal save
+                    await proceedWithSave()
+                    return
+                }
+                
+                let calendar = Calendar.current
+                let selectedEndDate = calendar.startOfDay(for: endDate)
+                
+                // Parse current dates
+                var currentHandoverDate: Date?
+                var currentMaintenanceDate: Date?
+                
+                if let handoverDateStr = project.handoverDate,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    currentHandoverDate = calendar.startOfDay(for: handoverDate)
+                }
+                
+                if let maintenanceDateStr = project.maintenanceDate,
+                   let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                    currentMaintenanceDate = calendar.startOfDay(for: maintenanceDate)
+                }
+                
+                // Check conditions
+                // Note: Handover date should always be <= maintenance date
+                // So if selected end date > maintenance date, we must update both dates
+                if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                    // Selected end date > maintenance date: Update both handover and maintenance
+                    // (handover must be <= maintenance, so both need to be updated)
+                    await MainActor.run {
+                        dateConfirmationType = .handoverAndMaintenance
+                        pendingEndDate = endDate
+                        showDateConfirmation = true
+                    }
+                } else if let handoverDate = currentHandoverDate,
+                          selectedEndDate > handoverDate,
+                          (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
+                    // Selected end date > handover date and <= maintenance date: Update only handover
+                    // (maintenance date remains unchanged since selected date <= maintenance)
+                    await MainActor.run {
+                        dateConfirmationType = .handoverOnly
+                        pendingEndDate = endDate
+                        showDateConfirmation = true
+                    }
+                } else {
+                    // No date updates needed, proceed with normal save
+                    await proceedWithSave()
+                }
+                
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to check dates: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false) {
         isSaving = true
         errorMessage = nil
         
@@ -5266,6 +5370,17 @@ private struct AddPhaseSheet: View {
                 // Format dates
                 let startDateStr = dateFormatter.string(from: startDate)
                 let endDateStr = dateFormatter.string(from: endDate)
+                
+                // Update project dates if needed (before creating phase)
+                if shouldUpdateHandover || shouldUpdateMaintenance {
+                    await updateProjectDates(
+                        projectId: projectId,
+                        customerId: customerId,
+                        newDate: endDate,
+                        updateHandover: shouldUpdateHandover,
+                        updateMaintenance: shouldUpdateMaintenance
+                    )
+                }
                 
                 // Create departments dictionary with phaseId_departmentName format
                 let phaseId = phaseRef.documentID
@@ -5292,7 +5407,7 @@ private struct AddPhaseSheet: View {
                 // Update project budget after adding phase
                 await updateProjectBudget(projectId: projectId, customerId: customerId)
                 
-                // Update handover date after adding phase
+                // Update handover date after adding phase (this will handle the logic internally)
                 await updateHandoverDate(projectId: projectId, customerId: customerId)
                 
                 await MainActor.run {
@@ -5429,6 +5544,69 @@ private struct AddPhaseSheet: View {
             print("Error updating handover date: \(error.localizedDescription)")
         }
     }
+    
+    // Helper function to update project dates directly
+    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool) async {
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let newDateStr = dateFormatter.string(from: newDate)
+            
+            // Fetch project to check status
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found")
+                return
+            }
+            
+            var updateData: [String: Any] = [
+                "updatedAt": Timestamp()
+            ]
+            
+            if updateHandover {
+                updateData["handoverDate"] = newDateStr
+                
+                // Check project status - if LOCKED or IN_REVIEW, update both fields
+                let projectStatus = project.statusType
+                if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                    updateData["initialHandOverDate"] = newDateStr
+                }
+            }
+            
+            if updateMaintenance {
+                updateData["maintenanceDate"] = newDateStr
+            }
+            
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData(updateData)
+        } catch {
+            print("Error updating project dates: \(error.localizedDescription)")
+        }
+    }
+    
+    // Handle confirmation from alert
+    private func handleDateConfirmation() {
+        guard let pendingDate = pendingEndDate else { return }
+        
+        // Update endDate to pending date
+        endDate = pendingDate
+        
+        // Determine which dates to update
+        let shouldUpdateHandover = dateConfirmationType == .handoverOnly || dateConfirmationType == .handoverAndMaintenance
+        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance
+        
+        // Proceed with save
+        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance)
+        
+        // Reset confirmation state
+        showDateConfirmation = false
+        pendingEndDate = nil
+    }
 }
 
 // MARK: - Department Item for Add Phase Sheet
@@ -5458,7 +5636,17 @@ private struct EditPhaseSheet: View {
     @State private var phaseNameError: String?
     @FocusState private var focusedField: Field?
     
+    // Date confirmation alert states
+    @State private var showDateConfirmation = false
+    @State private var dateConfirmationType: DateConfirmationType = .handoverAndMaintenance
+    @State private var pendingEndDate: Date?
+    
     private enum Field { case phaseName }
+    
+    private enum DateConfirmationType {
+        case handoverAndMaintenance
+        case handoverOnly
+    }
     
     private var dateFormatter: DateFormatter {
         let df = DateFormatter()
@@ -5601,6 +5789,22 @@ private struct EditPhaseSheet: View {
                 focusedField = .phaseName
                 loadExistingPhaseNames()
             }
+            .alert("Update Project Dates", isPresented: $showDateConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    showDateConfirmation = false
+                    pendingEndDate = nil
+                }
+                Button("Confirm") {
+                    handleDateConfirmation()
+                }
+            } message: {
+                let dateStr = pendingEndDate != nil ? dateFormatter.string(from: pendingEndDate!) : ""
+                if dateConfirmationType == .handoverAndMaintenance {
+                    Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Handover date and maintenance date will be set to \(dateStr).")
+                } else {
+                    Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
+                }
+            }
         }
     }
     
@@ -5644,6 +5848,92 @@ private struct EditPhaseSheet: View {
             return
         }
         
+        // Check if end date changed, if so check dates before saving
+        let endDateChanged = currentEndDate == nil || 
+                            (currentEndDate != nil && !Calendar.current.isDate(endDate, inSameDayAs: currentEndDate!))
+        
+        if endDateChanged {
+            checkDatesAndConfirm()
+        } else {
+            // No date change, proceed with normal save
+            proceedWithSave()
+        }
+    }
+    
+    private func checkDatesAndConfirm() {
+        Task {
+            do {
+                guard let customerId = authService.currentCustomerId else {
+                    await MainActor.run {
+                        errorMessage = "Customer ID not found. Please log in again."
+                    }
+                    return
+                }
+                
+                // Fetch project to get current handover and maintenance dates
+                let projectDoc = try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .getDocument()
+                
+                guard projectDoc.exists,
+                      let project = try? projectDoc.data(as: Project.self) else {
+                    // If project not found, proceed with normal save
+                    await proceedWithSave()
+                    return
+                }
+                
+                let calendar = Calendar.current
+                let selectedEndDate = calendar.startOfDay(for: endDate)
+                
+                // Parse current dates
+                var currentHandoverDate: Date?
+                var currentMaintenanceDate: Date?
+                
+                if let handoverDateStr = project.handoverDate,
+                   let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                    currentHandoverDate = calendar.startOfDay(for: handoverDate)
+                }
+                
+                if let maintenanceDateStr = project.maintenanceDate,
+                   let maintenanceDate = dateFormatter.date(from: maintenanceDateStr) {
+                    currentMaintenanceDate = calendar.startOfDay(for: maintenanceDate)
+                }
+                
+                // Check conditions
+                // Note: Handover date should always be <= maintenance date
+                // So if selected end date > maintenance date, we must update both dates
+                if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                    // Selected end date > maintenance date: Update both handover and maintenance
+                    // (handover must be <= maintenance, so both need to be updated)
+                    await MainActor.run {
+                        dateConfirmationType = .handoverAndMaintenance
+                        pendingEndDate = endDate
+                        showDateConfirmation = true
+                    }
+                } else if let handoverDate = currentHandoverDate,
+                          selectedEndDate > handoverDate,
+                          (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
+                    // Selected end date > handover date and <= maintenance date: Update only handover
+                    // (maintenance date remains unchanged since selected date <= maintenance)
+                    await MainActor.run {
+                        dateConfirmationType = .handoverOnly
+                        pendingEndDate = endDate
+                        showDateConfirmation = true
+                    }
+                } else {
+                    // No date updates needed, proceed with normal save
+                    await proceedWithSave()
+                }
+                
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to check dates: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false) {
         isSaving = true
         errorMessage = nil
         
@@ -5675,6 +5965,17 @@ private struct EditPhaseSheet: View {
                 let startDateChanged = previousStartDateStr != startDateStr
                 let endDateChanged = previousEndDateStr != endDateStr
                 
+                // Update project dates if needed (before updating phase)
+                if shouldUpdateHandover || shouldUpdateMaintenance {
+                    await updateProjectDates(
+                        projectId: projectId,
+                        customerId: customerId,
+                        newDate: endDate,
+                        updateHandover: shouldUpdateHandover,
+                        updateMaintenance: shouldUpdateMaintenance
+                    )
+                }
+                
                 // Update phase data
                 try await phaseRef.updateData([
                     "phaseName": phaseName.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -5702,7 +6003,7 @@ private struct EditPhaseSheet: View {
                 
                 // Note: Project budget doesn't change when editing phase name/dates, only when departments change
                 
-                // Update handover date after phase timeline is edited
+                // Update handover date after phase timeline is edited (this will handle the logic internally)
                 await updateHandoverDate(projectId: projectId, customerId: customerId)
                 
                 await MainActor.run {
@@ -5838,6 +6139,69 @@ private struct EditPhaseSheet: View {
         } catch {
             print("Error updating handover date: \(error.localizedDescription)")
         }
+    }
+    
+    // Helper function to update project dates directly
+    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool) async {
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let newDateStr = dateFormatter.string(from: newDate)
+            
+            // Fetch project to check status
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found")
+                return
+            }
+            
+            var updateData: [String: Any] = [
+                "updatedAt": Timestamp()
+            ]
+            
+            if updateHandover {
+                updateData["handoverDate"] = newDateStr
+                
+                // Check project status - if LOCKED or IN_REVIEW, update both fields
+                let projectStatus = project.statusType
+                if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
+                    updateData["initialHandOverDate"] = newDateStr
+                }
+            }
+            
+            if updateMaintenance {
+                updateData["maintenanceDate"] = newDateStr
+            }
+            
+            try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .updateData(updateData)
+        } catch {
+            print("Error updating project dates: \(error.localizedDescription)")
+        }
+    }
+    
+    // Handle confirmation from alert
+    private func handleDateConfirmation() {
+        guard let pendingDate = pendingEndDate else { return }
+        
+        // Update endDate to pending date
+        endDate = pendingDate
+        
+        // Determine which dates to update
+        let shouldUpdateHandover = dateConfirmationType == .handoverOnly || dateConfirmationType == .handoverAndMaintenance
+        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance
+        
+        // Proceed with save
+        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance)
+        
+        // Reset confirmation state
+        showDateConfirmation = false
+        pendingEndDate = nil
     }
 }
 
