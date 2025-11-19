@@ -99,13 +99,19 @@ struct ProjectCell: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
             // Top row: Project name and status badges
             HStack(alignment: .top, spacing: DesignSystem.Spacing.small) {
-                // Project name with truncation
+                // Project name with truncation - clickable to show popup
                 HStack(spacing: 4) {
-                    Text(project.name)
-                        .font(DesignSystem.Typography.title3)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    Button(action: {
+                        HapticManager.selection()
+                        showFullNamePopup = true
+                    }) {
+                        Text(project.name)
+                            .font(DesignSystem.Typography.title3)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .buttonStyle(.plain)
                     
                     // Show "..." button if name is truncated
                     if isNameTruncated {
@@ -263,6 +269,7 @@ struct ProjectCell: View {
                         .font(.caption2)
                         .foregroundColor(.red)
                     TruncatedRejectionReasonView(reason: reason)
+//                        .foregroundColor(.red)
                 }
                 .padding(.top, 4)
             }
@@ -274,44 +281,11 @@ struct ProjectCell: View {
         .animation(DesignSystem.Animation.interactiveSpring, value: isPressed)
         .id("\(project.id ?? "")-\(project.status)") // Force view update when status changes
         .zIndex(showFullNamePopup ? 1000 : 0) // Ensure popover appears above all cells
-        .popover(isPresented: $showFullNamePopup, arrowEdge: .top) {
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                // Status indicator with label
-                HStack(spacing: DesignSystem.Spacing.small) {
-                    Circle()
-                        .fill(displayedStatus.color)
-                        .frame(width: 8, height: 8)
-                    
-                    Text(displayedStatus.displayText)
-                        .font(DesignSystem.Typography.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                }
-                
-                Divider()
-                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
-                
-                // Project Name label and value
-                HStack {
-                    Text("Project Name")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                }
-                
-                Text(project.name)
-                    .font(DesignSystem.Typography.body)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineSpacing(2)
-            }
-            .padding(DesignSystem.Spacing.medium)
-            .frame(maxWidth: min(280, UIScreen.main.bounds.width - 40))
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .popover(isPresented: $showFullNamePopup, attachmentAnchor: .point(.center), arrowEdge: .top) {
+            ProjectNamePopoverView(
+                projectName: project.name,
+                status: displayedStatus
+            )
             .presentationCompactAdaptation(.popover)
             .zIndex(1001) // Ensure popover content is above everything
         }
@@ -561,6 +535,52 @@ extension Color {
         let g = components[1] - (percentage / 100)
         let b = components[2] - (percentage / 100)
         return Color(red: r, green: g, blue: b)
+    }
+}
+
+// MARK: - Project Name Popover View
+struct ProjectNamePopoverView: View {
+    let projectName: String
+    let status: ProjectStatus
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Status indicator with label
+            HStack(spacing: DesignSystem.Spacing.small) {
+                Circle()
+                    .fill(status.color)
+                    .frame(width: 8, height: 8)
+                
+                Text(status.displayText)
+                    .font(DesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            
+            Divider()
+                .padding(.vertical, DesignSystem.Spacing.extraSmall)
+            
+            // Project Name label and value
+            HStack {
+                Text("Project Name")
+                    .font(DesignSystem.Typography.caption1)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+            }
+            
+            Text(projectName)
+                .font(DesignSystem.Typography.body)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineSpacing(2)
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .frame(maxWidth: min(280, UIScreen.main.bounds.width - 40))
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 

@@ -29,7 +29,7 @@ struct TruncatedRejectionReasonView: View {
         HStack(spacing: 2) {
             Text(truncatedReason)
                 .font(DesignSystem.Typography.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(.red)
             
             if needsTruncation {
                 Text("...")
@@ -55,7 +55,7 @@ struct TruncatedRejectionReasonView: View {
                             
                             Text(reason)
                                 .font(.caption)
-                                .foregroundColor(.primary)
+                                .foregroundColor(.red)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(DesignSystem.Spacing.medium)
