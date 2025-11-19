@@ -51,9 +51,6 @@ struct CreateProjectView: View {
                         
                         // MARK: - Project Team Section
                         projectTeamSectionScrollView
-
-                        // MARK: - Template Overrides Section
-                        templateOverridesSectionScrollView
                         
                         // MARK: - Attachment Section
 //                        attachmentSectionScrollView
@@ -597,29 +594,6 @@ struct CreateProjectView: View {
         }
     }
     
-    private var templateOverridesSection: some View {
-        Section {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Allow Template Overrides")
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("Enable to allow overriding project templates")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Toggle("", isOn: $viewModel.allowTemplateOverrides)
-                    .labelsHidden()
-            }
-            .padding(.vertical, DesignSystem.Spacing.small)
-        } header: {
-            SectionHeaderLabel(title: "Template Settings", icon: "doc.on.doc")
-        }
-    }
     
     private var submitSection: some View {
         Section {
@@ -905,28 +879,6 @@ struct CreateProjectView: View {
         }
     }
     
-    private var templateOverridesSectionScrollView: some View {
-        FormSectionView(header: SectionHeaderLabel(title: "Template Settings", icon: "doc.on.doc")) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Allow Template Overrides")
-                        .font(DesignSystem.Typography.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("Enable to allow overriding project templates")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Toggle("", isOn: $viewModel.allowTemplateOverrides)
-                    .labelsHidden()
-            }
-            .padding(.horizontal, DesignSystem.Spacing.medium)
-            .padding(.vertical, DesignSystem.Spacing.small)
-        }
-    }
     
 //    private var attachmentSectionScrollView: some View {
 //        FormSectionView(header: SectionHeaderLabel(title: "Project Attachment", icon: "paperclip")) {
