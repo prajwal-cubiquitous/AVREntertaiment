@@ -4314,6 +4314,8 @@ struct TotalBudgetCard: View {
 // MARK: - Project Dates Card
 struct ProjectDatesCard: View {
     let project: Project
+    @State private var managerNames: [String: String] = [:] // [phoneNumber: name]
+    @State private var isLoadingManagers = false
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -4410,6 +4412,44 @@ struct ProjectDatesCard: View {
                     icon: "wrench.and.screwdriver.fill",
                     iconColor: .purple
                 )
+                
+                // Project Manager(s) below Maintenance Date
+                if !project.managerIds.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(project.managerIds, id: \.self) { managerPhone in
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                
+                                if let managerName = managerNames[managerPhone], !managerName.isEmpty {
+                                    Text(managerName)
+                                        .font(DesignSystem.Typography.caption2)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("• \(managerPhone)")
+                                        .font(DesignSystem.Typography.caption2)
+                                        .foregroundColor(.secondary)
+                                } else if isLoadingManagers {
+                                    HStack(spacing: 4) {
+                                        ProgressView()
+                                            .scaleEffect(0.7)
+                                        Text(managerPhone)
+                                            .font(DesignSystem.Typography.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                } else {
+                                    Text(managerPhone)
+                                        .font(DesignSystem.Typography.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                    .padding(.leading, 22) // Align with date rows (icon width + spacing)
+                }
             }
         }
         .padding(.horizontal, DesignSystem.Spacing.medium)
@@ -4418,6 +4458,91 @@ struct ProjectDatesCard: View {
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.large)
         .cardStyle(shadow: DesignSystem.Shadow.small)
+        .task {
+            await loadManagerNames()
+        }
+    }
+    
+    // MARK: - Load Manager Names
+    private func loadManagerNames() async {
+        guard !project.managerIds.isEmpty else { return }
+        
+        isLoadingManagers = true
+        
+        let db = Firestore.firestore()
+        var fetchedNames: [String: String] = [:]
+        
+        // Fetch names for all managers in parallel
+        await withTaskGroup(of: (String, String?).self) { group in
+            for managerPhone in project.managerIds {
+                group.addTask {
+                    let name = await fetchManagerName(phoneNumber: managerPhone, db: db)
+                    return (managerPhone, name)
+                }
+            }
+            
+            for await (phone, name) in group {
+                if let name = name {
+                    fetchedNames[phone] = name
+                }
+            }
+        }
+        
+        await MainActor.run {
+            managerNames = fetchedNames
+            isLoadingManagers = false
+        }
+    }
+    
+    private func fetchManagerName(phoneNumber: String, db: Firestore) async -> String? {
+        do {
+            // Clean phone number (remove +91 prefix if present)
+            var cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleanPhone.hasPrefix("+91") {
+                cleanPhone = String(cleanPhone.dropFirst(3))
+            }
+            cleanPhone = cleanPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Try to get user by document ID (phone number)
+            let userDoc = try await db
+                .collection("users")
+                .document(cleanPhone)
+                .getDocument()
+            
+            if let userData = userDoc.data(),
+               let name = userData["name"] as? String, !name.isEmpty {
+                return name
+            }
+            
+            // Fallback: try query by phoneNumber field
+            let userQuery = try await db
+                .collection("users")
+                .whereField("phoneNumber", isEqualTo: cleanPhone)
+                .limit(to: 1)
+                .getDocuments()
+            
+            if let userData = userQuery.documents.first?.data(),
+               let name = userData["name"] as? String, !name.isEmpty {
+                return name
+            }
+            
+            // Try with original phone number if different
+            if cleanPhone != phoneNumber {
+                let userDoc2 = try await db
+                    .collection("users")
+                    .document(phoneNumber)
+                    .getDocument()
+                
+                if let userData = userDoc2.data(),
+                   let name = userData["name"] as? String, !name.isEmpty {
+                    return name
+                }
+            }
+        } catch {
+            print("Error loading manager name for \(phoneNumber): \(error.localizedDescription)")
+        }
+        
+        return nil
     }
     
     private struct DateRow: View {

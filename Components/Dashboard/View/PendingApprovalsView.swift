@@ -335,6 +335,15 @@ struct ModernExpenseApprovalRow: View {
     @State var UserName: String = ""
     @State private var showingFileViewer = false
     
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
+    }
+    
     
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.medium) {
@@ -369,7 +378,7 @@ struct ModernExpenseApprovalRow: View {
                 
                 // Middle Row: Department and Categories
                 HStack {
-                    Text(expense.department)
+                    Text(extractDepartmentName(from: expense.department))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
