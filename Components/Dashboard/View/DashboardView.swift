@@ -65,7 +65,6 @@ struct DashboardView: View {
     @State private var showProjectDetail = false
     @State private var showingAddDepartment = false
     @State private var phaseForDepartmentAdd: PhaseSummary? = nil
-    @State private var showingPhaseRequestNotifications = false
     @State private var selectedRequest: PhaseRequestItem? = nil
     @State private var showingRequestActionSheet = false
     @StateObject private var phaseRequestNotificationViewModel = PhaseRequestNotificationViewModel()
@@ -301,51 +300,6 @@ struct DashboardView: View {
                     alignment: .bottom
                 )
                 
-                // Phase Request Notification popup overlay (Admin only)
-                if showingPhaseRequestNotifications && role == .ADMIN {
-                    Color.black.opacity(0.1)
-                        .ignoresSafeArea()
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.3)) {
-                                showingPhaseRequestNotifications = false
-                            }
-                        }
-                    
-                    // Responsive phase request notification popup
-                    VStack {
-                        HStack {
-                            Spacer()
-                            
-                            PhaseRequestNotificationFloatingView(
-                                requests: phaseRequestNotificationViewModel.pendingRequests,
-                                onRequestTap: { request in
-                                    // Handle request tap - show accept/reject sheet
-                                    selectedRequest = request
-                                    showingPhaseRequestNotifications = false
-                                    showingRequestActionSheet = true
-                                },
-                                onDismiss: {
-                                    withAnimation(.spring(response: 0.3)) {
-                                        showingPhaseRequestNotifications = false
-                                    }
-                                }
-                            )
-                            .frame(
-                                width: min(360, geometry.size.width - 32),
-                                height: min(600, geometry.size.height * 0.7)
-                            )
-                            .padding(.trailing, 16)
-                            .transition(.asymmetric(
-                                insertion: .scale(scale: 0.8).combined(with: .opacity),
-                                removal: .scale(scale: 0.95).combined(with: .opacity)
-                            ))
-                            .onTapGesture { }  // Prevent tap from dismissing
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding(.top, geometry.safeAreaInsets.top + 60) // Account for navigation bar
-                }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -367,22 +321,36 @@ struct DashboardView: View {
             
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: DesignSystem.Spacing.medium) {
-                    // FCM Notifications Button (for APPROVER and ADMIN roles)
+                    // Unified Notifications Button (for APPROVER and ADMIN roles)
                     if role == .APPROVER || role == .ADMIN {
                         Button {
                             HapticManager.selection()
                             showingNotifications = true
+                            // Load phase requests when opening notifications (Admin only)
+                            if role == .ADMIN, let projectId = project?.id {
+                                Task {
+                                    await phaseRequestNotificationViewModel.loadPendingRequests(
+                                        projectId: projectId,
+                                        customerId: customerId
+                                    )
+                                }
+                            }
                         } label: {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "bell")
                                     .font(.title3)
                                     .foregroundColor(.primary)
                                 
-                                if notificationViewModel.unreadNotificationCount > 0 {
-                                    Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
+                                // Combined badge count
+                                let totalCount = role == .ADMIN 
+                                    ? notificationViewModel.unreadNotificationCount + phaseRequestNotificationViewModel.pendingRequestsCount
+                                    : notificationViewModel.unreadNotificationCount
+                                
+                                if totalCount > 0 {
+                                    Text(totalCount > 99 ? "99+" : "\(totalCount)")
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(.white)
-                                        .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
+                                        .padding(.horizontal, totalCount > 99 ? 4 : 5)
                                         .padding(.vertical, 2)
                                         .background(Color.red)
                                         .clipShape(Capsule())
@@ -393,42 +361,6 @@ struct DashboardView: View {
                                         .offset(x: 8, y: -8)
                                         .minimumScaleFactor(0.5)
                                         .lineLimit(1)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Phase Request Notification Button (Admin only, before pencil)
-                    if role == .ADMIN {
-                        Button {
-                            HapticManager.impact(.light)
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showingPhaseRequestNotifications.toggle()
-                                if showingPhaseRequestNotifications {
-                                    Task {
-                                        await phaseRequestNotificationViewModel.loadPendingRequests(
-                                            projectId: project?.id ?? "",
-                                            customerId: customerId
-                                        )
-                                    }
-                                }
-                            }
-                        } label: {
-                            ZStack {
-                                Image(systemName: "bell.fill")
-                                    .foregroundColor(.primary)
-                                
-                                if phaseRequestNotificationViewModel.pendingRequestsCount > 0 {
-                                    Circle()
-                                        .fill(.red)
-                                        .frame(width: 14, height: 14)
-                                        .overlay(
-                                            Text("\(phaseRequestNotificationViewModel.pendingRequestsCount)")
-                                                .font(.system(size: 10))
-                                                .fontWeight(.bold)
-                                                .foregroundColor(.white)
-                                        )
-                                        .offset(x: 10, y: -10)
                                 }
                             }
                         }
@@ -566,12 +498,20 @@ struct DashboardView: View {
         }
         .overlay {
             if showingNotifications, let project = project {
-                NotificationPopupView(
+                UnifiedNotificationPopupView(
                     notificationViewModel: notificationViewModel,
+                    phaseRequestNotificationViewModel: phaseRequestNotificationViewModel,
                     project: project,
                     role: role,
                     phoneNumber: phoneNumber,
-                    isPresented: $showingNotifications
+                    customerId: customerId,
+                    isPresented: $showingNotifications,
+                    onPhaseRequestTap: { request in
+                        // Handle request tap - show accept/reject sheet
+                        selectedRequest = request
+                        showingNotifications = false
+                        showingRequestActionSheet = true
+                    }
                 )
             }
         }

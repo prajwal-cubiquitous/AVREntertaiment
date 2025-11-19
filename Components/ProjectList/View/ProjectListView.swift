@@ -51,10 +51,12 @@ struct ProjectListView: View {
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
-                                .lineLimit(1)
-                            
+//                                .lineLimit(1)
+//                                .truncationMode(.tail)
+//                                .allowsTightening(false)
+//                            
                             if shouldShowTruncation {
-                                Text("...")
+                                Text("...")  // Whatever dots YOU want
                                     .font(.title2)
                                     .fontWeight(.bold)
                                     .foregroundColor(.accentColor)
@@ -64,6 +66,7 @@ struct ProjectListView: View {
                                     }
                             }
                         }
+
                         
                         Spacer(minLength: 4)
                         
@@ -666,15 +669,15 @@ struct ProjectListView: View {
     
     /// Truncated business name (23 characters max)
     private var truncatedBusinessName: String {
-        if businessName.count > 23 {
-            return String(businessName.prefix(23))
+        if businessName.count > 20 {
+            return String(businessName.prefix(20))
         }
         return businessName
     }
     
     /// Whether to show truncation dots
     private var shouldShowTruncation: Bool {
-        businessName.count > 23
+        businessName.count > 20
     }
     
     /// Filtered projects based on search text (case-insensitive search on project name)
