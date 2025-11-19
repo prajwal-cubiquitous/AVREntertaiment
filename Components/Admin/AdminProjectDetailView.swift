@@ -711,6 +711,11 @@ struct ModernStatusCard: View {
     let icon: String
     let onStatusChange: (ProjectStatus) -> Void
     
+    // Check if status is ARCHIVE
+    private var isArchived: Bool {
+        status == ProjectStatus.ARCHIVE.rawValue
+    }
+    
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.medium) {
             HStack {
@@ -725,27 +730,8 @@ struct ModernStatusCard: View {
                 Spacer()
             }
             
-            Menu {
-                // Filter out automatic statuses that shouldn't be manually selectable
-                let allowedStatuses = ProjectStatus.allCases.filter { status in
-                    status != .IN_REVIEW && status != .LOCKED && status != .REVIEW_REJECTED
-                }
-                
-                ForEach(allowedStatuses, id: \.self) { projectStatus in
-                    Button {
-                        HapticManager.selection()
-                        onStatusChange(projectStatus)
-                    } label: {
-                        HStack {
-                            Text(projectStatus.rawValue)
-                            if projectStatus.rawValue == status {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                    }
-                }
-            } label: {
+            if isArchived {
+                // Display only status text with OK indicator when archived
                 HStack {
                     Text(status)
                         .font(.subheadline.weight(.medium))
@@ -753,13 +739,51 @@ struct ModernStatusCard: View {
                     
                     Spacer()
                     
-                    Image(systemName: "chevron.up.chevron.down")
+                    Image(systemName: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.green)
                 }
                 .padding()
                 .background(Color(.quaternarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            } else {
+                // Show dropdown menu for non-archived statuses
+                Menu {
+                    // Filter out automatic statuses that shouldn't be manually selectable
+                    let allowedStatuses = ProjectStatus.allCases.filter { status in
+                        status != .IN_REVIEW && status != .LOCKED && status != .REVIEW_REJECTED
+                    }
+                    
+                    ForEach(allowedStatuses, id: \.self) { projectStatus in
+                        Button {
+                            HapticManager.selection()
+                            onStatusChange(projectStatus)
+                        } label: {
+                            HStack {
+                                Text(projectStatus.rawValue)
+                                if projectStatus.rawValue == status {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.blue)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(status)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding()
+                    .background(Color(.quaternarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+                }
             }
         }
         .padding()

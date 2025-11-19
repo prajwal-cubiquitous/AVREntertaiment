@@ -23,6 +23,7 @@ struct ProjectDetailView: View {
     @State private var hasVisiblePhase = false
     @State private var showingExpenseChat = false
     @State private var expenseForChat: Expense? = nil
+    @State private var showingProjectMenu = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -150,6 +151,24 @@ struct ProjectDetailView: View {
                         .foregroundColor(.primary)
                         .symbolRenderingMode(.hierarchical)
                 }
+                
+                // 3-dots Menu in navigation bar
+                Menu {
+                    // Add menu items here as needed
+                    Button {
+                        HapticManager.selection()
+                        // Add action here
+                    } label: {
+                        Label("Project Options", systemImage: "ellipsis.circle")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.title3)
+                        .foregroundColor(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -795,7 +814,7 @@ private struct CurrentPhaseView: View {
                         .fill(progressColor)
                         .frame(width: 10, height: 10)
                     
-                    // 3-dots Menu (horizontal ellipsis)
+                    // 3-dots Menu (horizontal ellipsis) - Improved touch target
                     Menu {
                         if hasUserRequests {
                             Button {
@@ -814,10 +833,12 @@ private struct CurrentPhaseView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.caption)
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.secondary)
-                            .padding(6)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .sheet(isPresented: $showingRequestForm) {
@@ -1315,7 +1336,7 @@ private struct ProjectDetailPhaseCardView: View {
                         .fill(progressColor)
                         .frame(width: 10, height: 10)
                     
-                    // 3-dots Menu (horizontal ellipsis)
+                    // 3-dots Menu (horizontal ellipsis) - Improved touch target
                     Menu {
                         if hasUserRequests {
                             Button {
@@ -1334,10 +1355,12 @@ private struct ProjectDetailPhaseCardView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.caption)
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.secondary)
-                            .padding(6)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .sheet(isPresented: $showingRequestForm) {
@@ -1775,28 +1798,37 @@ private struct ProjectHeaderView: View {
 //                            .padding(.top, DesignSystem.Spacing.extraSmall)
 //                    }
                     
-                    // Location and Client
-                    Spacer()
-                    VStack(alignment: .leading, spacing: 4) {
+                    // Location and Client - Single line, no wrapping, compact layout
+                    HStack(spacing: 4) {
                         if !project.location.isEmpty {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 2) {
                                 Image(systemName: "location.fill")
-                                    .font(.caption)
+                                    .font(.system(size: 9, weight: .medium))
                                     .foregroundColor(.secondary)
                                 Text(project.location)
-                                    .font(DesignSystem.Typography.caption1)
+                                    .font(.system(size: 10))
                                     .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
                             }
                         }
                         
+                        if !project.location.isEmpty && !project.client.isEmpty {
+                            Circle()
+                                .fill(Color.secondary.opacity(0.5))
+                                .frame(width: 2, height: 2)
+                        }
+                        
                         if !project.client.isEmpty {
-                            HStack(spacing: 6) {
+                            HStack(spacing: 2) {
                                 Image(systemName: "person.fill")
-                                    .font(.caption)
+                                    .font(.system(size: 9, weight: .medium))
                                     .foregroundColor(.secondary)
                                 Text(project.client)
-                                    .font(DesignSystem.Typography.caption1)
+                                    .font(.system(size: 10))
                                     .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.5)
                             }
                         }
                     }
