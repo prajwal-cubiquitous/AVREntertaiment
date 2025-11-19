@@ -464,7 +464,7 @@ class AdminProjectDetailViewModel: ObservableObject {
         // If dates will change, show confirmation alert
         if !dateChanges.isEmpty {
             let dateList = dateChanges.joined(separator: " and ")
-            statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to today's date. Do you want to continue?"
+            statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to yesterday's date (to reflect immediately in UI). Do you want to continue?"
             pendingStatusChange = newStatus
             showStatusChangeConfirmation = true
         } else {
@@ -500,6 +500,7 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 let calendar = Calendar.current
                 let today = calendar.startOfDay(for: Date())
+                let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
                 
                 var updateData: [String: Any] = [
                     "status": newStatus.rawValue,
@@ -516,36 +517,36 @@ class AdminProjectDetailViewModel: ObservableObject {
                 // Adjust dates based on new status
                 switch newStatus {
                 case .ACTIVE:
-                    // If changing from LOCKED to ACTIVE and plannedDate > current date, set plannedDate = current date
+                    // If changing from LOCKED to ACTIVE and plannedDate > current date, set plannedDate = yesterday (to reflect immediately)
                     if currentStatus == .LOCKED {
                         let planned = calendar.startOfDay(for: plannedDate)
                         if planned > today {
-                            updatedPlannedDate = today
-                            updateData["plannedDate"] = dateFormatter.string(from: today)
+                            updatedPlannedDate = yesterday
+                            updateData["plannedDate"] = dateFormatter.string(from: yesterday)
                         }
                     }
                     
                 case .MAINTENANCE:
-                    // If handoverDate > current date, set handoverDate = current date
+                    // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
                     let handover = calendar.startOfDay(for: handoverDate)
                     if handover > today {
-                        updatedHandoverDate = today
-                        updateData["handoverDate"] = dateFormatter.string(from: today)
+                        updatedHandoverDate = yesterday
+                        updateData["handoverDate"] = dateFormatter.string(from: yesterday)
                     }
                     
                 case .COMPLETED:
-                    // If handoverDate > current date, set handoverDate = current date
+                    // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
                     let handover = calendar.startOfDay(for: handoverDate)
                     if handover > today {
-                        updatedHandoverDate = today
-                        updateData["handoverDate"] = dateFormatter.string(from: today)
+                        updatedHandoverDate = yesterday
+                        updateData["handoverDate"] = dateFormatter.string(from: yesterday)
                     }
                     
-                    // If maintenanceDate > current date, set maintenanceDate = current date
+                    // If maintenanceDate > current date, set maintenanceDate = yesterday (to reflect immediately)
                     let maintenance = calendar.startOfDay(for: maintenanceDate)
                     if maintenance > today {
-                        updatedMaintenanceDate = today
-                        updateData["maintenanceDate"] = dateFormatter.string(from: today)
+                        updatedMaintenanceDate = yesterday
+                        updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
                     }
                     
                 default:
