@@ -51,7 +51,7 @@ struct ProjectDetailView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
                     // MARK: - Main Header Card
-                    ProjectHeaderView(project: project)
+                    ProjectHeaderView(project: project, viewModel: viewModel)
                         .cardStyle()
                         .padding(.horizontal, DesignSystem.Spacing.medium)
 
@@ -1773,10 +1773,23 @@ private struct EmptyStateRow: View {
 
 private struct ProjectHeaderView: View {
     let project: Project
+    let viewModel: ProjectDetailViewModel
     @State private var managerName: String?
     @State private var managerPhone: String?
     @State private var isLoadingManager = false
     @State private var hasLoadedManager = false // Track if manager details have been loaded
+    
+    // Computed property to determine displayed status
+    private var displayedStatus: ProjectStatus {
+        // If project is ACTIVE but has no active phases, show SUSPENDED in UI
+        if project.statusType == .ACTIVE && project.isSuspended != true {
+            // Check if there are any active phases
+            if viewModel.currentPhases.isEmpty {
+                return .SUSPENDED
+            }
+        }
+        return project.statusType
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
@@ -1839,6 +1852,7 @@ private struct ProjectHeaderView: View {
                 
                 VStack(alignment: .trailing, spacing: DesignSystem.Spacing.small) {
                     // Show suspended status if project is suspended, otherwise show normal status
+                    // Also show SUSPENDED if ACTIVE but no active phases (UI-only override)
                     if project.isSuspended == true {
                         VStack(alignment: .trailing, spacing: DesignSystem.Spacing.extraSmall) {
                             HStack(spacing: 4) {
@@ -1870,6 +1884,9 @@ private struct ProjectHeaderView: View {
                                 .frame(maxWidth: 200, alignment: .trailing)
                             }
                         }
+                    } else if displayedStatus == .SUSPENDED && project.statusType == .ACTIVE {
+                        // Show orange SUSPENDED status when ACTIVE but no active phases (UI-only)
+                        StatusViewDetial(status: .SUSPENDED)
                     } else {
                         StatusViewDetial(status: project.statusType)
                     }

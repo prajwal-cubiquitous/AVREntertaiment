@@ -13,13 +13,27 @@ struct ProjectCell: View {
     let role: UserRole?
     let tempApproverStatus: TempApproverStatus?
     let onReviewTap: (() -> Void)?
+    let hasActivePhases: Bool? // Optional: if nil, will check project status only; if true/false, will use this value
     @State private var isPressed = false
     
-    init(project: Project, role: UserRole?, tempApproverStatus: TempApproverStatus? = nil, onReviewTap: (() -> Void)? = nil) {
+    init(project: Project, role: UserRole?, tempApproverStatus: TempApproverStatus? = nil, onReviewTap: (() -> Void)? = nil, hasActivePhases: Bool? = nil) {
         self.project = project
         self.role = role
         self.tempApproverStatus = tempApproverStatus
         self.onReviewTap = onReviewTap
+        self.hasActivePhases = hasActivePhases
+    }
+    
+    // Computed property to determine displayed status
+    private var displayedStatus: ProjectStatus {
+        // If project is ACTIVE but has no active phases, show SUSPENDED in UI
+        if project.statusType == .ACTIVE && project.isSuspended != true {
+            // If hasActivePhases is explicitly provided, use it; otherwise assume true (default behavior)
+            if let hasActivePhases = hasActivePhases, !hasActivePhases {
+                return .SUSPENDED
+            }
+        }
+        return project.statusType
     }
     
     private var daysRemainingText: String {
@@ -76,8 +90,12 @@ struct ProjectCell: View {
                 
                 HStack(spacing: DesignSystem.Spacing.small) {
                     // Show Suspended status if project is suspended, otherwise show normal status
+                    // Also show SUSPENDED if ACTIVE but no active phases (UI-only override)
                     if project.isSuspended == true {
                         SuspendedStatusView(suspendedDate: project.suspendedDate)
+                    } else if displayedStatus == .SUSPENDED && project.statusType == .ACTIVE {
+                        // Show orange SUSPENDED status when ACTIVE but no active phases (UI-only)
+                        StatusView(status: .SUSPENDED)
                     } else {
                         StatusView(status: project.statusType)
                     }

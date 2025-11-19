@@ -912,11 +912,25 @@ struct DashboardView: View {
                         endDate: tempApproverEndDate
                     )
                 } else {
+                    // Check if project is ACTIVE but has no active phases - show SUSPENDED in UI
+                    let displayedStatus: ProjectStatus = {
+                        if let project = project, project.statusType == .ACTIVE {
+                            // Check if there are any active phases
+                            let hasActivePhases = allPhases.contains { phase in
+                                (phaseEnabledMap[phase.id] ?? true) && isPhaseInProgress(phase)
+                            }
+                            if !hasActivePhases {
+                                return .SUSPENDED
+                            }
+                        }
+                        return project?.statusType ?? .LOCKED
+                    }()
+                    
                     ProjectStatsCard(
                         title: "Project Status",
-                        value: project?.statusType.rawValue ?? "N/A",
+                        value: displayedStatus.rawValue,
                         icon: "circle.fill",
-                        color: project?.statusType == .ACTIVE ? .green : .orange
+                        color: displayedStatus == .ACTIVE ? .green : (displayedStatus == .SUSPENDED ? .orange : .orange)
                     )
                 }
                 
