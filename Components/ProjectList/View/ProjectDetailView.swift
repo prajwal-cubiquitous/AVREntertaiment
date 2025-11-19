@@ -427,7 +427,26 @@ private struct KeyInformationView: View {
     @Binding var isTeamMembersDropdownVisible: Bool
     
     var totalApprovedAmount: Double {
-        viewModel.approvedExpensesByDepartment.values.reduce(0, +)
+        // Priority 1: If phases are loaded, sum from phases (most reliable - calculated from actual phase data)
+        // This ensures we always get the correct total even if totalApprovedExpenses hasn't been set yet
+        if !viewModel.phases.isEmpty {
+            let totalFromPhases = viewModel.totalApprovedFromPhases
+            // Use totalFromPhases if it's > 0, otherwise use totalApprovedExpenses (which might be 0 if no expenses)
+            if totalFromPhases > 0 {
+                return totalFromPhases
+            }
+            // If phases are loaded but totalFromPhases is 0, use totalApprovedExpenses
+            // This handles the case where phases exist but have no expenses
+            return viewModel.totalApprovedExpenses
+        }
+        
+        // Priority 2: Use totalApprovedExpenses if phases haven't loaded yet
+        if viewModel.totalApprovedExpenses > 0 {
+            return viewModel.totalApprovedExpenses
+        }
+        
+        // Priority 3: Sum from departments (legacy support)
+        return viewModel.approvedExpensesByDepartment.values.reduce(0, +)
     }
     
     var totalRemainingBudget: Double {

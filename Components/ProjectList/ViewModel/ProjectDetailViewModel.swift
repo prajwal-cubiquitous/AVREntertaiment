@@ -54,6 +54,7 @@ class ProjectDetailViewModel: ObservableObject {
     // Legacy properties for backward compatibility
     @Published var approvedExpensesByDepartment: [String: Double] = [:]
     @Published var allocatedBudgetsByDepartment: [String: Double] = [:]
+    @Published var totalApprovedExpenses: Double = 0 // Total approved expenses across all phases
     
     private let project: Project
     private let db = Firestore.firestore()
@@ -107,29 +108,44 @@ class ProjectDetailViewModel: ObservableObject {
                 
                 var expensesByPhaseId: [String: [Expense]] = [:]
                 var expensesByPhaseAndDepartment: [String: [String: Double]] = [:]
+                var totalApproved: Double = 0 // Track total approved expenses
                 
                 // Process expenses
+                var processedCount = 0
+                var failedCount = 0
                 for expenseDoc in expensesSnapshot.documents {
-                    if let expense = try? expenseDoc.data(as: Expense.self),
-                       let phaseId = expense.phaseId {
-                        if expensesByPhaseId[phaseId] == nil {
-                            expensesByPhaseId[phaseId] = []
-                        }
-                        expensesByPhaseId[phaseId]?.append(expense)
+                    do {
+                        let expense = try expenseDoc.data(as: Expense.self)
+                        // Add to total regardless of phaseId
+                        totalApproved += expense.amount
+                        processedCount += 1
                         
-                        // Track by phase and department
-                        // Expenses use just department name, but departments are stored as phaseId_departmentName
-                        // We need to match expenses to both formats for backward compatibility
-                        if expensesByPhaseAndDepartment[phaseId] == nil {
-                            expensesByPhaseAndDepartment[phaseId] = [:]
+                        // Process phase-based expenses
+                        if let phaseId = expense.phaseId {
+                            if expensesByPhaseId[phaseId] == nil {
+                                expensesByPhaseId[phaseId] = []
+                            }
+                            expensesByPhaseId[phaseId]?.append(expense)
+                            
+                            // Track by phase and department
+                            // Expenses use just department name, but departments are stored as phaseId_departmentName
+                            // We need to match expenses to both formats for backward compatibility
+                            if expensesByPhaseAndDepartment[phaseId] == nil {
+                                expensesByPhaseAndDepartment[phaseId] = [:]
+                            }
+                            // Store with new format key (phaseId_departmentName)
+                            let departmentKey = "\(phaseId)_\(expense.department)"
+                            expensesByPhaseAndDepartment[phaseId]?[departmentKey, default: 0] += expense.amount
+                            // Also store with old format for backward compatibility
+                            expensesByPhaseAndDepartment[phaseId]?[expense.department, default: 0] += expense.amount
                         }
-                        // Store with new format key (phaseId_departmentName)
-                        let departmentKey = "\(phaseId)_\(expense.department)"
-                        expensesByPhaseAndDepartment[phaseId]?[departmentKey, default: 0] += expense.amount
-                        // Also store with old format for backward compatibility
-                        expensesByPhaseAndDepartment[phaseId]?[expense.department, default: 0] += expense.amount
+                    } catch {
+                        failedCount += 1
+                        print("⚠️ Failed to decode expense document \(expenseDoc.documentID): \(error)")
                     }
                 }
+                
+                print("📊 Processed \(processedCount) approved expenses, \(failedCount) failed, Total: ₹\(totalApproved)")
                 
                 // Process phases
                 var phasesList: [PhaseInfo] = []
@@ -194,6 +210,9 @@ class ProjectDetailViewModel: ObservableObject {
                     self.currentPhase = self.getCurrentPhase(from: phasesList)
                     self.currentPhases = self.getCurrentPhases(from: phasesList)
                     self.expiredPhases = self.getExpiredPhases(from: phasesList)
+                    // Always update totalApprovedExpenses with the calculated value
+                    self.totalApprovedExpenses = totalApproved
+                    print("✅ Total approved expenses calculated: ₹\(totalApproved) from \(expensesSnapshot.documents.count) expense documents")
                     self.isLoading = false
                 }
                 
@@ -283,8 +302,10 @@ class ProjectDetailViewModel: ObservableObject {
                     }
                     
                     var departmentTotals: [String: Double] = [:]
+                    var totalApproved: Double = 0
                     for document in documents {
                         if let expense = try? document.data(as: Expense.self) {
+                            totalApproved += expense.amount
                             if expense.isAnonymous == true {
                                 departmentTotals["Other Expenses", default: 0] += expense.amount
                             } else {
@@ -294,6 +315,11 @@ class ProjectDetailViewModel: ObservableObject {
                     }
                     
                     self?.approvedExpensesByDepartment = departmentTotals
+                    // Update total approved expenses if phases haven't loaded yet or if total is 0
+                    // Otherwise, loadPhases() will have the more accurate total (it processes all expenses)
+                    if self?.phases.isEmpty == true || self?.totalApprovedExpenses == 0 {
+                        self?.totalApprovedExpenses = totalApproved
+                    }
                 }
             }
     }
@@ -333,6 +359,11 @@ class ProjectDetailViewModel: ObservableObject {
     func spentPercentage(for department: String, allocatedBudget: Double) -> Double {
         guard allocatedBudget > 0 else { return 0 }
         return approvedAmount(for: department) / allocatedBudget
+    }
+    
+    // Computed property to get total approved expenses from phases
+    var totalApprovedFromPhases: Double {
+        return phases.reduce(0) { $0 + $1.approvedAmount }
     }
     
     // MARK: - Load Phase Extensions
