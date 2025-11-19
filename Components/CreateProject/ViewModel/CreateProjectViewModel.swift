@@ -1218,6 +1218,9 @@ class CreateProjectViewModel: ObservableObject {
                         isSuspended: nil, // New projects are not suspended
                         suspendedDate: nil, // No suspension date for new projects
                         suspensionReason: nil, // No suspension reason for new projects
+                        rejectionReason: nil, // No rejection reason for new projects
+                        rejectedBy: nil, // No rejector for new projects
+                        rejectedAt: nil, // No rejection timestamp for new projects
                         teamMembers: Array(allTeamMembers),
                         managerIds: managerIds,
                         tempApproverID: nil,

@@ -163,6 +163,18 @@ struct ProjectCell: View {
                     }
                     .padding(.top, DesignSystem.Spacing.extraSmall)
                 }
+                
+                // Show rejection reason if project is REVIEW_REJECTED
+                if project.statusType == .REVIEW_REJECTED, let reason = project.rejectionReason, !reason.isEmpty {
+                    HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                        
+                        TruncatedRejectionReasonView(reason: reason)
+                    }
+                    .padding(.top, DesignSystem.Spacing.extraSmall)
+                }
             }
         }
         .padding(DesignSystem.Spacing.medium)

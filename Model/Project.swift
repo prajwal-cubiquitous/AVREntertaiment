@@ -34,6 +34,9 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let isSuspended: Bool? // Whether the project is currently suspended
     let suspendedDate: String? // Date until which the project is suspended
     let suspensionReason: String? // Reason for suspension
+    let rejectionReason: String? // Reason for rejection when status is REVIEW_REJECTED
+    let rejectedBy: String? // User who rejected the project
+    let rejectedAt: Timestamp? // Timestamp when project was rejected
     let teamMembers: [String]
     let managerIds: [String] // Project approvers/managers
     var tempApproverID: String?
@@ -117,6 +120,9 @@ extension Project {
                 isSuspended: nil,
                 suspendedDate: nil,
                 suspensionReason: nil,
+                rejectionReason: nil,
+                rejectedBy: nil,
+                rejectedAt: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -142,6 +148,9 @@ extension Project {
                 isSuspended: nil,
                 suspendedDate: nil,
                 suspensionReason: nil,
+                rejectionReason: nil,
+                rejectedBy: nil,
+                rejectedAt: nil,
                 teamMembers: ["user1", "user2", "user3"],
                 managerIds: ["manager1"],
                 tempApproverID: nil,
@@ -167,6 +176,9 @@ extension Project {
                 isSuspended: nil,
                 suspendedDate: nil,
                 suspensionReason: nil,
+                rejectionReason: nil,
+                rejectedBy: nil,
+                rejectedAt: nil,
                 teamMembers: ["user1", "user4"],
                 managerIds: ["manager2"],
                 tempApproverID: nil,
