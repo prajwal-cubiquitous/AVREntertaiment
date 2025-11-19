@@ -1149,7 +1149,7 @@ struct DashboardView: View {
                                             Spacer()
                                             
                                             // 3-dot menu for Complete Phase (available for all roles, hidden when archived)
-                                            if project?.statusType != .ARCHIVE {
+                                            if project?.statusType != .ARCHIVE && project?.isSuspended == false{
                                                 Menu {
                                                     Button(role: .destructive) {
                                                         HapticManager.selection()
@@ -3601,7 +3601,7 @@ private struct AllPhasesView: View {
                 HStack{
                     Spacer()
             // 3-dot menu for Complete Phase (available for all roles, only for active phases, hidden when archived)
-            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && project?.statusType != .ARCHIVE {
+            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && project?.statusType != .ARCHIVE && project?.isSuspended == false {
                 Menu {
                     Button(role: .destructive) {
                         HapticManager.selection()
@@ -3623,7 +3623,7 @@ private struct AllPhasesView: View {
             }
             
             // 3-dot menu for Start Now (for future phases, available for all roles, hidden when archived)
-            if isPhaseInFuture(phase) && project?.statusType != .ARCHIVE {
+            if isPhaseInFuture(phase) && project?.statusType != .ARCHIVE &&  project?.isSuspended == false {
                 Menu {
                     Button {
                         HapticManager.selection()
