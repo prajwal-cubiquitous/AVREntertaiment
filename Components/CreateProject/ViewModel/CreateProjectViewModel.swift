@@ -151,6 +151,7 @@ class CreateProjectViewModel: ObservableObject {
     @Published var isSavingDraft: Bool = false
     @Published var showDraftList: Bool = false
     @Published var drafts: [DraftProject] = []
+    @Published var currentDraftId: String? = nil // Track which draft is currently loaded
     
     // MARK: - Attachment State
     @Published var attachmentURL: String?
@@ -1260,6 +1261,44 @@ class CreateProjectViewModel: ObservableObject {
                     try await phaseRef.setData(from: phaseData)
                 }
                 
+                // Delete draft from draft_projects collection if one was loaded
+                if let draftId = currentDraftId, !draftId.isEmpty {
+                    do {
+                        let draftRef = db.collection("customers")
+                            .document(customerId)
+                            .collection("draft_projects")
+                            .document(draftId)
+                        
+                        // Verify document exists before deleting
+                        let draftDoc = try await draftRef.getDocument()
+                        if draftDoc.exists {
+                            try await draftRef.delete()
+                            
+                            // Update customer document if no drafts remain
+                            let remainingDrafts = try await db.collection("customers")
+                                .document(customerId)
+                                .collection("draft_projects")
+                                .getDocuments()
+                            
+                            if remainingDrafts.documents.isEmpty {
+                                let customerRef = db.collection("customers").document(customerId)
+                                try await customerRef.updateData([
+                                    "hasDrafts": false
+                                ])
+                            }
+                            
+                            // Refresh drafts list
+                            await loadDrafts()
+                        }
+                    } catch {
+                        // Log error but don't fail the project creation
+                        print("⚠️ Failed to delete draft after project creation: \(error.localizedDescription)")
+                    }
+                }
+                
+                // Clear current draft ID
+                currentDraftId = nil
+                
                 // Show success message
                 isLoading = false
                 showSuccessMessage = true
@@ -1845,11 +1884,29 @@ class CreateProjectViewModel: ObservableObject {
                 var draft = DraftProject(formState: formState)
                 draft.updatedAt = Timestamp() // Update timestamp
                 
-                // Save to draft_projects collection
-                let draftRef = db.collection("customers")
-                    .document(customerId)
-                    .collection("draft_projects")
-                    .document()
+                // Save to draft_projects collection - update existing draft if one is loaded, otherwise create new
+                let draftRef: DocumentReference
+                if let existingDraftId = currentDraftId, !existingDraftId.isEmpty {
+                    // Update existing draft
+                    draftRef = db.collection("customers")
+                        .document(customerId)
+                        .collection("draft_projects")
+                        .document(existingDraftId)
+                    // Preserve the original createdAt timestamp
+                    let existingDraftDoc = try await draftRef.getDocument()
+                    if let existingData = existingDraftDoc.data(),
+                       let existingCreatedAt = existingData["createdAt"] as? Timestamp {
+                        draft.createdAt = existingCreatedAt
+                    }
+                } else {
+                    // Create new draft
+                    draftRef = db.collection("customers")
+                        .document(customerId)
+                        .collection("draft_projects")
+                        .document()
+                    // Set the current draft ID so future saves will update this draft
+                    currentDraftId = draftRef.documentID
+                }
                 
                 try await draftRef.setData(from: draft)
                 
@@ -1870,6 +1927,9 @@ class CreateProjectViewModel: ObservableObject {
                 
                 // Refresh drafts list
                 await loadDrafts()
+                
+                // Note: We keep currentDraftId set so that if user continues editing and saves again,
+                // it will update the same draft instead of creating a new one
                 
             } catch {
                 isSavingDraft = false
@@ -1903,6 +1963,8 @@ class CreateProjectViewModel: ObservableObject {
         attachmentName = nil
         uploadProgress = 0.0
         restoredExpandedPhaseIds = []
+        // Note: We don't clear currentDraftId here because the user might want to continue editing
+        // The draft ID will be cleared when project is successfully created or when a new draft is loaded
     }
     
     func loadDrafts() async {
@@ -1941,6 +2003,9 @@ class CreateProjectViewModel: ObservableObject {
     
     func loadDraft(_ draft: DraftProject) {
         let formState = draft.formState
+        
+        // Set the current draft ID so future saves will update this draft instead of creating a new one
+        currentDraftId = draft.id
         
         // Restore form fields
         projectName = formState.projectName
@@ -1991,6 +2056,11 @@ class CreateProjectViewModel: ObservableObject {
         
         // Store the draft ID for restoration if deletion fails
         let draftIdToDelete = draftId
+        
+        // Clear currentDraftId if the deleted draft is the current one
+        if currentDraftId == draftIdToDelete {
+            currentDraftId = nil
+        }
         
         // Optimistically remove from UI immediately with smooth animation
         withAnimation(.easeInOut(duration: 0.25)) {
