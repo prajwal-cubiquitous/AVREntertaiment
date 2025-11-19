@@ -223,6 +223,7 @@ struct AdminProjectDetailView: View {
                 title: "Project Status",
                 status: viewModel.projectStatus,
                 icon: "flag.fill",
+                isProjectSuspended: viewModel.project.isSuspended ?? false,
                 onStatusChange: viewModel.updateProjectStatus
             )
             
@@ -709,11 +710,17 @@ struct ModernStatusCard: View {
     let title: String
     let status: String
     let icon: String
+    let isProjectSuspended: Bool // Pass whether the project is actually suspended
     let onStatusChange: (ProjectStatus) -> Void
     
     // Check if status is ARCHIVE
     private var isArchived: Bool {
         status == ProjectStatus.ARCHIVE.rawValue
+    }
+    
+    // Check if status is SUSPENDED
+    private var isSuspendedStatus: Bool {
+        status == ProjectStatus.SUSPENDED.rawValue
     }
     
     var body: some View {
@@ -746,7 +753,22 @@ struct ModernStatusCard: View {
                 .padding()
                 .background(Color(.quaternarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
-            } else {
+            } else if isSuspendedStatus && isProjectSuspended {
+                HStack {
+                    Text(status)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }else {
                 // Show dropdown menu for non-archived statuses
                 Menu {
                     // Filter out automatic statuses that shouldn't be manually selectable
