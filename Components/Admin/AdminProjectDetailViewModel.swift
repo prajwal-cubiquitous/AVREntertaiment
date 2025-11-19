@@ -671,10 +671,40 @@ class AdminProjectDetailViewModel: ObservableObject {
                     "updatedAt": Timestamp()
                 ]
                 
+                let calendar = Calendar.current
+                let today = calendar.startOfDay(for: Date())
+                let handover = calendar.startOfDay(for: newHandoverDate)
+                let maintenance = calendar.startOfDay(for: maintenanceDate)
+                
                 // Check project status - if LOCKED or IN_REVIEW, update both fields
                 let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .LOCKED
                 if currentStatus == .LOCKED || currentStatus == .IN_REVIEW {
                     updateData["initialHandOverDate"] = handoverDateStr
+                }
+                
+                // Logic for status changes (only if status is not IN_REVIEW or LOCKED)
+                if currentStatus != .IN_REVIEW && currentStatus != .LOCKED {
+                    // If changed date >= today's date, change project status to ACTIVE
+                    if handover >= today {
+                        updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                        projectStatus = ProjectStatus.ACTIVE.rawValue
+                    }
+                    
+                    // If changed date > maintenance date, change maintenance date to changed date + 1 month
+                    if handover > maintenance {
+                        let newMaintenanceDate = calendar.date(byAdding: .month, value: 1, to: newHandoverDate) ?? newHandoverDate
+                        let newMaintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
+                        updateData["maintenanceDate"] = newMaintenanceDateStr
+                        maintenanceDate = newMaintenanceDate
+                    }
+                } else {
+                    // If status is IN_REVIEW or LOCKED, only update maintenance date if handover > maintenance
+                    if handover > maintenance {
+                        let newMaintenanceDate = calendar.date(byAdding: .month, value: 1, to: newHandoverDate) ?? newHandoverDate
+                        let newMaintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
+                        updateData["maintenanceDate"] = newMaintenanceDateStr
+                        maintenanceDate = newMaintenanceDate
+                    }
                 }
                 
                 try await FirebasePathHelper.shared
@@ -686,25 +716,6 @@ class AdminProjectDetailViewModel: ObservableObject {
                 // Update initialHandOverDate if status is LOCKED or IN_REVIEW
                 if currentStatus == .LOCKED || currentStatus == .IN_REVIEW {
                     initialHandOverDate = newHandoverDate
-                }
-                
-                // If maintenance date is not set or is before new handover date, update it to 1 month from handover
-                let calendar = Calendar.current
-                let handover = calendar.startOfDay(for: newHandoverDate)
-                let maintenance = calendar.startOfDay(for: maintenanceDate)
-                
-                if maintenance <= handover {
-                    let newMaintenanceDate = calendar.date(byAdding: .month, value: 1, to: newHandoverDate) ?? newHandoverDate
-                    let newMaintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
-                    
-                    try await FirebasePathHelper.shared
-                        .projectDocument(customerId: customerId, projectId: projectId)
-                        .updateData([
-                            "maintenanceDate": newMaintenanceDateStr,
-                            "updatedAt": Timestamp()
-                        ])
-                    
-                    maintenanceDate = newMaintenanceDate
                 }
                 
                 isEditingHandoverDate = false
@@ -733,12 +744,38 @@ class AdminProjectDetailViewModel: ObservableObject {
                 
                 let maintenanceDateStr = dateFormatter.string(from: newMaintenanceDate)
                 
+                var updateData: [String: Any] = [
+                    "maintenanceDate": maintenanceDateStr,
+                    "updatedAt": Timestamp()
+                ]
+                
+                let calendar = Calendar.current
+                let today = calendar.startOfDay(for: Date())
+                let maintenance = calendar.startOfDay(for: newMaintenanceDate)
+                let handover = calendar.startOfDay(for: handoverDate)
+                
+                // Check project status - only apply status changes if not IN_REVIEW or LOCKED
+                let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .LOCKED
+                
+                // Logic for status changes (only if status is not IN_REVIEW or LOCKED)
+                if currentStatus != .IN_REVIEW && currentStatus != .LOCKED {
+                    // If maintenance date >= today's date
+                    if maintenance >= today {
+                        // If handover date < today's date: change status to MAINTENANCE
+                        // Else: change status to ACTIVE
+                        if handover < today {
+                            updateData["status"] = ProjectStatus.MAINTENANCE.rawValue
+                            projectStatus = ProjectStatus.MAINTENANCE.rawValue
+                        } else {
+                            updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                            projectStatus = ProjectStatus.ACTIVE.rawValue
+                        }
+                    }
+                }
+                
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
-                    .updateData([
-                        "maintenanceDate": maintenanceDateStr,
-                        "updatedAt": Timestamp()
-                    ])
+                    .updateData(updateData)
                 
                 maintenanceDate = newMaintenanceDate
                 isEditingMaintenanceDate = false
