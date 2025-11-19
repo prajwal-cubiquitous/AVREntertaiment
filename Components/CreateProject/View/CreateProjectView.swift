@@ -39,27 +39,7 @@ struct CreateProjectView: View {
         NavigationView {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: DesignSystem.Spacing.medium) {
-                        // MARK: - Draft Management Section
-                        draftManagementSection
-                        
-                        // MARK: - Project Information
-                        projectDetailsSectionScrollView
-                        
-                        // MARK: - Phases Section
-                        phasesSectionScrollView
-                        
-                        // MARK: - Project Team Section
-                        projectTeamSectionScrollView
-                        
-                        // MARK: - Attachment Section
-//                        attachmentSectionScrollView
-                        
-                        // MARK: - Submit Action
-                        submitSectionScrollView
-                    }
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                    .padding(.vertical, DesignSystem.Spacing.medium)
+                    mainContent
                 }
                 .background(Color(.systemGroupedBackground))
                 .navigationTitle(projectToEdit != nil ? "Edit Project" : "New Project")
@@ -600,6 +580,84 @@ struct CreateProjectView: View {
             submitButton
                 .padding(.vertical, DesignSystem.Spacing.small)
         }
+    }
+    
+    // MARK: - Main Content
+    private var mainContent: some View {
+        VStack(spacing: DesignSystem.Spacing.medium) {
+            // MARK: - Rejection Reason Banner (if project is REVIEW_REJECTED)
+            if shouldShowRejectionBanner {
+                rejectionReasonBanner(reason: rejectionReasonText)
+            }
+            
+            // MARK: - Draft Management Section
+            draftManagementSection
+            
+            // MARK: - Project Information
+            projectDetailsSectionScrollView
+            
+            // MARK: - Phases Section
+            phasesSectionScrollView
+            
+            // MARK: - Project Team Section
+            projectTeamSectionScrollView
+            
+            // MARK: - Attachment Section
+//            attachmentSectionScrollView
+            
+            // MARK: - Submit Action
+            submitSectionScrollView
+        }
+        .padding(.horizontal, DesignSystem.Spacing.medium)
+        .padding(.vertical, DesignSystem.Spacing.medium)
+    }
+    
+    // MARK: - Rejection Banner Helpers
+    private var shouldShowRejectionBanner: Bool {
+        guard let project = projectToEdit,
+              project.statusType == .REVIEW_REJECTED,
+              let reason = project.rejectionReason,
+              !reason.isEmpty else {
+            return false
+        }
+        return true
+    }
+    
+    private var rejectionReasonText: String {
+        projectToEdit?.rejectionReason ?? ""
+    }
+    
+    // MARK: - Rejection Reason Banner
+    private func rejectionReasonBanner(reason: String) -> some View {
+        HStack(alignment: .top, spacing: DesignSystem.Spacing.small) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.title3)
+                .foregroundColor(.red)
+                .symbolRenderingMode(.hierarchical)
+            
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                Text("Rejection Reason")
+                    .font(DesignSystem.Typography.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.red)
+                
+                Text(reason)
+                    .font(DesignSystem.Typography.body)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+        .padding(DesignSystem.Spacing.medium)
+        .background(
+            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                .fill(Color.red.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                )
+        )
     }
     
     // MARK: - ScrollView Compatible Sections

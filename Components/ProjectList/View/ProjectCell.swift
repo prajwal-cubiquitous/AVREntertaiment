@@ -119,7 +119,7 @@ struct ProjectCell: View {
                             HapticManager.selection()
                             showFullNamePopup = true
                         }) {
-                            Text("...")
+                            Text("")
                                 .font(DesignSystem.Typography.title3)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.blue)
@@ -513,12 +513,12 @@ extension ProjectStatus {
     
     var displayText: String {
         switch self {
-        case .ACTIVE: return "Active"
-        case .COMPLETED: return "Completed"
+        case .ACTIVE: return "ACTIVE"
+        case .COMPLETED: return "COMPLETED"
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
         case .SUSPENDED: return "SUSPENDED"
-        case .REVIEW_REJECTED: return "REVIEW REJECTED"
+        case .REVIEW_REJECTED: return "DECLINED"
         case .MAINTENANCE: return "MAINTENANCE"
         case .ARCHIVE: return "ARCHIVE"
         }
