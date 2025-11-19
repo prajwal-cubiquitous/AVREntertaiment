@@ -442,9 +442,14 @@ class AdminProjectDetailViewModel: ObservableObject {
             }
             
         case .MAINTENANCE:
-            let handover = calendar.startOfDay(for: handoverDate)
-            if handover > today {
-                dateChanges.append("Handover Date")
+            // If changing from COMPLETED to MAINTENANCE, maintenance date will be set to 1 month from now
+            if currentStatus == .COMPLETED {
+                dateChanges.append("Maintenance Date")
+            } else {
+                let handover = calendar.startOfDay(for: handoverDate)
+                if handover > today {
+                    dateChanges.append("Handover Date")
+                }
             }
             
         case .COMPLETED:
@@ -464,7 +469,14 @@ class AdminProjectDetailViewModel: ObservableObject {
         // If dates will change, show confirmation alert
         if !dateChanges.isEmpty {
             let dateList = dateChanges.joined(separator: " and ")
-            statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to yesterday's date (to reflect immediately in UI). Do you want to continue?"
+            
+            // Customize message based on the status change
+            if newStatus == .MAINTENANCE && currentStatus == .COMPLETED {
+                statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to 1 month from now. Do you want to continue?"
+            } else {
+                statusChangeMessage = "Changing status to \(newStatus.rawValue) will automatically update the \(dateList) to yesterday's date (to reflect immediately in UI). Do you want to continue?"
+            }
+            
             pendingStatusChange = newStatus
             showStatusChangeConfirmation = true
         } else {
@@ -527,6 +539,21 @@ class AdminProjectDetailViewModel: ObservableObject {
                     }
                     
                 case .MAINTENANCE:
+                    // If changing from COMPLETED to MAINTENANCE, set maintenance date to 1 month from now
+                    if currentStatus == .COMPLETED {
+                        let oneMonthFromNow = calendar.date(byAdding: .month, value: 1, to: today) ?? today
+                        updatedMaintenanceDate = oneMonthFromNow
+                        updateData["maintenanceDate"] = dateFormatter.string(from: oneMonthFromNow)
+                    } else {
+                        // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
+                        let handover = calendar.startOfDay(for: handoverDate)
+                        if handover > today {
+                            updatedHandoverDate = yesterday
+                            updateData["handoverDate"] = dateFormatter.string(from: yesterday)
+                        }
+                    }
+                    
+                case .COMPLETED:
                     // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
                     let handover = calendar.startOfDay(for: handoverDate)
                     if handover > today {
@@ -534,40 +561,17 @@ class AdminProjectDetailViewModel: ObservableObject {
                         updateData["handoverDate"] = dateFormatter.string(from: yesterday)
                     }
                     
-                case .COMPLETED:
-                    // Only apply date changes when changing from ACTIVE to COMPLETED
-                    if currentStatus == .ACTIVE {
-                        // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
-                        let handover = calendar.startOfDay(for: handoverDate)
-                        if handover > today {
-                            updatedHandoverDate = yesterday
-                            updateData["handoverDate"] = dateFormatter.string(from: yesterday)
-                        }
-                        
-                        // If maintenanceDate > current date, set maintenanceDate = yesterday (to reflect immediately)
-                        let maintenance = calendar.startOfDay(for: maintenanceDate)
-                        if maintenance > today {
-                            updatedMaintenanceDate = yesterday
-                            updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
-                        }
-                        
-                        // Update all phase end dates that are in future to yesterday
-                        // Update phase start dates that are in future to 2 days back
-                        await updatePhasesForCompletedStatus(projectId: projectId, customerId: customerId, yesterday: yesterday, twoDaysBack: calendar.date(byAdding: .day, value: -2, to: today) ?? yesterday)
-                    } else {
-                        // For other status changes to COMPLETED, still update dates if in future
-                        let handover = calendar.startOfDay(for: handoverDate)
-                        if handover > today {
-                            updatedHandoverDate = yesterday
-                            updateData["handoverDate"] = dateFormatter.string(from: yesterday)
-                        }
-                        
-                        let maintenance = calendar.startOfDay(for: maintenanceDate)
-                        if maintenance > today {
-                            updatedMaintenanceDate = yesterday
-                            updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
-                        }
+                    // If maintenanceDate > current date, set maintenanceDate = yesterday (to reflect immediately)
+                    let maintenance = calendar.startOfDay(for: maintenanceDate)
+                    if maintenance > today {
+                        updatedMaintenanceDate = yesterday
+                        updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
                     }
+                    
+                    // Update all phase end dates that are in future to yesterday
+                    // Update phase start dates that are in future to 2 days back
+                    // This applies to ALL status changes to COMPLETED (not just from ACTIVE)
+                    await updatePhasesForCompletedStatus(projectId: projectId, customerId: customerId, yesterday: yesterday, twoDaysBack: calendar.date(byAdding: .day, value: -2, to: today) ?? yesterday)
                     
                 default:
                     break
