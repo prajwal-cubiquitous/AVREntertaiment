@@ -1938,7 +1938,6 @@ struct DashboardView: View {
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData([
-                        "status": ProjectStatus.ACTIVE.rawValue,
                         "plannedDate": startDateStr,
                         "updatedAt": Timestamp()
                     ])
@@ -3306,6 +3305,7 @@ private struct AllPhasesView: View {
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData([
+                        "status": ProjectStatus.ACTIVE.rawValue,
                         "plannedDate": startDateStr,
                         "updatedAt": Timestamp()
                     ])
@@ -3624,7 +3624,7 @@ private struct AllPhasesView: View {
             }
             
             // 3-dot menu for Start Now (for future phases, available for all roles, hidden when archived)
-            if isPhaseInFuture(phase) && project?.statusType != .ARCHIVE &&  project?.isSuspended == false {
+            if isPhaseInFuture(phase) && project?.statusType != .ARCHIVE &&  project?.isSuspended != true {
                 Menu {
                     Button {
                         HapticManager.selection()
