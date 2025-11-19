@@ -587,7 +587,9 @@ struct DashboardView: View {
             }
         } message: {
             if let phase = phaseToComplete {
-                Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
+                let calendar = Calendar.current
+                let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+                Text("This stage will be closed immediately. Users cannot add any expense to this phase. The phase end date will be set to yesterday (\(phaseDateFormatter.string(from: yesterday))).")
             }
         }
         .alert("Start Phase Now", isPresented: $showingStartNowConfirmation) {
@@ -1149,7 +1151,7 @@ struct DashboardView: View {
                                             Spacer()
                                             
                                             // 3-dot menu for Complete Phase (available for all roles, hidden when archived)
-                                            if project?.statusType != .ARCHIVE && project?.isSuspended == false{
+                                            if project?.statusType != .ARCHIVE && project?.isSuspended != true{
                                                 Menu {
                                                     Button(role: .destructive) {
                                                         HapticManager.selection()
@@ -1998,11 +2000,12 @@ struct DashboardView: View {
         }
         
         do {
-            // Format today's date as end date
-            let today = Date()
-            let endDateStr = phaseDateFormatter.string(from: today)
+            // Format yesterday's date as end date (to ensure phase is marked as completed immediately)
+            let calendar = Calendar.current
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+            let endDateStr = phaseDateFormatter.string(from: yesterday)
             
-            // Update phase end date to today
+            // Update phase end date to yesterday
             try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .document(phase.id)
@@ -3371,11 +3374,12 @@ private struct AllPhasesView: View {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
             
-            // Format today's date as end date
-            let today = Date()
-            let endDateStr = dateFormatter.string(from: today)
+            // Format yesterday's date as end date (to ensure phase is marked as completed immediately)
+            let calendar = Calendar.current
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+            let endDateStr = dateFormatter.string(from: yesterday)
             
-            // Update phase end date to today
+            // Update phase end date to yesterday
             try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .document(phase.id)
@@ -3602,7 +3606,7 @@ private struct AllPhasesView: View {
                 HStack{
                     Spacer()
             // 3-dot menu for Complete Phase (available for all roles, only for active phases, hidden when archived)
-            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && project?.statusType != .ARCHIVE && project?.isSuspended == false {
+            if isPhaseInProgress(phase) && (phaseEnabledMap[phase.id] ?? true) && project?.statusType != .ARCHIVE && project?.isSuspended != true {
                 Menu {
                     Button(role: .destructive) {
                         HapticManager.selection()
@@ -3907,7 +3911,9 @@ private struct AllPhasesView: View {
             }
         } message: {
             if let phase = phaseToComplete {
-                Text("From tomorrow, this stage will be closed. Users cannot add any expense to this phase. The phase end date will be set to today (\(phaseDateFormatter.string(from: Date()))).")
+                let calendar = Calendar.current
+                let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+                Text("This stage will be closed immediately. Users cannot add any expense to this phase. The phase end date will be set to yesterday (\(phaseDateFormatter.string(from: yesterday))).")
             }
         }
         .alert("Start Phase Now", isPresented: $showingStartNowConfirmation) {
