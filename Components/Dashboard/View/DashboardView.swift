@@ -368,35 +368,35 @@ struct DashboardView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: DesignSystem.Spacing.medium) {
                     // FCM Notifications Button (for APPROVER and ADMIN roles)
-//                    if role == .APPROVER || role == .ADMIN {
-//                        Button {
-//                            HapticManager.selection()
-//                            showingNotifications = true
-//                        } label: {
-//                            ZStack(alignment: .topTrailing) {
-//                                Image(systemName: "bell")
-//                                    .font(.title3)
-//                                    .foregroundColor(.primary)
-//                                
-//                                if notificationViewModel.unreadNotificationCount > 0 {
-//                                    Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
-//                                        .font(.system(size: 11, weight: .bold))
-//                                        .foregroundColor(.white)
-//                                        .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
-//                                        .padding(.vertical, 2)
-//                                        .background(Color.red)
-//                                        .clipShape(Capsule())
-//                                        .overlay(
-//                                            Capsule()
-//                                                .stroke(Color.white, lineWidth: 1.5)
-//                                        )
-//                                        .offset(x: 8, y: -8)
-//                                        .minimumScaleFactor(0.5)
-//                                        .lineLimit(1)
-//                                }
-//                            }
-//                        }
-//                    }
+                    if role == .APPROVER || role == .ADMIN {
+                        Button {
+                            HapticManager.selection()
+                            showingNotifications = true
+                        } label: {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+                                    .font(.title3)
+                                    .foregroundColor(.primary)
+                                
+                                if notificationViewModel.unreadNotificationCount > 0 {
+                                    Text(notificationViewModel.unreadNotificationCount > 99 ? "99+" : "\(notificationViewModel.unreadNotificationCount)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, notificationViewModel.unreadNotificationCount > 99 ? 4 : 5)
+                                        .padding(.vertical, 2)
+                                        .background(Color.red)
+                                        .clipShape(Capsule())
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color.white, lineWidth: 1.5)
+                                        )
+                                        .offset(x: 8, y: -8)
+                                        .minimumScaleFactor(0.5)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
                     
                     // Phase Request Notification Button (Admin only, before pencil)
                     if role == .ADMIN {
