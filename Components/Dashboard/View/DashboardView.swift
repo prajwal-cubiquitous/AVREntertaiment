@@ -4820,6 +4820,7 @@ private struct AddPhaseSheet: View {
     private enum DateConfirmationType {
         case handoverAndMaintenance
         case handoverOnly
+        case maintenanceOnly
     }
     
     private var dateFormatter: DateFormatter {
@@ -5229,6 +5230,8 @@ private struct AddPhaseSheet: View {
                 let dateStr = pendingEndDate != nil ? dateFormatter.string(from: pendingEndDate!) : ""
                 if dateConfirmationType == .handoverAndMaintenance {
                     Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Handover date and maintenance date will be set to \(dateStr).")
+                } else if dateConfirmationType == .maintenanceOnly {
+                    Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Maintenance date will be set to \(dateStr) and project status will be set to MAINTENANCE.")
                 } else {
                     Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
                 }
@@ -5376,30 +5379,51 @@ private struct AddPhaseSheet: View {
                     currentMaintenanceDate = calendar.startOfDay(for: maintenanceDate)
                 }
                 
-                // Check conditions
-                // Note: Handover date should always be <= maintenance date
-                // So if selected end date > maintenance date, we must update both dates
-                if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
-                    // Selected end date > maintenance date: Update both handover and maintenance
-                    // (handover must be <= maintenance, so both need to be updated)
-                    await MainActor.run {
-                        dateConfirmationType = .handoverAndMaintenance
-                        pendingEndDate = endDate
-                        showDateConfirmation = true
-                    }
-                } else if let handoverDate = currentHandoverDate,
-                          selectedEndDate > handoverDate,
-                          (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
-                    // Selected end date > handover date and <= maintenance date: Update only handover
-                    // (maintenance date remains unchanged since selected date <= maintenance)
-                    await MainActor.run {
-                        dateConfirmationType = .handoverOnly
-                        pendingEndDate = endDate
-                        showDateConfirmation = true
+                // Check project status
+                let projectStatus = project.statusType
+                
+                // NEW LOGIC: If project status is MAINTENANCE or COMPLETED
+                if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                    // Only update maintenance date (not handover date)
+                    // Set status to MAINTENANCE
+                    if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                        // Selected end date > maintenance date: Update only maintenance date
+                        await MainActor.run {
+                            dateConfirmationType = .maintenanceOnly
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else {
+                        // No maintenance date update needed, but still proceed with save
+                        // Status will be set to MAINTENANCE in updateProjectDates
+                        await proceedWithSave(shouldUpdateHandover: false, shouldUpdateMaintenance: false, shouldSetMaintenanceStatus: true)
                     }
                 } else {
-                    // No date updates needed, proceed with normal save
-                    await proceedWithSave()
+                    // EXISTING LOGIC: For all other statuses, work as before
+                    // Note: Handover date should always be <= maintenance date
+                    // So if selected end date > maintenance date, we must update both dates
+                    if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                        // Selected end date > maintenance date: Update both handover and maintenance
+                        // (handover must be <= maintenance, so both need to be updated)
+                        await MainActor.run {
+                            dateConfirmationType = .handoverAndMaintenance
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else if let handoverDate = currentHandoverDate,
+                              selectedEndDate > handoverDate,
+                              (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
+                        // Selected end date > handover date and <= maintenance date: Update only handover
+                        // (maintenance date remains unchanged since selected date <= maintenance)
+                        await MainActor.run {
+                            dateConfirmationType = .handoverOnly
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else {
+                        // No date updates needed, proceed with normal save
+                        await proceedWithSave()
+                    }
                 }
                 
             } catch {
@@ -5410,7 +5434,7 @@ private struct AddPhaseSheet: View {
         }
     }
     
-    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false) {
+    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false, shouldSetMaintenanceStatus: Bool = false) {
         isSaving = true
         errorMessage = nil
         
@@ -5437,13 +5461,14 @@ private struct AddPhaseSheet: View {
                 let endDateStr = dateFormatter.string(from: endDate)
                 
                 // Update project dates if needed (before creating phase)
-                if shouldUpdateHandover || shouldUpdateMaintenance {
+                if shouldUpdateHandover || shouldUpdateMaintenance || shouldSetMaintenanceStatus {
                     await updateProjectDates(
                         projectId: projectId,
                         customerId: customerId,
                         newDate: endDate,
                         updateHandover: shouldUpdateHandover,
-                        updateMaintenance: shouldUpdateMaintenance
+                        updateMaintenance: shouldUpdateMaintenance,
+                        shouldSetMaintenanceStatus: shouldSetMaintenanceStatus
                     )
                 }
                 
@@ -5533,6 +5558,13 @@ private struct AddPhaseSheet: View {
                 return
             }
             
+            // NEW LOGIC: Don't update handover date if project status is MAINTENANCE or COMPLETED
+            let projectStatus = project.statusType
+            if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                print("Skipping handover date update - project is in MAINTENANCE or COMPLETED status")
+                return
+            }
+            
             let phasesSnapshot = try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .getDocuments()
@@ -5573,7 +5605,6 @@ private struct AddPhaseSheet: View {
                     ]
                     
                     // Check project status - if LOCKED or IN_REVIEW, update both fields
-                    let projectStatus = project.statusType
                     if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
                         updateData["initialHandOverDate"] = handoverDateStr
                     }
@@ -5590,7 +5621,6 @@ private struct AddPhaseSheet: View {
                     ]
                     
                     // Check project status - if LOCKED or IN_REVIEW, update both fields
-                    let projectStatus = project.statusType
                     if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
                         updateData["initialHandOverDate"] = handoverDateStr
                     } else {
@@ -5611,7 +5641,7 @@ private struct AddPhaseSheet: View {
     }
     
     // Helper function to update project dates directly
-    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool) async {
+    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool, shouldSetMaintenanceStatus: Bool = false) async {
         do {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
@@ -5631,6 +5661,15 @@ private struct AddPhaseSheet: View {
             var updateData: [String: Any] = [
                 "updatedAt": Timestamp()
             ]
+            
+            // NEW LOGIC: If shouldSetMaintenanceStatus is true, set status to MAINTENANCE
+            if shouldSetMaintenanceStatus {
+                let projectStatus = project.statusType
+                // Only set to MAINTENANCE if current status is MAINTENANCE or COMPLETED
+                if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                    updateData["status"] = ProjectStatus.MAINTENANCE.rawValue
+                }
+            }
             
             if updateHandover {
                 updateData["handoverDate"] = newDateStr
@@ -5663,10 +5702,11 @@ private struct AddPhaseSheet: View {
         
         // Determine which dates to update
         let shouldUpdateHandover = dateConfirmationType == .handoverOnly || dateConfirmationType == .handoverAndMaintenance
-        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance
+        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance || dateConfirmationType == .maintenanceOnly
+        let shouldSetMaintenanceStatus = dateConfirmationType == .maintenanceOnly
         
         // Proceed with save
-        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance)
+        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance, shouldSetMaintenanceStatus: shouldSetMaintenanceStatus)
         
         // Reset confirmation state
         showDateConfirmation = false
@@ -5711,6 +5751,7 @@ private struct EditPhaseSheet: View {
     private enum DateConfirmationType {
         case handoverAndMaintenance
         case handoverOnly
+        case maintenanceOnly
     }
     
     private var dateFormatter: DateFormatter {
@@ -5866,6 +5907,8 @@ private struct EditPhaseSheet: View {
                 let dateStr = pendingEndDate != nil ? dateFormatter.string(from: pendingEndDate!) : ""
                 if dateConfirmationType == .handoverAndMaintenance {
                     Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Handover date and maintenance date will be set to \(dateStr).")
+                } else if dateConfirmationType == .maintenanceOnly {
+                    Text("The selected end date (\(dateStr)) is greater than the current maintenance date. Maintenance date will be set to \(dateStr) and project status will be set to MAINTENANCE.")
                 } else {
                     Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
                 }
@@ -5964,30 +6007,51 @@ private struct EditPhaseSheet: View {
                     currentMaintenanceDate = calendar.startOfDay(for: maintenanceDate)
                 }
                 
-                // Check conditions
-                // Note: Handover date should always be <= maintenance date
-                // So if selected end date > maintenance date, we must update both dates
-                if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
-                    // Selected end date > maintenance date: Update both handover and maintenance
-                    // (handover must be <= maintenance, so both need to be updated)
-                    await MainActor.run {
-                        dateConfirmationType = .handoverAndMaintenance
-                        pendingEndDate = endDate
-                        showDateConfirmation = true
-                    }
-                } else if let handoverDate = currentHandoverDate,
-                          selectedEndDate > handoverDate,
-                          (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
-                    // Selected end date > handover date and <= maintenance date: Update only handover
-                    // (maintenance date remains unchanged since selected date <= maintenance)
-                    await MainActor.run {
-                        dateConfirmationType = .handoverOnly
-                        pendingEndDate = endDate
-                        showDateConfirmation = true
+                // Check project status
+                let projectStatus = project.statusType
+                
+                // NEW LOGIC: If project status is MAINTENANCE or COMPLETED
+                if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                    // Only update maintenance date (not handover date)
+                    // Set status to MAINTENANCE
+                    if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                        // Selected end date > maintenance date: Update only maintenance date
+                        await MainActor.run {
+                            dateConfirmationType = .maintenanceOnly
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else {
+                        // No maintenance date update needed, but still proceed with save
+                        // Status will be set to MAINTENANCE in updateProjectDates
+                        await proceedWithSave(shouldUpdateHandover: false, shouldUpdateMaintenance: false, shouldSetMaintenanceStatus: true)
                     }
                 } else {
-                    // No date updates needed, proceed with normal save
-                    await proceedWithSave()
+                    // EXISTING LOGIC: For all other statuses, work as before
+                    // Note: Handover date should always be <= maintenance date
+                    // So if selected end date > maintenance date, we must update both dates
+                    if let maintenanceDate = currentMaintenanceDate, selectedEndDate > maintenanceDate {
+                        // Selected end date > maintenance date: Update both handover and maintenance
+                        // (handover must be <= maintenance, so both need to be updated)
+                        await MainActor.run {
+                            dateConfirmationType = .handoverAndMaintenance
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else if let handoverDate = currentHandoverDate,
+                              selectedEndDate > handoverDate,
+                              (currentMaintenanceDate == nil || selectedEndDate <= currentMaintenanceDate!) {
+                        // Selected end date > handover date and <= maintenance date: Update only handover
+                        // (maintenance date remains unchanged since selected date <= maintenance)
+                        await MainActor.run {
+                            dateConfirmationType = .handoverOnly
+                            pendingEndDate = endDate
+                            showDateConfirmation = true
+                        }
+                    } else {
+                        // No date updates needed, proceed with normal save
+                        await proceedWithSave()
+                    }
                 }
                 
             } catch {
@@ -5998,7 +6062,7 @@ private struct EditPhaseSheet: View {
         }
     }
     
-    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false) {
+    private func proceedWithSave(shouldUpdateHandover: Bool = false, shouldUpdateMaintenance: Bool = false, shouldSetMaintenanceStatus: Bool = false) {
         isSaving = true
         errorMessage = nil
         
@@ -6031,13 +6095,14 @@ private struct EditPhaseSheet: View {
                 let endDateChanged = previousEndDateStr != endDateStr
                 
                 // Update project dates if needed (before updating phase)
-                if shouldUpdateHandover || shouldUpdateMaintenance {
+                if shouldUpdateHandover || shouldUpdateMaintenance || shouldSetMaintenanceStatus {
                     await updateProjectDates(
                         projectId: projectId,
                         customerId: customerId,
                         newDate: endDate,
                         updateHandover: shouldUpdateHandover,
-                        updateMaintenance: shouldUpdateMaintenance
+                        updateMaintenance: shouldUpdateMaintenance,
+                        shouldSetMaintenanceStatus: shouldSetMaintenanceStatus
                     )
                 }
                 
@@ -6129,6 +6194,13 @@ private struct EditPhaseSheet: View {
                 return
             }
             
+            // NEW LOGIC: Don't update handover date if project status is MAINTENANCE or COMPLETED
+            let projectStatus = project.statusType
+            if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                print("Skipping handover date update - project is in MAINTENANCE or COMPLETED status")
+                return
+            }
+            
             let phasesSnapshot = try await FirebasePathHelper.shared
                 .phasesCollection(customerId: customerId, projectId: projectId)
                 .getDocuments()
@@ -6169,7 +6241,6 @@ private struct EditPhaseSheet: View {
                     ]
                     
                     // Check project status - if LOCKED or IN_REVIEW, update both fields
-                    let projectStatus = project.statusType
                     if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
                         updateData["initialHandOverDate"] = handoverDateStr
                     }
@@ -6186,7 +6257,6 @@ private struct EditPhaseSheet: View {
                     ]
                     
                     // Check project status - if LOCKED or IN_REVIEW, update both fields
-                    let projectStatus = project.statusType
                     if projectStatus == .LOCKED || projectStatus == .IN_REVIEW {
                         updateData["initialHandOverDate"] = handoverDateStr
                     } else {
@@ -6207,7 +6277,7 @@ private struct EditPhaseSheet: View {
     }
     
     // Helper function to update project dates directly
-    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool) async {
+    private func updateProjectDates(projectId: String, customerId: String, newDate: Date, updateHandover: Bool, updateMaintenance: Bool, shouldSetMaintenanceStatus: Bool = false) async {
         do {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
@@ -6227,6 +6297,15 @@ private struct EditPhaseSheet: View {
             var updateData: [String: Any] = [
                 "updatedAt": Timestamp()
             ]
+            
+            // NEW LOGIC: If shouldSetMaintenanceStatus is true, set status to MAINTENANCE
+            if shouldSetMaintenanceStatus {
+                let projectStatus = project.statusType
+                // Only set to MAINTENANCE if current status is MAINTENANCE or COMPLETED
+                if projectStatus == .MAINTENANCE || projectStatus == .COMPLETED {
+                    updateData["status"] = ProjectStatus.MAINTENANCE.rawValue
+                }
+            }
             
             if updateHandover {
                 updateData["handoverDate"] = newDateStr
@@ -6259,10 +6338,11 @@ private struct EditPhaseSheet: View {
         
         // Determine which dates to update
         let shouldUpdateHandover = dateConfirmationType == .handoverOnly || dateConfirmationType == .handoverAndMaintenance
-        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance
+        let shouldUpdateMaintenance = dateConfirmationType == .handoverAndMaintenance || dateConfirmationType == .maintenanceOnly
+        let shouldSetMaintenanceStatus = dateConfirmationType == .maintenanceOnly
         
         // Proceed with save
-        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance)
+        proceedWithSave(shouldUpdateHandover: shouldUpdateHandover, shouldUpdateMaintenance: shouldUpdateMaintenance, shouldSetMaintenanceStatus: shouldSetMaintenanceStatus)
         
         // Reset confirmation state
         showDateConfirmation = false
