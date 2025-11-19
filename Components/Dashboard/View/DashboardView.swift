@@ -1938,6 +1938,7 @@ struct DashboardView: View {
                 try await FirebasePathHelper.shared
                     .projectDocument(customerId: customerId, projectId: projectId)
                     .updateData([
+                        "status": ProjectStatus.ACTIVE.rawValue,
                         "plannedDate": startDateStr,
                         "updatedAt": Timestamp()
                     ])
@@ -5460,6 +5461,13 @@ private struct AddPhaseSheet: View {
                 let startDateStr = dateFormatter.string(from: startDate)
                 let endDateStr = dateFormatter.string(from: endDate)
                 
+                // NEW LOGIC: Check project status and plannedDate before creating phase
+                await checkAndUpdateProjectStatusAndPlannedDate(
+                    projectId: projectId,
+                    customerId: customerId,
+                    phaseStartDate: startDate
+                )
+                
                 // Update project dates if needed (before creating phase)
                 if shouldUpdateHandover || shouldUpdateMaintenance || shouldSetMaintenanceStatus {
                     await updateProjectDates(
@@ -5515,6 +5523,68 @@ private struct AddPhaseSheet: View {
                     errorMessage = "Failed to save phase: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Helper function to check and update project status and plannedDate based on phase start date
+    private func checkAndUpdateProjectStatusAndPlannedDate(projectId: String, customerId: String, phaseStartDate: Date) async {
+        do {
+            // Fetch project to check status and plannedDate
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found in checkAndUpdateProjectStatusAndPlannedDate")
+                return
+            }
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            let phaseStart = calendar.startOfDay(for: phaseStartDate)
+            
+            var updateData: [String: Any] = [
+                "updatedAt": Timestamp()
+            ]
+            var needsUpdate = false
+            
+            // LOGIC 1: If project status is LOCKED and phase start date <= today, change status to ACTIVE
+            let projectStatus = project.statusType
+            if projectStatus == .LOCKED && phaseStart <= today {
+                updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                needsUpdate = true
+                print("Updating project status from LOCKED to ACTIVE - phase start date (\(dateFormatter.string(from: phaseStartDate))) is <= today")
+            }
+            
+            // LOGIC 2: If plannedDate > phase start date, update plannedDate to phase start date
+            if let plannedDateStr = project.plannedDate,
+               let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                let plannedDateStart = calendar.startOfDay(for: plannedDate)
+                
+                if plannedDateStart > phaseStart {
+                    updateData["plannedDate"] = dateFormatter.string(from: phaseStartDate)
+                    needsUpdate = true
+                    print("Updating plannedDate from \(plannedDateStr) to \(dateFormatter.string(from: phaseStartDate)) - phase start date is earlier")
+                }
+            } else {
+                // If no plannedDate exists, set it to phase start date
+                updateData["plannedDate"] = dateFormatter.string(from: phaseStartDate)
+                needsUpdate = true
+                print("Setting plannedDate to phase start date: \(dateFormatter.string(from: phaseStartDate))")
+            }
+            
+            // Update project if needed
+            if needsUpdate {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(updateData)
+            }
+        } catch {
+            print("Error in checkAndUpdateProjectStatusAndPlannedDate: \(error.localizedDescription)")
         }
     }
     
@@ -6094,6 +6164,15 @@ private struct EditPhaseSheet: View {
                 let startDateChanged = previousStartDateStr != startDateStr
                 let endDateChanged = previousEndDateStr != endDateStr
                 
+                // NEW LOGIC: Check project status and plannedDate before updating phase (only if start date changed)
+                if startDateChanged {
+                    await checkAndUpdateProjectStatusAndPlannedDate(
+                        projectId: projectId,
+                        customerId: customerId,
+                        phaseStartDate: startDate
+                    )
+                }
+                
                 // Update project dates if needed (before updating phase)
                 if shouldUpdateHandover || shouldUpdateMaintenance || shouldSetMaintenanceStatus {
                     await updateProjectDates(
@@ -6151,6 +6230,68 @@ private struct EditPhaseSheet: View {
                     errorMessage = "Failed to update phase: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Helper function to check and update project status and plannedDate based on phase start date
+    private func checkAndUpdateProjectStatusAndPlannedDate(projectId: String, customerId: String, phaseStartDate: Date) async {
+        do {
+            // Fetch project to check status and plannedDate
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            guard projectDoc.exists,
+                  let project = try? projectDoc.data(as: Project.self) else {
+                print("Error: Project not found in checkAndUpdateProjectStatusAndPlannedDate")
+                return
+            }
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            let phaseStart = calendar.startOfDay(for: phaseStartDate)
+            
+            var updateData: [String: Any] = [
+                "updatedAt": Timestamp()
+            ]
+            var needsUpdate = false
+            
+            // LOGIC 1: If project status is LOCKED and phase start date <= today, change status to ACTIVE
+            let projectStatus = project.statusType
+            if projectStatus == .LOCKED && phaseStart <= today {
+                updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                needsUpdate = true
+                print("Updating project status from LOCKED to ACTIVE - phase start date (\(dateFormatter.string(from: phaseStartDate))) is <= today")
+            }
+            
+            // LOGIC 2: If plannedDate > phase start date, update plannedDate to phase start date
+            if let plannedDateStr = project.plannedDate,
+               let plannedDate = dateFormatter.date(from: plannedDateStr) {
+                let plannedDateStart = calendar.startOfDay(for: plannedDate)
+                
+                if plannedDateStart > phaseStart {
+                    updateData["plannedDate"] = dateFormatter.string(from: phaseStartDate)
+                    needsUpdate = true
+                    print("Updating plannedDate from \(plannedDateStr) to \(dateFormatter.string(from: phaseStartDate)) - phase start date is earlier")
+                }
+            } else {
+                // If no plannedDate exists, set it to phase start date
+                updateData["plannedDate"] = dateFormatter.string(from: phaseStartDate)
+                needsUpdate = true
+                print("Setting plannedDate to phase start date: \(dateFormatter.string(from: phaseStartDate))")
+            }
+            
+            // Update project if needed
+            if needsUpdate {
+                try await FirebasePathHelper.shared
+                    .projectDocument(customerId: customerId, projectId: projectId)
+                    .updateData(updateData)
+            }
+        } catch {
+            print("Error in checkAndUpdateProjectStatusAndPlannedDate: \(error.localizedDescription)")
         }
     }
     
