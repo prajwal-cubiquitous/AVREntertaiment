@@ -535,18 +535,38 @@ class AdminProjectDetailViewModel: ObservableObject {
                     }
                     
                 case .COMPLETED:
-                    // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
-                    let handover = calendar.startOfDay(for: handoverDate)
-                    if handover > today {
-                        updatedHandoverDate = yesterday
-                        updateData["handoverDate"] = dateFormatter.string(from: yesterday)
-                    }
-                    
-                    // If maintenanceDate > current date, set maintenanceDate = yesterday (to reflect immediately)
-                    let maintenance = calendar.startOfDay(for: maintenanceDate)
-                    if maintenance > today {
-                        updatedMaintenanceDate = yesterday
-                        updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
+                    // Only apply date changes when changing from ACTIVE to COMPLETED
+                    if currentStatus == .ACTIVE {
+                        // If handoverDate > current date, set handoverDate = yesterday (to reflect immediately)
+                        let handover = calendar.startOfDay(for: handoverDate)
+                        if handover > today {
+                            updatedHandoverDate = yesterday
+                            updateData["handoverDate"] = dateFormatter.string(from: yesterday)
+                        }
+                        
+                        // If maintenanceDate > current date, set maintenanceDate = yesterday (to reflect immediately)
+                        let maintenance = calendar.startOfDay(for: maintenanceDate)
+                        if maintenance > today {
+                            updatedMaintenanceDate = yesterday
+                            updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
+                        }
+                        
+                        // Update all phase end dates that are in future to yesterday
+                        // Update phase start dates that are in future to 2 days back
+                        await updatePhasesForCompletedStatus(projectId: projectId, customerId: customerId, yesterday: yesterday, twoDaysBack: calendar.date(byAdding: .day, value: -2, to: today) ?? yesterday)
+                    } else {
+                        // For other status changes to COMPLETED, still update dates if in future
+                        let handover = calendar.startOfDay(for: handoverDate)
+                        if handover > today {
+                            updatedHandoverDate = yesterday
+                            updateData["handoverDate"] = dateFormatter.string(from: yesterday)
+                        }
+                        
+                        let maintenance = calendar.startOfDay(for: maintenanceDate)
+                        if maintenance > today {
+                            updatedMaintenanceDate = yesterday
+                            updateData["maintenanceDate"] = dateFormatter.string(from: yesterday)
+                        }
                     }
                     
                 default:
@@ -577,6 +597,62 @@ class AdminProjectDetailViewModel: ObservableObject {
                 errorMessage = "Failed to update project status: \(error.localizedDescription)"
                 showError = true
             }
+        }
+    }
+    
+    // MARK: - Update Phases for Completed Status
+    private func updatePhasesForCompletedStatus(projectId: String, customerId: String, yesterday: Date, twoDaysBack: Date) async {
+        do {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "dd/MM/yyyy"
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            
+            // Get all phases for this project
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            // Update each phase
+            for doc in phasesSnapshot.documents {
+                guard let phase = try? doc.data(as: Phase.self) else { continue }
+                
+                var phaseUpdateData: [String: Any] = [:]
+                var needsUpdate = false
+                
+                // Check and update end date if in future
+                if let endDateStr = phase.endDate,
+                   let endDate = dateFormatter.date(from: endDateStr) {
+                    let phaseEnd = calendar.startOfDay(for: endDate)
+                    if phaseEnd > today {
+                        phaseUpdateData["endDate"] = dateFormatter.string(from: yesterday)
+                        needsUpdate = true
+                    }
+                }
+                
+                // Check and update start date if in future
+                if let startDateStr = phase.startDate,
+                   let startDate = dateFormatter.date(from: startDateStr) {
+                    let phaseStart = calendar.startOfDay(for: startDate)
+                    if phaseStart > today {
+                        phaseUpdateData["startDate"] = dateFormatter.string(from: twoDaysBack)
+                        needsUpdate = true
+                    }
+                }
+                
+                // Update phase if needed
+                if needsUpdate {
+                    phaseUpdateData["updatedAt"] = Timestamp()
+                    try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .document(doc.documentID)
+                        .updateData(phaseUpdateData)
+                    
+                    print("✅ Updated phase \(doc.documentID): endDate and/or startDate adjusted for COMPLETED status")
+                }
+            }
+        } catch {
+            print("⚠️ Error updating phases for completed status: \(error.localizedDescription)")
         }
     }
     
