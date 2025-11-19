@@ -15,6 +15,7 @@ struct ProjectCell: View {
     let onReviewTap: (() -> Void)?
     let hasActivePhases: Bool? // Optional: if nil, will check project status only; if true/false, will use this value
     @State private var isPressed = false
+    @State private var showFullNamePopup = false
     
     init(project: Project, role: UserRole?, tempApproverStatus: TempApproverStatus? = nil, onReviewTap: (() -> Void)? = nil, hasActivePhases: Bool? = nil) {
         self.project = project
@@ -68,44 +69,75 @@ struct ProjectCell: View {
         }
     }
     
+    // Computed property for timeline text (planned date to handover date)
+    private var timelineText: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        
+        var startDateStr = "N/A"
+        var endDateStr = "N/A"
+        
+        if let plannedDate = project.plannedDate, !plannedDate.isEmpty {
+            startDateStr = plannedDate
+        }
+        
+        if let handoverDate = project.handoverDate, !handoverDate.isEmpty {
+            endDateStr = handoverDate
+        }
+        
+        return "\(startDateStr) - \(endDateStr)"
+    }
+    
+    // Check if project name is likely truncated (heuristic based on character count)
+    private var isNameTruncated: Bool {
+        // Estimate if name is likely to be truncated based on typical screen width
+        // For title3 font, approximately 30-35 characters fit on iPhone in single line
+        return project.name.count > 30
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            // Header with project name and status
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+            // Top row: Project name and status badges
+            HStack(alignment: .top, spacing: DesignSystem.Spacing.small) {
+                // Project name with truncation
+                HStack(spacing: 4) {
                     Text(project.name)
                         .font(DesignSystem.Typography.title3)
                         .foregroundColor(.primary)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     
-                    if !project.description.isEmpty {
-                        Text(project.description)
-                            .font(DesignSystem.Typography.footnote)
-                            .foregroundColor(.secondary)
-                            .lineLimit(2)
+                    // Show "..." button if name is truncated
+                    if isNameTruncated {
+                        Button(action: {
+                            HapticManager.selection()
+                            showFullNamePopup = true
+                        }) {
+                            Text("...")
+                                .font(DesignSystem.Typography.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.blue)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 
-                Spacer(minLength: DesignSystem.Spacing.small)
+                Spacer(minLength: 8)
                 
-                HStack(spacing: DesignSystem.Spacing.small) {
-                    // Show Suspended status if project is suspended, otherwise show normal status
-                    // Also show SUSPENDED if ACTIVE but no active phases (UI-only override)
+                // Status badges row
+                HStack(spacing: DesignSystem.Spacing.extraSmall) {
                     if project.isSuspended == true {
                         SuspendedStatusView(suspendedDate: project.suspendedDate)
                     } else if displayedStatus == .SUSPENDED && project.statusType == .ACTIVE {
-                        // Show orange SUSPENDED status when ACTIVE but no active phases (UI-only)
                         StatusView(status: .SUSPENDED)
                     } else {
                         StatusView(status: project.statusType)
                     }
                     
-                    // Temp Approver Status Indicator
                     if let tempStatus = tempApproverStatus {
                         TempApproverStatusView(status: tempStatus)
                     }
                     
-                    // Review icon for APPROVER when project is IN_REVIEW
                     if role == .APPROVER && project.statusType == .IN_REVIEW {
                         Button(action: {
                             HapticManager.selection()
@@ -119,7 +151,6 @@ struct ProjectCell: View {
                         .buttonStyle(.plain)
                     }
                     
-                    // Edit button for Admin role (always visible, but editing is restricted inside AdminProjectDetailView for archived projects)
                     if role == .ADMIN {
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
@@ -132,67 +163,108 @@ struct ProjectCell: View {
                 }
             }
             
-            // Project details
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
-                // Budget and timeline
-                HStack {
+            // Description (if available)
+            if !project.description.isEmpty {
+                Text(project.description)
+                    .font(DesignSystem.Typography.footnote)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .padding(.top, 2)
+            }
+            
+            // Middle row: Budget, Members, Days Left on left | Location, Client, Timeline on right
+            HStack(alignment: .top, spacing: DesignSystem.Spacing.medium) {
+                // Left side: Budget, Members, Days Left
+                VStack(alignment: .leading, spacing: 6) {
                     InfoRow(
                         icon: "indianrupeesign.circle.fill",
                         text: project.budgetFormatted,
                         color: .green
                     )
                     
-                    Spacer()
-                    
-                    if project.startDate != nil || project.endDate != nil {
-                        InfoRow(
-                            icon: "calendar.circle.fill",
-                            text: project.dateRangeFormatted,
-                            color: .blue
-                        )
-                    }
-                }
-                
-                // Team and days remaining
-                HStack {
                     InfoRow(
                         icon: "person.2.circle.fill",
                         text: "\(project.teamMembers.count) members",
                         color: .purple
                     )
                     
-                    Spacer()
-                    
-                    if project.endDate != nil && project.statusType == .ACTIVE && project.isSuspended != true {
+                    if project.handoverDate != nil && project.statusType == .ACTIVE && project.isSuspended != true {
                         Text(daysRemainingText)
                             .font(DesignSystem.Typography.caption2)
+                            .fontWeight(.medium)
                             .foregroundColor(getDaysRemainingColor())
+                            .padding(.leading, 20)
                     }
                 }
                 
-                // Show suspension reason if project is suspended
-                if project.isSuspended == true, let reason = project.suspensionReason, !reason.isEmpty {
-                    HStack(spacing: DesignSystem.Spacing.extraSmall) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                        
-                        TruncatedSuspensionReasonView(reason: reason)
-                    }
-                    .padding(.top, DesignSystem.Spacing.extraSmall)
-                }
+                Spacer()
                 
-                // Show rejection reason if project is REVIEW_REJECTED
-                if project.statusType == .REVIEW_REJECTED, let reason = project.rejectionReason, !reason.isEmpty {
-                    HStack(spacing: DesignSystem.Spacing.extraSmall) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundColor(.red)
-                        
-                        TruncatedRejectionReasonView(reason: reason)
+                // Right side: Location, Client, Timeline
+                VStack(alignment: .trailing, spacing: 6) {
+                    if !project.location.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 12, height: 12)
+                            Text(project.location)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
                     }
-                    .padding(.top, DesignSystem.Spacing.extraSmall)
+                    
+                    if !project.client.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 12, height: 12)
+                            Text(project.client)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                    }
+                    
+                    if project.plannedDate != nil || project.handoverDate != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.blue)
+                                .frame(width: 12, height: 12)
+                            Text(timelineText)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                    }
                 }
+            }
+            .padding(.top, 4)
+            
+            // Bottom: Suspension/Rejection reasons
+            if project.isSuspended == true, let reason = project.suspensionReason, !reason.isEmpty {
+                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                    TruncatedSuspensionReasonView(reason: reason)
+                }
+                .padding(.top, 4)
+            }
+            
+            if project.statusType == .REVIEW_REJECTED, let reason = project.rejectionReason, !reason.isEmpty {
+                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                    TruncatedRejectionReasonView(reason: reason)
+                }
+                .padding(.top, 4)
             }
         }
         .padding(DesignSystem.Spacing.medium)
@@ -201,6 +273,48 @@ struct ProjectCell: View {
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(DesignSystem.Animation.interactiveSpring, value: isPressed)
         .id("\(project.id ?? "")-\(project.status)") // Force view update when status changes
+        .zIndex(showFullNamePopup ? 1000 : 0) // Ensure popover appears above all cells
+        .popover(isPresented: $showFullNamePopup, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                // Status indicator with label
+                HStack(spacing: DesignSystem.Spacing.small) {
+                    Circle()
+                        .fill(displayedStatus.color)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(displayedStatus.displayText)
+                        .font(DesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                Divider()
+                    .padding(.vertical, DesignSystem.Spacing.extraSmall)
+                
+                // Project Name label and value
+                HStack {
+                    Text("Project Name")
+                        .font(DesignSystem.Typography.caption1)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                }
+                
+                Text(project.name)
+                    .font(DesignSystem.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(2)
+            }
+            .padding(DesignSystem.Spacing.medium)
+            .frame(maxWidth: min(280, UIScreen.main.bounds.width - 40))
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+            .presentationCompactAdaptation(.popover)
+            .zIndex(1001) // Ensure popover content is above everything
+        }
     }
     
     private func getDaysRemainingColor() -> Color {
