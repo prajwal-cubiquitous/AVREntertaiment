@@ -723,6 +723,10 @@ struct ModernStatusCard: View {
         status == ProjectStatus.SUSPENDED.rawValue
     }
     
+    private var isInReview: Bool {
+        status == ProjectStatus.IN_REVIEW.rawValue
+    }
+    
     var body: some View {
         VStack(spacing: DesignSystem.Spacing.medium) {
             HStack {
@@ -768,14 +772,45 @@ struct ModernStatusCard: View {
                 .padding()
                 .background(Color(.quaternarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }else if isInReview{
+                HStack {
+                    Text(status)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             }else {
                 // Show dropdown menu for non-archived statuses
                 Menu {
                     // Filter out automatic statuses that shouldn't be manually selectable
                     let allowedStatuses = ProjectStatus.allCases.filter { status in
-                        status != .IN_REVIEW && status != .LOCKED && status != .REVIEW_REJECTED
+                        status != .IN_REVIEW &&
+                        status != .LOCKED &&
+                        status != .REVIEW_REJECTED &&
+                        status != .ARCHIVE &&
+                        status != .SUSPENDED
                     }
-                    
+
+                    // Convert your current status string → enum safely
+                    if let currentStatus = ProjectStatus(rawValue: status) {
+
+                        // Check if current status is COMPLETED or MAINTENANCE
+                        if currentStatus == .COMPLETED || currentStatus == .MAINTENANCE {
+
+                            // remove `.ACTIVE` from allowedStatuses
+                            let allowedStatusesFiltered = allowedStatuses.filter { $0 != .ACTIVE }
+
+                        }
+                    }
+
                     ForEach(allowedStatuses, id: \.self) { projectStatus in
                         Button {
                             HapticManager.selection()

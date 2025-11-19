@@ -426,15 +426,19 @@ class AdminProjectDetailViewModel: ObservableObject {
         // Check if dates will change and prepare confirmation message
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
+        let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .LOCKED
         
         var dateChanges: [String] = []
         
         // Check which dates will change based on new status
         switch newStatus {
         case .ACTIVE:
-            let planned = calendar.startOfDay(for: plannedDate)
-            if planned > today {
-                dateChanges.append("Planned Date")
+            // Only check for planned date change if changing from LOCKED to ACTIVE
+            if currentStatus == .LOCKED {
+                let planned = calendar.startOfDay(for: plannedDate)
+                if planned > today {
+                    dateChanges.append("Planned Date")
+                }
             }
             
         case .MAINTENANCE:
@@ -506,14 +510,19 @@ class AdminProjectDetailViewModel: ObservableObject {
                 var updatedHandoverDate = handoverDate
                 var updatedMaintenanceDate = maintenanceDate
                 
+                // Get current status before update
+                let currentStatus = ProjectStatus(rawValue: projectStatus) ?? .LOCKED
+                
                 // Adjust dates based on new status
                 switch newStatus {
                 case .ACTIVE:
-                    // If plannedDate > current date, set plannedDate = current date
-                    let planned = calendar.startOfDay(for: plannedDate)
-                    if planned > today {
-                        updatedPlannedDate = today
-                        updateData["plannedDate"] = dateFormatter.string(from: today)
+                    // If changing from LOCKED to ACTIVE and plannedDate > current date, set plannedDate = current date
+                    if currentStatus == .LOCKED {
+                        let planned = calendar.startOfDay(for: plannedDate)
+                        if planned > today {
+                            updatedPlannedDate = today
+                            updateData["plannedDate"] = dateFormatter.string(from: today)
+                        }
                     }
                     
                 case .MAINTENANCE:
