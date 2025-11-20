@@ -489,7 +489,20 @@ class DashboardStateManager: ObservableObject {
                     if departmentSpentMap[phaseId] == nil {
                         departmentSpentMap[phaseId] = [:]
                     }
-                    departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
+                    
+                    // Determine the correct department key
+                    // Expenses may be stored with format "phaseId_departmentName" or just "departmentName"
+                    let departmentKey: String
+                    if expense.department.hasPrefix("\(phaseId)_") {
+                        // Expense already has phaseId prefix - use it directly
+                        departmentKey = expense.department
+                    } else {
+                        // Expense has just department name - add phaseId prefix to match phase format
+                        departmentKey = "\(phaseId)_\(expense.department)"
+                    }
+                    
+                    // Store using the department key
+                    departmentSpentMap[phaseId]?[departmentKey, default: 0] += expense.amount
                 }
             }
             

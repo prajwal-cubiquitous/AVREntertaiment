@@ -128,16 +128,24 @@ class ProjectDetailViewModel: ObservableObject {
                             expensesByPhaseId[phaseId]?.append(expense)
                             
                             // Track by phase and department
-                            // Expenses use just department name, but departments are stored as phaseId_departmentName
-                            // We need to match expenses to both formats for backward compatibility
+                            // Expenses may be stored with format "phaseId_departmentName" or just "departmentName"
+                            // We need to match expenses to phase department keys correctly
                             if expensesByPhaseAndDepartment[phaseId] == nil {
                                 expensesByPhaseAndDepartment[phaseId] = [:]
                             }
-                            // Store with new format key (phaseId_departmentName)
-                            let departmentKey = "\(phaseId)_\(expense.department)"
+                            
+                            // Determine the correct department key
+                            let departmentKey: String
+                            if expense.department.hasPrefix("\(phaseId)_") {
+                                // Expense already has phaseId prefix - use it directly
+                                departmentKey = expense.department
+                            } else {
+                                // Expense has just department name - add phaseId prefix to match phase format
+                                departmentKey = "\(phaseId)_\(expense.department)"
+                            }
+                            
+                            // Store using the department key (only once, no double counting)
                             expensesByPhaseAndDepartment[phaseId]?[departmentKey, default: 0] += expense.amount
-                            // Also store with old format for backward compatibility
-                            expensesByPhaseAndDepartment[phaseId]?[expense.department, default: 0] += expense.amount
                         }
                     } catch {
                         failedCount += 1

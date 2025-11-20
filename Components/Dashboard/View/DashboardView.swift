@@ -1868,7 +1868,9 @@ struct DashboardView: View {
     
     private func loadPhaseDepartmentSpent() async {
         guard let projectId = project?.id else { return }
-        guard let customerId = customerId else {
+        // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("❌ Customer ID not found in loadPhaseDepartmentSpent")
             return
         }
         do {
@@ -1889,13 +1891,20 @@ struct DashboardView: View {
                     if departmentSpentMap[phaseId] == nil {
                         departmentSpentMap[phaseId] = [:]
                     }
-                    // Expenses use just department name, but we need to match to phaseId_departmentName keys
-                    // Try both formats: phaseId_departmentName (new) and just departmentName (old/expense format)
-                    let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
-                    // Store using the new format key, but also support old format for backward compatibility
+                    
+                    // Determine the correct department key
+                    // Expenses may be stored with format "phaseId_departmentName" or just "departmentName"
+                    let departmentKey: String
+                    if expense.department.hasPrefix("\(phaseId)_") {
+                        // Expense already has phaseId prefix - use it directly
+                        departmentKey = expense.department
+                    } else {
+                        // Expense has just department name - add phaseId prefix to match phase format
+                        departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
+                    }
+                    
+                    // Store using the department key (only once, no double counting)
                     departmentSpentMap[phaseId]?[departmentKey, default: 0] += expense.amount
-                    // Also store with old format for backward compatibility
-                    departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
                 }
             }
             
@@ -3085,16 +3094,10 @@ private struct AllPhasesView: View {
     
     private func loadPhaseEnabledStates() {
         guard let projectId = project?.id else { return }
-        // Get customerId from parent view or environment
-        // For now, we'll need to pass it or get it from authService
-        // Since this is inside AllPhasesView, we need to get customerId from parent
         Task {
             do {
-                // Try to get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
-                    print("❌ Customer ID not found in loadPhaseEnabledStates")
-                    return
-                }
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 let snapshot = try await FirebasePathHelper.shared
                     .phasesCollection(customerId: customerId, projectId: projectId)
@@ -3120,11 +3123,8 @@ private struct AllPhasesView: View {
         guard let projectId = project?.id else { return }
         Task {
             do {
-                // Get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
-                    print("❌ Customer ID not found in AllPhasesView.loadPhaseBudgets")
-                    return
-                }
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 // Load all approved expenses for this project
                 let expensesSnapshot = try await FirebasePathHelper.shared
@@ -3166,11 +3166,8 @@ private struct AllPhasesView: View {
         guard let projectId = project?.id else { return }
         Task {
             do {
-                // Get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
-                    print("❌ Customer ID not found in AllPhasesView.loadPhaseDepartmentSpent")
-                    return
-                }
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 // Load all approved expenses for this project (excluding anonymous)
                 let expensesSnapshot = try await FirebasePathHelper.shared
@@ -3189,13 +3186,20 @@ private struct AllPhasesView: View {
                         if departmentSpentMap[phaseId] == nil {
                             departmentSpentMap[phaseId] = [:]
                         }
-                        // Expenses use just department name, but we need to match to phaseId_departmentName keys
-                        // Try both formats: phaseId_departmentName (new) and just departmentName (old/expense format)
-                        let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
-                        // Store using the new format key, but also support old format for backward compatibility
+                        
+                        // Determine the correct department key
+                        // Expenses may be stored with format "phaseId_departmentName" or just "departmentName"
+                        let departmentKey: String
+                        if expense.department.hasPrefix("\(phaseId)_") {
+                            // Expense already has phaseId prefix - use it directly
+                            departmentKey = expense.department
+                        } else {
+                            // Expense has just department name - add phaseId prefix to match phase format
+                            departmentKey = String.departmentKey(phaseId: phaseId, departmentName: expense.department)
+                        }
+                        
+                        // Store using the department key (only once, no double counting)
                         departmentSpentMap[phaseId]?[departmentKey, default: 0] += expense.amount
-                        // Also store with old format for backward compatibility
-                        departmentSpentMap[phaseId]?[expense.department, default: 0] += expense.amount
                     }
                 }
                 
@@ -3212,11 +3216,8 @@ private struct AllPhasesView: View {
         guard let projectId = project?.id else { return }
         Task {
             do {
-                // Get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
-                    print("❌ Customer ID not found in AllPhasesView.loadPhaseExtensions")
-                    return
-                }
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 var extensionMap: [String: Bool] = [:]
                 let dateFormatter = DateFormatter()
@@ -3267,11 +3268,8 @@ private struct AllPhasesView: View {
         guard let projectId = project?.id else { return }
         Task {
             do {
-                // Get customerId from Firebase Auth
-                guard let customerId = Auth.auth().currentUser?.uid else {
-                    print("❌ Customer ID not found in AllPhasesView.loadPhaseAnonymousExpenses")
-                    return
-                }
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 // Load all anonymous expenses for this project
                 let expensesSnapshot = try await FirebasePathHelper.shared
