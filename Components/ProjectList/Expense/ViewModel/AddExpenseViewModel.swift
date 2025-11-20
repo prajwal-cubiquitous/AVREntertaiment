@@ -281,18 +281,21 @@ class AddExpenseViewModel: ObservableObject {
     }
     
     func selectCategory(_ category: String, at index: Int) {
-        if category == "Misc / Other (notes required)" {
+        let trimmedCategory = category.trimmingCharacters(in: .whitespaces)
+        guard !trimmedCategory.isEmpty else { return }
+        
+        if trimmedCategory == "Misc / Other (notes required)" {
             // Keep the category as is, but allow custom name entry
-            categories[index] = category
-            categorySearchTexts[index] = ""
+            categories[index] = trimmedCategory
+            categorySearchTexts[index] = trimmedCategory
             // Initialize custom name if not exists
             if categoryCustomNames[index] == nil {
                 categoryCustomNames[index] = ""
             }
         } else {
-            // For other categories, set directly and clear custom name
-            categories[index] = category
-            categorySearchTexts[index] = ""
+            // For other categories (including custom entries), set directly and clear custom name
+            categories[index] = trimmedCategory
+            categorySearchTexts[index] = trimmedCategory
             categoryCustomNames.removeValue(forKey: index)
         }
     }

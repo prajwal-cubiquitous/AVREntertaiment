@@ -619,13 +619,21 @@ struct AddExpenseView: View {
                             (index >= 0 && index < viewModel.categories.count) ? viewModel.categories[index] : ""
                         },
                         set: { newValue in
+                            // This binding is updated as user types, allowing custom entries
                             if index < viewModel.categories.count {
-                                viewModel.selectCategory(newValue, at: index)
+                                let trimmedValue = newValue.trimmingCharacters(in: .whitespaces)
+                                if !trimmedValue.isEmpty {
+                                    viewModel.categories[index] = trimmedValue
+                                }
                             }
                         }
                     ),
                     searchText: Binding(
-                        get: { viewModel.categorySearchTexts[index] ?? "" },
+                        get: { 
+                            // If category exists but search text is empty, use category
+                            let category = (index >= 0 && index < viewModel.categories.count) ? viewModel.categories[index] : ""
+                            return viewModel.categorySearchTexts[index] ?? category
+                        },
                         set: { newValue in
                             viewModel.categorySearchTexts[index] = newValue
                         }
@@ -1119,35 +1127,51 @@ struct CategorySearchableDropdown: View {
     let showRemoveButton: Bool
     let onRemove: () -> Void
     @State private var showDropdown = false
+    @FocusState private var isTextFieldFocused: Bool
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                // Search Text Field / Display
-                if selectedCategory.isEmpty || showDropdown {
-                    TextField("Search or select category", text: $searchText)
-                        .textFieldStyle(.roundedBorder)
-                        .onTapGesture {
+                // Always show text field for both search and entry
+                TextField("Search or enter category", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isTextFieldFocused)
+                    .onTapGesture {
+                        showDropdown = true
+                    }
+                    .onChange(of: searchText) { newValue in
+                        // Show dropdown when typing (if there are matches)
+                        if !newValue.isEmpty {
                             showDropdown = true
+                        } else {
+                            showDropdown = false
                         }
-                        .onChange(of: searchText) { _ in
-                            showDropdown = !searchText.isEmpty || selectedCategory.isEmpty
+                    }
+                    .onSubmit {
+                        // When user presses return/done, accept the typed text as the category
+                        let trimmedText = searchText.trimmingCharacters(in: .whitespaces)
+                        if !trimmedText.isEmpty {
+                            onSelect(trimmedText)
+                            showDropdown = false
+                            isTextFieldFocused = false
                         }
-                } else {
-                    // Show selected category as a chip
-                    HStack {
-                        Text(selectedCategory)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color(.tertiarySystemFill))
-                        .cornerRadius(8)
-                        .onTapGesture {
-                            showDropdown = true
-                            searchText = ""
+                    }
+                    .onChange(of: isTextFieldFocused) { focused in
+                        if !focused {
+                            // When text field loses focus, accept the typed text if it's not empty
+                            let trimmedText = searchText.trimmingCharacters(in: .whitespaces)
+                            if !trimmedText.isEmpty {
+                                onSelect(trimmedText)
+                            }
+                            // Hide dropdown after a short delay to allow selection
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                showDropdown = false
+                            }
+                        } else {
+                            // Show dropdown when focused (if there are matches)
+                            if !searchText.isEmpty {
+                                showDropdown = true
+                            }
                         }
                     }
                 
@@ -1160,15 +1184,16 @@ struct CategorySearchableDropdown: View {
                 }
             }
             
-            // Dropdown List
-            if showDropdown && !filteredCategories.isEmpty {
+            // Dropdown List - Show matching suggestions
+            if showDropdown && isTextFieldFocused && !filteredCategories.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(filteredCategories, id: \.self) { category in
                             Button(action: {
                                 onSelect(category)
-                                searchText = ""
+                                searchText = category
                                 showDropdown = false
+                                isTextFieldFocused = false
                             }) {
                                 HStack {
                                     Text(category)
@@ -1200,8 +1225,15 @@ struct CategorySearchableDropdown: View {
             }
         }
         .onAppear {
-            if !selectedCategory.isEmpty {
-                showDropdown = false
+            // Initialize search text with selected category if it exists
+            if !selectedCategory.isEmpty && searchText.isEmpty {
+                searchText = selectedCategory
+            }
+        }
+        .onChange(of: selectedCategory) { newValue in
+            // Sync search text when category is selected from dropdown
+            if !newValue.isEmpty && searchText != newValue {
+                searchText = newValue
             }
         }
     }
