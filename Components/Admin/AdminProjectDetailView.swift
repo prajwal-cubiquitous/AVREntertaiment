@@ -726,6 +726,9 @@ struct ModernStatusCard: View {
     private var isInReview: Bool {
         status == ProjectStatus.IN_REVIEW.rawValue
     }
+    private var isDeclined: Bool {
+        status == ProjectStatus.DECLINED.rawValue
+    }
     
     // Computed property for allowed statuses based on current status
     private var allowedStatuses: [ProjectStatus] {
@@ -799,6 +802,21 @@ struct ModernStatusCard: View {
                 .background(Color(.quaternarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
             }else if isInReview{
+                HStack {
+                    Text(status)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+                .padding()
+                .background(Color(.quaternarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium))
+            }else if isDeclined{
                 HStack {
                     Text(status)
                         .font(.subheadline.weight(.medium))

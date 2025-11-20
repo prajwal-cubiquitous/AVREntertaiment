@@ -269,30 +269,40 @@ class ProjectDetailViewModel: ObservableObject {
     }
     
     private func isPhaseInProgress(_ phase: PhaseInfo) -> Bool {
-        let current = now
+        let calendar = Calendar.current
+        let current = calendar.startOfDay(for: now) // Normalize current date to start of day
+        
         switch (phase.startDate, phase.endDate) {
         case (nil, nil):
             return true // Always visible if no dates
         case (let s?, nil):
-            return s <= current // Visible if start date passed
+            let startOfDay = calendar.startOfDay(for: s)
+            return startOfDay <= current // Visible if start date passed or is today
         case (nil, let e?):
-            return current <= e // Visible if before end date
+            let endOfDay = calendar.startOfDay(for: e)
+            return current <= endOfDay // Visible if before or on end date (end date is inclusive)
         case (let s?, let e?):
-            return s <= current && current <= e // Visible if in range
+            let startOfDay = calendar.startOfDay(for: s)
+            let endOfDay = calendar.startOfDay(for: e)
+            return startOfDay <= current && current <= endOfDay // Visible if in range (end date is inclusive)
         }
     }
     
     private func isPhaseExpired(_ phase: PhaseInfo) -> Bool {
-        let current = now
+        let calendar = Calendar.current
+        let current = calendar.startOfDay(for: now) // Normalize current date to start of day
+        
         switch (phase.startDate, phase.endDate) {
         case (nil, nil):
             return false // No dates means not expired
         case (let s?, nil):
             return false // Only start date means not expired
         case (nil, let e?):
-            return current > e // Expired if past end date
+            let endOfDay = calendar.startOfDay(for: e)
+            return current > endOfDay // Expired if past end date (end date is not expired)
         case (let s?, let e?):
-            return current > e // Expired if past end date
+            let endOfDay = calendar.startOfDay(for: e)
+            return current > endOfDay // Expired if past end date (end date is not expired)
         }
     }
     

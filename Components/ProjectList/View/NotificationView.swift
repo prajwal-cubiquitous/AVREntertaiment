@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct NotificationView: View {
     @ObservedObject var viewModel: ProjectListViewModel
@@ -95,11 +96,44 @@ struct NotificationView: View {
 
 struct NotificationItemView: View {
     let expense: Expense
+    @State private var submitterName: String?
+    
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
+    }
+    
+    // Helper function to load user name from users collection
+    private func loadUserName(phoneNumber: String) async {
+        do {
+            let db = Firestore.firestore()
+            var cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleanPhone.hasPrefix("+91") {
+                cleanPhone = String(cleanPhone.dropFirst(3))
+            }
+            cleanPhone = cleanPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let userDoc = try await db.collection("users").document(cleanPhone).getDocument()
+            
+            if let userData = userDoc.data(),
+               let name = userData["name"] as? String, !name.isEmpty {
+                await MainActor.run {
+                    submitterName = name
+                }
+            }
+        } catch {
+            print("Error loading user name for \(phoneNumber): \(error)")
+        }
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(expense.department)
+                Text(extractDepartmentName(from: expense.department))
                     .font(.headline)
                 Spacer()
                 Text(expense.amountFormatted)
@@ -115,7 +149,7 @@ struct NotificationItemView: View {
             HStack {
                 Label(expense.dateFormatted, systemImage: "calendar")
                 Spacer()
-                Label("Submitted by: \(expense.submittedBy.formatPhoneNumber)", systemImage: "person")
+                Label("Submitted by: \(submitterName ?? expense.submittedBy.formatPhoneNumber)", systemImage: "person")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -127,5 +161,8 @@ struct NotificationItemView: View {
             .font(.caption)
         }
         .padding(.vertical, 4)
+        .task {
+            await loadUserName(phoneNumber: expense.submittedBy)
+        }
     }
 } 

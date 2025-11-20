@@ -19,6 +19,15 @@ struct ExpenseDetailReadOnlyView: View {
     @State private var spentAmount: Double = 0
     @State private var isLoadingBudget = false
     
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -127,7 +136,7 @@ struct ExpenseDetailReadOnlyView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text(expense.department)
+                    Text(extractDepartmentName(from: expense.department))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -458,7 +467,7 @@ struct ExpenseDetailReadOnlyView: View {
                     Image(systemName: "building.2.fill")
                         .font(.caption2)
                     TruncatedTextWithTooltip(
-                        expense.department,
+                        extractDepartmentName(from: expense.department),
                         font: .caption,
                         fontWeight: .medium,
                         foregroundColor: .primary,

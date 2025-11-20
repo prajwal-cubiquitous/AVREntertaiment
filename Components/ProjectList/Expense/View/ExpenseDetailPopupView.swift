@@ -1,6 +1,7 @@
 import SwiftUI
 import SafariServices
 import FirebaseFirestore
+import FirebaseAuth
 
 struct ExpenseDetailPopupView: View {
     let expense: Expense
@@ -11,6 +12,8 @@ struct ExpenseDetailPopupView: View {
     @State private var showingRemarkEditor = false
     @State private var approverName: String?
     @State private var rejectorName: String?
+    @State private var submitterName: String?
+    @State private var projectName: String?
     @State private var isLoading = false
     @State private var loadingAction: LoadingAction? = nil
     let onApprove: ((String) async -> Void)?
@@ -20,6 +23,57 @@ struct ExpenseDetailPopupView: View {
     enum LoadingAction {
         case approve
         case reject
+    }
+    
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
+    }
+    
+    // Helper function to load user name from users collection
+    private func loadUserName(phoneNumber: String) async {
+        do {
+            let db = Firestore.firestore()
+            var cleanPhone = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleanPhone.hasPrefix("+91") {
+                cleanPhone = String(cleanPhone.dropFirst(3))
+            }
+            cleanPhone = cleanPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let userDoc = try await db.collection("users").document(cleanPhone).getDocument()
+            
+            if let userData = userDoc.data(),
+               let name = userData["name"] as? String, !name.isEmpty {
+                await MainActor.run {
+                    submitterName = name
+                }
+            }
+        } catch {
+            print("Error loading user name for \(phoneNumber): \(error)")
+        }
+    }
+    
+    // Helper function to load project name
+    private func loadProjectName(projectId: String) async {
+        do {
+            let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            let projectDoc = try await FirebasePathHelper.shared
+                .projectDocument(customerId: customerId, projectId: projectId)
+                .getDocument()
+            
+            if let projectData = projectDoc.data(),
+               let name = projectData["name"] as? String, !name.isEmpty {
+                await MainActor.run {
+                    projectName = name
+                }
+            }
+        } catch {
+            print("Error loading project name for \(projectId): \(error)")
+        }
     }
     
     // These would come from your view model in a real implementation
@@ -79,6 +133,27 @@ struct ExpenseDetailPopupView: View {
                     // Content
                     ScrollView {
                         VStack(spacing: 16) {
+                            // Project and Phase Info Section
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Project Information")
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                
+                                if let projectName = projectName {
+                                    detailRow(title: "Project:", value: projectName)
+                                }
+                                
+                                if let phaseName = expense.phaseName {
+                                    detailRow(title: "Phase:", value: phaseName)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                            
+                            Divider()
+                            
                             // Status
                             HStack {
                                 Text("Status:")
@@ -95,13 +170,16 @@ struct ExpenseDetailPopupView: View {
                             }
                             
                             // Basic Info
-                            detailRow(title: "Department:", value: expense.department)
+                            detailRow(title: "Department:", value: extractDepartmentName(from: expense.department))
                             detailRow(title: "Subcategory:", value: expense.categories.first ?? "")
                             detailRow(title: "Date:", value: expense.dateFormatted)
                             detailRow(title: "Amount:", value: expense.amountFormatted)
                             
                             // Payment Mode
                             detailRow(title: "Payment Mode:", value: expense.modeOfPayment.rawValue)
+                            
+                            // Submitted By
+                            detailRow(title: "Submitted By:", value: submitterName ?? expense.submittedBy.formatPhoneNumber)
                             
                             // Receipt (Attachment)
                             if let attachmentURL = expense.attachmentURL, !attachmentURL.isEmpty {
@@ -306,6 +384,8 @@ struct ExpenseDetailPopupView: View {
         }
         .task {
             await loadApproverRejectorNames()
+            await loadUserName(phoneNumber: expense.submittedBy)
+            await loadProjectName(projectId: expense.projectId)
         }
     }
     

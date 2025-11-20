@@ -29,6 +29,15 @@ struct ExpenseDetailView: View {
     private let currentUserPhone: String
     private let currentUserRole: UserRole
     
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
+    }
+    
     init(expense: Expense, role: UserRole? = nil, stateManager: DashboardStateManager? = nil) {
         self.expense = expense
         self.stateManager = stateManager
@@ -182,7 +191,7 @@ struct ExpenseDetailView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text(expense.department)
+                    Text(extractDepartmentName(from: expense.department))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -278,7 +287,7 @@ struct ExpenseDetailView: View {
                     Image(systemName: "building.2.fill")
                         .font(.caption2)
                     TruncatedTextWithTooltip(
-                        expense.department,
+                        extractDepartmentName(from: expense.department),
                         font: .caption,
                         fontWeight: .medium,
                         foregroundColor: .primary,

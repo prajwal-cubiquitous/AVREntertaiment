@@ -418,9 +418,14 @@ struct ModernExpenseApprovalRow: View {
                 
                 // Bottom Row: Submitted By and Description
                 HStack {
-                    Text("By: \(UserName != "" ? UserName : expense.submittedBy)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("Submitted by: \(UserName != "" ? UserName : expense.submittedBy)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
 //                    Spacer()
 //                    

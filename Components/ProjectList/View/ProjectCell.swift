@@ -157,7 +157,7 @@ struct ProjectCell: View {
                         .buttonStyle(.plain)
                     }
                     
-                    if role == .ADMIN {
+                    if role == .ADMIN && project.status != ProjectStatus.DECLINED.rawValue{
                         NavigationLink(destination: AdminProjectDetailView(project: project)) {
                             Image(systemName: "pencil.circle.fill")
                                 .font(.title3)
