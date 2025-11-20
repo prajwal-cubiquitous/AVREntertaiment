@@ -25,6 +25,9 @@ struct ExpenseDetailView: View {
     @State private var phaseName: String? = nil
     @State private var showingFileViewer = false
     
+    // User Name State
+    @State private var submitterName: String? = nil
+    
     private let db = Firestore.firestore()
     private let currentUserPhone: String
     private let currentUserRole: UserRole
@@ -148,6 +151,8 @@ struct ExpenseDetailView: View {
             if expense.phaseId != nil && expense.status == .pending {
                 loadBudgetContext()
             }
+            // Load submitter name
+            loadSubmitterName()
         }
     }
     
@@ -233,7 +238,7 @@ struct ExpenseDetailView: View {
             
             VStack(spacing: DesignSystem.Spacing.small) {
                 DetailRow(title: "Date", value: expense.dateFormatted)
-                DetailRow(title: "Submitted By", value: expense.submittedBy.formatPhoneNumber)
+                DetailRow(title: "Submitted By", value: submitterName ?? (expense.submittedBy.lowercased() == "admin" ? "Admin" : expense.submittedBy.formatPhoneNumber))
                 DetailRow(title: "Description", value: expense.description)
                 
                 if let existingRemark = expense.remark, !existingRemark.isEmpty {
@@ -416,6 +421,59 @@ struct ExpenseDetailView: View {
     private var remainingPercentage: Double {
         guard allocatedBudget > 0 else { return 0 }
         return (remainingBudget / allocatedBudget) * 100
+    }
+    
+    // MARK: - Load Submitter Name
+    private func loadSubmitterName() {
+        // Check if it's "Admin" first
+        if expense.submittedBy.lowercased() == "admin" {
+            submitterName = "Admin"
+            return
+        }
+        
+        Task {
+            do {
+                let db = Firestore.firestore()
+                // Try to get user by document ID (phone number)
+                let userDoc = try await db
+                    .collection(FirebaseCollections.users)
+                    .document(expense.submittedBy)
+                    .getDocument()
+                
+                if let userData = userDoc.data(),
+                   let name = userData["name"] as? String {
+                    await MainActor.run {
+                        self.submitterName = name
+                    }
+                    return
+                }
+                
+                // Fallback: try query by phoneNumber field
+                let userQuery = try await db
+                    .collection(FirebaseCollections.users)
+                    .whereField("phoneNumber", isEqualTo: expense.submittedBy)
+                    .limit(to: 1)
+                    .getDocuments()
+                
+                if let userData = userQuery.documents.first?.data(),
+                   let name = userData["name"] as? String {
+                    await MainActor.run {
+                        self.submitterName = name
+                    }
+                } else {
+                    // If no user found, use formatted phone number as fallback
+                    await MainActor.run {
+                        self.submitterName = expense.submittedBy.formatPhoneNumber
+                    }
+                }
+            } catch {
+                print("Error loading submitter name for \(expense.submittedBy): \(error)")
+                // On error, use formatted phone number as fallback
+                await MainActor.run {
+                    self.submitterName = expense.submittedBy.formatPhoneNumber
+                }
+            }
+        }
     }
     
     // MARK: - Load Budget Context

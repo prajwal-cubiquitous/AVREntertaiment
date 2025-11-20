@@ -178,7 +178,7 @@ struct ExpenseDetailReadOnlyView: View {
             
             VStack(spacing: DesignSystem.Spacing.small) {
                 DetailRow(title: "Date", value: expense.dateFormatted)
-                DetailRow(title: "Submitted By", value: submitterName ?? expense.submittedBy.formatPhoneNumber)
+                DetailRow(title: "Submitted By", value: submitterName ?? (expense.submittedBy.lowercased() == "admin" ? "Admin" : expense.submittedBy.formatPhoneNumber))
                 DetailRow(title: "Description", value: expense.description)
                 
                 if let existingRemark = expense.remark, !existingRemark.isEmpty {
@@ -584,29 +584,53 @@ struct ExpenseDetailReadOnlyView: View {
     
     // MARK: - Helper Methods
     private func loadAllNames() async {
-        let db = Firestore.firestore()
-        
-        // Load submitter name
-        await loadUserName(phoneNumber: expense.submittedBy) { name in
-            self.submitterName = name
+        // Load submitter name - check for "Admin" first
+        if expense.submittedBy.lowercased() == "admin" {
+            await MainActor.run {
+                self.submitterName = "Admin"
+            }
+        } else {
+            await loadUserName(phoneNumber: expense.submittedBy) { name in
+                self.submitterName = name
+            }
         }
         
         // Load approver name if approved
         if expense.status == .approved, let approvedBy = expense.approvedBy {
-            await loadUserName(phoneNumber: approvedBy) { name in
-                self.approverName = name
+            if approvedBy.lowercased() == "admin" {
+                await MainActor.run {
+                    self.approverName = "Admin"
+                }
+            } else {
+                await loadUserName(phoneNumber: approvedBy) { name in
+                    self.approverName = name
+                }
             }
         }
         
         // Load rejector name if rejected
         if expense.status == .rejected, let rejectedBy = expense.rejectedBy {
-            await loadUserName(phoneNumber: rejectedBy) { name in
-                self.rejectorName = name
+            if rejectedBy.lowercased() == "admin" {
+                await MainActor.run {
+                    self.rejectorName = "Admin"
+                }
+            } else {
+                await loadUserName(phoneNumber: rejectedBy) { name in
+                    self.rejectorName = name
+                }
             }
         }
     }
     
     private func loadUserName(phoneNumber: String, completion: @escaping (String?) -> Void) async {
+        // Check if it's "Admin" first
+        if phoneNumber.lowercased() == "admin" {
+            await MainActor.run {
+                completion("Admin")
+            }
+            return
+        }
+        
         do {
             let db = Firestore.firestore()
             // Try to get user by document ID (phone number)
@@ -635,9 +659,18 @@ struct ExpenseDetailReadOnlyView: View {
                 await MainActor.run {
                     completion(name)
                 }
+            } else {
+                // If no user found, return formatted phone number as fallback
+                await MainActor.run {
+                    completion(phoneNumber.formatPhoneNumber)
+                }
             }
         } catch {
             print("Error loading user name for \(phoneNumber): \(error)")
+            // On error, return formatted phone number as fallback
+            await MainActor.run {
+                completion(phoneNumber.formatPhoneNumber)
+            }
         }
     }
     
