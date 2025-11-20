@@ -11,9 +11,16 @@ struct ExpenseDetailPopupView: View {
     @State private var showingRemarkEditor = false
     @State private var approverName: String?
     @State private var rejectorName: String?
-    let onApprove: ((String) -> Void)?
-    let onReject: ((String) -> Void)?
+    @State private var isLoading = false
+    @State private var loadingAction: LoadingAction? = nil
+    let onApprove: ((String) async -> Void)?
+    let onReject: ((String) async -> Void)?
     let isPendingApproval: Bool
+    
+    enum LoadingAction {
+        case approve
+        case reject
+    }
     
     // These would come from your view model in a real implementation
     let budgetBefore: Double = 98000
@@ -21,8 +28,8 @@ struct ExpenseDetailPopupView: View {
     
     init(expense: Expense, 
          isPresented: Binding<Bool>, 
-         onApprove: ((String) -> Void)? = nil,
-         onReject: ((String) -> Void)? = nil,
+         onApprove: ((String) async -> Void)? = nil,
+         onReject: ((String) async -> Void)? = nil,
          isPendingApproval: Bool = false) {
         self.expense = expense
         self._isPresented = isPresented
@@ -38,10 +45,13 @@ struct ExpenseDetailPopupView: View {
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
                     .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isPresented = false
+                        if !isLoading {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isPresented = false
+                            }
                         }
                     }
+                    .allowsHitTesting(!isLoading)
                 
                 // Popup content
                 VStack(spacing: 0) {
@@ -52,14 +62,17 @@ struct ExpenseDetailPopupView: View {
                             .fontWeight(.semibold)
                         Spacer()
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isPresented = false
+                            if !isLoading {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isPresented = false
+                                }
                             }
                         } label: {
                             Image(systemName: "xmark")
                                 .foregroundColor(.gray)
                                 .font(.title3)
                         }
+                        .disabled(isLoading)
                     }
                     .padding()
                     
@@ -189,28 +202,60 @@ struct ExpenseDetailPopupView: View {
                                 // Action Buttons (only for pending approval)
                                 HStack(spacing: 12) {
                                     Button(action: {
-                                        onApprove?(reviewerNote)
+                                        Task {
+                                            isLoading = true
+                                            loadingAction = .approve
+                                            HapticManager.selection()
+                                            await onApprove?(reviewerNote)
+                                            isLoading = false
+                                            loadingAction = nil
+                                        }
                                     }) {
-                                        Label("Approve", systemImage: "checkmark")
-                                            .font(.headline)
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                            .background(Color.green)
-                                            .cornerRadius(8)
+                                        HStack {
+                                            if loadingAction == .approve {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                    .scaleEffect(0.8)
+                                            } else {
+                                                Label("Approve", systemImage: "checkmark")
+                                            }
+                                        }
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(loadingAction == .approve ? Color.green.opacity(0.7) : Color.green)
+                                        .cornerRadius(8)
                                     }
+                                    .disabled(isLoading)
                                     
                                     Button(action: {
-                                        onReject?(reviewerNote)
+                                        Task {
+                                            isLoading = true
+                                            loadingAction = .reject
+                                            HapticManager.selection()
+                                            await onReject?(reviewerNote)
+                                            isLoading = false
+                                            loadingAction = nil
+                                        }
                                     }) {
-                                        Label("Reject", systemImage: "xmark")
-                                            .font(.headline)
-                                            .foregroundColor(.white)
-                                            .frame(maxWidth: .infinity)
-                                            .padding()
-                                            .background(Color.red)
-                                            .cornerRadius(8)
+                                        HStack {
+                                            if loadingAction == .reject {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                    .scaleEffect(0.8)
+                                            } else {
+                                                Label("Reject", systemImage: "xmark")
+                                            }
+                                        }
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(loadingAction == .reject ? Color.red.opacity(0.7) : Color.red)
+                                        .cornerRadius(8)
                                     }
+                                    .disabled(isLoading)
                                 }
                             }
                         }
@@ -221,6 +266,30 @@ struct ExpenseDetailPopupView: View {
                 .background(Color(.systemBackground))
                 .cornerRadius(12)
                 .shadow(radius: 10)
+                .overlay {
+                    // Loading overlay
+                    if isLoading {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .cornerRadius(12)
+                            
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                                
+                                Text(loadingAction == .approve ? "Approving..." : loadingAction == .reject ? "Rejecting..." : "Processing...")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(24)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(.ultraThinMaterial)
+                            )
+                        }
+                    }
+                }
             }
         }
         .sheet(isPresented: $showingAttachment) {

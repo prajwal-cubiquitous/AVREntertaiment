@@ -56,24 +56,24 @@ struct NotificationView: View {
                             set: { if !$0 { selectedExpense = nil } }
                         ),
                         onApprove: { remark in
-                            Task {
-                                await viewModel.updateExpenseStatus(
-                                    projectId: projectId,
-                                    expense: expense,
-                                    status: .approved,
-                                    remark: remark
-                                )
+                            await viewModel.updateExpenseStatus(
+                                projectId: projectId,
+                                expense: expense,
+                                status: .approved,
+                                remark: remark
+                            )
+                            await MainActor.run {
                                 selectedExpense = nil
                             }
                         },
                         onReject: { remark in
-                            Task {
-                                await viewModel.updateExpenseStatus(
-                                    projectId: projectId,
-                                    expense: expense,
-                                    status: .rejected,
-                                    remark: remark
-                                )
+                            await viewModel.updateExpenseStatus(
+                                projectId: projectId,
+                                expense: expense,
+                                status: .rejected,
+                                remark: remark
+                            )
+                            await MainActor.run {
                                 selectedExpense = nil
                             }
                         },

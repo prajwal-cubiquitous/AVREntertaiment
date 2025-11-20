@@ -370,13 +370,16 @@ class ProjectListViewModel: ObservableObject {
     }
     
     func updateExpenseStatus(projectId: String, expense: Expense, status: ExpenseStatus, remark: String?) async {
-        guard let expenseId = expense.id else { return }
+        guard let expenseId = expense.id,
+              let customerId = customerId else {
+            print("❌ Missing expense ID or customer ID")
+            return
+        }
         
         do {
-            let expenseRef = db
-                .collection(FirebaseCollections.projects)
-                .document(projectId)
-                .collection(FirebaseCollections.expenses)
+            // Use the correct customer-specific path
+            let expenseRef = FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
                 .document(expenseId)
             
             // Clean phone number - remove +91 prefix if it exists
@@ -384,15 +387,38 @@ class ProjectListViewModel: ObservableObject {
             
             var updateData: [String: Any] = [
                 "status": status.rawValue,
-                "approvedAt": Timestamp(),
-                "approvedBy": cleanPhone
+                "updatedAt": Timestamp()
             ]
             
-            if let remark = remark {
-                updateData["remark"] = remark
+            // Set appropriate fields based on status
+            if status == .approved {
+                updateData["approvedAt"] = Timestamp()
+                updateData["approvedBy"] = cleanPhone
+            } else if status == .rejected {
+                updateData["rejectedAt"] = Timestamp()
+                updateData["rejectedBy"] = cleanPhone
+            }
+            
+            // Add remark if provided
+            if let remark = remark, !remark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                updateData["remark"] = remark.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             
             try await expenseRef.updateData(updateData)
+            
+            // Post notification for other listeners
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ExpenseStatusUpdated"),
+                object: nil,
+                userInfo: [
+                    "expenseId": expenseId,
+                    "phaseId": expense.phaseId as Any,
+                    "department": expense.department,
+                    "oldStatus": expense.status.rawValue,
+                    "newStatus": status.rawValue,
+                    "amount": expense.amount
+                ]
+            )
             
             // Refresh pending expenses
             await fetchPendingExpenses()
