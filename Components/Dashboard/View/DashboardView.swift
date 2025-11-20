@@ -201,6 +201,12 @@ struct DashboardView: View {
                     .refreshable {
                         await refreshAllData()
                     }
+                    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PhaseUpdated"))) { _ in
+                        // Refresh all data when a phase is created/updated
+                        Task {
+                            await refreshAllData()
+                        }
+                    }
                     .onChange(of: scrollToDepartmentSection) { newValue in
                         if newValue {
                             withAnimation(.easeInOut(duration: 0.6)) {
@@ -3265,7 +3271,7 @@ private struct AllPhasesView: View {
                 
                 // Calculate total budget and create PhaseBudget for each phase
                 var budgetMap: [String: DashboardView.PhaseBudget] = [:]
-                for phase in phases {
+                for phase in displayPhases {
                     let totalBudget = phase.departments.values.reduce(0, +)
                     let spent = phaseSpentMap[phase.id] ?? 0
                     budgetMap[phase.id] = DashboardView.PhaseBudget(
@@ -3356,7 +3362,7 @@ private struct AllPhasesView: View {
                 dateFormatter.dateFormat = "dd/MM/yyyy"
                 
                 // Check each phase for accepted extension requests
-                for phase in phases {
+                for phase in displayPhases {
                     // Get phase end date
                     guard let phaseEndDate = phase.end else { continue }
                     
@@ -3968,9 +3974,15 @@ private struct AllPhasesView: View {
         }
     }
     
+    // Use stateManager's phases if available, otherwise fall back to passed phases
+    private var displayPhases: [DashboardView.PhaseSummary] {
+        // Prefer stateManager's phases as they're updated via notifications
+        return !stateManager.allPhases.isEmpty ? stateManager.allPhases : phases
+    }
+    
     var body: some View {
         List {
-            ForEach(phases) { phase in
+            ForEach(displayPhases) { phase in
                 Section {
                     phaseRowView(phase: phase)
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -4003,6 +4015,34 @@ private struct AllPhasesView: View {
             loadPhaseDepartmentSpent()
             loadPhaseExtensions()
             loadPhaseAnonymousExpenses()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PhaseUpdated"))) { notification in
+            // Reload all phase data when a phase is created/updated
+            // First reload phases from stateManager (which should have the latest data)
+            if let projectId = project?.id {
+                Task {
+                    do {
+                        let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                        await stateManager.loadAllData(projectId: projectId, customerId: customerId)
+                        
+                        // Update local phase data
+                        await MainActor.run {
+                            // Sync with stateManager's updated phases
+                            // Note: phases parameter is passed from parent, so parent needs to refresh too
+                            // But we can reload our local data
+                            loadPhaseEnabledStates()
+                            loadPhaseBudgets()
+                            loadPhaseDepartmentSpent()
+                            loadPhaseExtensions()
+                            loadPhaseAnonymousExpenses()
+                        }
+                    } catch {
+                        print("Error reloading phases: \(error)")
+                    }
+                }
+            }
+            // Also call the parent callback to refresh phases list
+            onPhaseAdded?()
         }
 //        .sheet(item: $selectedDepartment) { department in
 //            if let project = project,
@@ -5691,14 +5731,19 @@ private struct AddPhaseSheet: View {
                 // Update handover date after adding phase (this will handle the logic internally)
                 await updateHandoverDate(projectId: projectId, customerId: customerId)
                 
+                // Post notification to refresh phases BEFORE dismissing
+                // This ensures the notification is sent before the view is dismissed
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("PhaseUpdated"),
+                    object: nil,
+                    userInfo: ["projectId": projectId]
+                )
+                
                 await MainActor.run {
                     isSaving = false
                     onSaved()
                     dismiss()
                 }
-                
-                // Post notification to refresh phases
-                NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
                 
             } catch {
                 await MainActor.run {
