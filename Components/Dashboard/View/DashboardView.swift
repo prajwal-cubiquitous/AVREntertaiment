@@ -1282,10 +1282,43 @@ struct DashboardView: View {
                                         ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
                                             // Strip phaseId_ prefix for display
                                             let displayName = deptKey.displayDepartmentName()
+                                            
+                                            // Look up spent amount - try both deptKey formats
+                                            // phaseDepartmentSpentMap stores keys with phaseId prefix (e.g., "phaseId_departmentName")
+                                            // But phase.departments might have keys with or without prefix
+                                            let spentAmount: Double = {
+                                                // First try exact match
+                                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
+                                                    return spent
+                                                }
+                                                
+                                                // If deptKey has prefix, try without prefix
+                                                if deptKey.hasPrefix("\(phase.id)_") {
+                                                    let deptWithoutPrefix = deptKey.displayDepartmentName()
+                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                                                        return spent
+                                                    }
+                                                } else {
+                                                    // deptKey doesn't have prefix - try with prefix
+                                                    let deptWithPrefix = "\(phase.id)_\(deptKey)"
+                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                                        return spent
+                                                    }
+                                                }
+                                                
+                                                // Debug: log when no match is found
+                                                if let deptMap = phaseDepartmentSpentMap[phase.id], !deptMap.isEmpty {
+                                                    print("⚠️ No match for deptKey '\(deptKey)' in phase '\(phase.id)'")
+                                                    print("   Available keys: \(deptMap.keys.joined(separator: ", "))")
+                                                }
+                                                
+                                                return 0
+                                            }()
+                                            
                                             DepartmentMiniCard(
                                                 title: displayName,
                                                 amount: amount,
-                                                spent: phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0,
+                                                spent: spentAmount,
                                                 onTap: {
                                                     // Use the display name (without phaseId prefix) for selection
                                                     selectedDepartmentForDetail = displayName
@@ -1688,7 +1721,9 @@ struct DashboardView: View {
     
     private func loadPhases() async {
         guard let projectId = project?.id else { return }
-        guard let customerId = customerId else {
+        // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("❌ Customer ID not found in loadPhases")
             return
         }
         do {
@@ -1725,7 +1760,9 @@ struct DashboardView: View {
     
     private func loadPhaseExtensions() async {
         guard let projectId = project?.id else { return }
-        guard let customerId = customerId else {
+        // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("❌ Customer ID not found in loadPhaseExtensions")
             return
         }
         
@@ -1788,7 +1825,9 @@ struct DashboardView: View {
     
     private func loadPhaseAnonymousExpenses() async {
         guard let projectId = project?.id else { return }
-        guard let customerId = customerId else {
+        // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("❌ Customer ID not found in loadPhaseAnonymousExpenses")
             return
         }
         
@@ -1824,7 +1863,9 @@ struct DashboardView: View {
     
     private func loadPhaseBudgets() async {
         guard let projectId = project?.id else { return }
-        guard let customerId = customerId else {
+        // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+        guard let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            print("❌ Customer ID not found in loadPhaseBudgets")
             return
         }
         do {
@@ -1908,12 +1949,22 @@ struct DashboardView: View {
                 }
             }
             
-            await MainActor.run {
-                phaseDepartmentSpentMap = departmentSpentMap
-                // Sync with state manager
-                stateManager.phaseDepartmentSpentMap = departmentSpentMap
-                stateManager.recalculateProjectTotals()
-            }
+                await MainActor.run {
+                    phaseDepartmentSpentMap = departmentSpentMap
+                    // Sync with state manager
+                    stateManager.phaseDepartmentSpentMap = departmentSpentMap
+                    stateManager.recalculateProjectTotals()
+                    
+                    // Debug logging for APPROVER role
+                    print("📊 loadPhaseDepartmentSpent completed:")
+                    print("   Total phases with expenses: \(departmentSpentMap.keys.count)")
+                    for (phaseId, deptMap) in departmentSpentMap {
+                        print("   Phase \(phaseId): \(deptMap.count) departments")
+                        for (dept, amount) in deptMap {
+                            print("      \(dept): ₹\(amount)")
+                        }
+                    }
+                }
         } catch {
             // Error loading phase department spent
         }
@@ -3205,9 +3256,19 @@ private struct AllPhasesView: View {
                 
                 await MainActor.run {
                     phaseDepartmentSpentMap = departmentSpentMap
+                    
+                    // Debug logging for APPROVER role
+                    print("📊 AllPhasesView.loadPhaseDepartmentSpent completed:")
+                    print("   Total phases with expenses: \(departmentSpentMap.keys.count)")
+                    for (phaseId, deptMap) in departmentSpentMap {
+                        print("   Phase \(phaseId): \(deptMap.count) departments")
+                        for (dept, amount) in deptMap {
+                            print("      \(dept): ₹\(amount)")
+                        }
+                    }
                 }
             } catch {
-                // Error loading phase department spent
+                print("❌ Error loading phase department spent: \(error)")
             }
         }
     }
@@ -3757,10 +3818,43 @@ private struct AllPhasesView: View {
                     ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
                         // Strip phaseId_ prefix for display
                         let displayName = deptKey.displayDepartmentName()
+                        
+                        // Look up spent amount - try both deptKey formats
+                        // phaseDepartmentSpentMap stores keys with phaseId prefix (e.g., "phaseId_departmentName")
+                        // But phase.departments might have keys with or without prefix
+                        let spentAmount: Double = {
+                            // First try exact match
+                            if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
+                                return spent
+                            }
+                            
+                            // If deptKey has prefix, try without prefix
+                            if deptKey.hasPrefix("\(phase.id)_") {
+                                let deptWithoutPrefix = deptKey.displayDepartmentName()
+                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                                    return spent
+                                }
+                            } else {
+                                // deptKey doesn't have prefix - try with prefix
+                                let deptWithPrefix = "\(phase.id)_\(deptKey)"
+                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                    return spent
+                                }
+                            }
+                            
+                            // Debug: log when no match is found
+                            if let deptMap = phaseDepartmentSpentMap[phase.id], !deptMap.isEmpty {
+                                print("⚠️ No match for deptKey '\(deptKey)' in phase '\(phase.id)'")
+                                print("   Available keys: \(deptMap.keys.joined(separator: ", "))")
+                            }
+                            
+                            return 0
+                        }()
+                        
                         DepartmentMiniCard(
                             title: displayName,
                             amount: amount,
-                            spent: phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0,
+                            spent: spentAmount,
                             onTap: {
                                 // Use the display name (without phaseId prefix) for selection
                                 selectedDepartment = DepartmentSelection(name: displayName, phaseId: phase.id)
