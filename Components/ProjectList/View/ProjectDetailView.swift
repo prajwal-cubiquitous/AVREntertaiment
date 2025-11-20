@@ -175,7 +175,11 @@ struct ProjectDetailView: View {
             addExpenseButton
         }
         .onAppear {
+            // Load phases first (this also calculates totalApprovedExpenses)
             viewModel.loadPhases()
+            
+            // Then fetch approved expenses separately (for department breakdown)
+            // This will also update totalApprovedExpenses, but loadPhases() should set it first
             viewModel.fetchApprovedExpenses()
             
             // Load state manager data
@@ -255,6 +259,11 @@ struct ProjectDetailView: View {
                     newStatus: newStatus,
                     amount: amount
                 )
+                
+                // Refresh approved expenses total when status changes
+                viewModel.fetchApprovedExpenses()
+                // Also reload phases to update phase-level approved amounts
+                viewModel.loadPhases()
             }
         }
         .sheet(isPresented: $showingExpenseChat) {
@@ -441,30 +450,13 @@ private struct SectionHeader: View {
 
 private struct KeyInformationView: View {
     let project: Project
-    var viewModel: ProjectDetailViewModel
+    @ObservedObject var viewModel: ProjectDetailViewModel
     @Binding var isTeamMembersDropdownVisible: Bool
     
     var totalApprovedAmount: Double {
-        // Priority 1: If phases are loaded, sum from phases (most reliable - calculated from actual phase data)
-        // This ensures we always get the correct total even if totalApprovedExpenses hasn't been set yet
-        if !viewModel.phases.isEmpty {
-            let totalFromPhases = viewModel.totalApprovedFromPhases
-            // Use totalFromPhases if it's > 0, otherwise use totalApprovedExpenses (which might be 0 if no expenses)
-            if totalFromPhases > 0 {
-                return totalFromPhases
-            }
-            // If phases are loaded but totalFromPhases is 0, use totalApprovedExpenses
-            // This handles the case where phases exist but have no expenses
-            return viewModel.totalApprovedExpenses
-        }
-        
-        // Priority 2: Use totalApprovedExpenses if phases haven't loaded yet
-        if viewModel.totalApprovedExpenses > 0 {
-            return viewModel.totalApprovedExpenses
-        }
-        
-        // Priority 3: Sum from departments (legacy support)
-        return viewModel.approvedExpensesByDepartment.values.reduce(0, +)
+        // Always use totalApprovedExpenses which is fetched directly from Firebase
+        // This is calculated by summing all approved expenses from the expenses subcollection
+        return viewModel.totalApprovedExpenses
     }
     
     var totalRemainingBudget: Double {

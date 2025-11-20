@@ -80,9 +80,8 @@ class ProjectDetailViewModel: ObservableObject {
     
     // MARK: - Load Phases
     func loadPhases() {
-        guard let projectId = project.id,
-              let customerId = customerId else {
-            print("❌ Customer ID or Project ID not found in loadPhases")
+        guard let projectId = project.id else {
+            print("❌ Project ID not found in loadPhases")
             isLoading = false
             return
         }
@@ -90,6 +89,10 @@ class ProjectDetailViewModel: ObservableObject {
         
         Task {
             do {
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                print("📊 loadPhases: Using customerId: \(customerId), projectId: \(projectId)")
+                
                 let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
                 let snapshot = try await phasesRef.order(by: "phaseNumber").getDocuments()
                 
@@ -219,8 +222,9 @@ class ProjectDetailViewModel: ObservableObject {
                     self.currentPhases = self.getCurrentPhases(from: phasesList)
                     self.expiredPhases = self.getExpiredPhases(from: phasesList)
                     // Always update totalApprovedExpenses with the calculated value
+                    let previousValue = self.totalApprovedExpenses
                     self.totalApprovedExpenses = totalApproved
-                    print("✅ Total approved expenses calculated: ₹\(totalApproved) from \(expensesSnapshot.documents.count) expense documents")
+                    print("✅ loadPhases: Total approved expenses calculated: ₹\(totalApproved) from \(expensesSnapshot.documents.count) expense documents (Previous: ₹\(previousValue))")
                     self.isLoading = false
                 }
                 
@@ -293,65 +297,96 @@ class ProjectDetailViewModel: ObservableObject {
     }
     
     // MARK: - Legacy Methods (for backward compatibility)
-    func fetchApprovedExpenses()  {
-        guard let projectId = project.id,
-              let customerId = customerId else {
-            print("❌ Customer ID or Project ID not found in fetchApprovedExpenses")
+    func fetchApprovedExpenses() {
+        guard let projectId = project.id else {
+            print("❌ Project ID not found in fetchApprovedExpenses")
             return
         }
         
-        FirebasePathHelper.shared
-            .expensesCollection(customerId: customerId, projectId: projectId)
-            .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
-            .getDocuments { [weak self] snapshot, error in
-                DispatchQueue.main.async {
-                    guard let documents = snapshot?.documents else {
-                        return
-                    }
-                    
-                    var departmentTotals: [String: Double] = [:]
-                    var totalApproved: Double = 0
-                    for document in documents {
-                        if let expense = try? document.data(as: Expense.self) {
-                            totalApproved += expense.amount
-                            if expense.isAnonymous == true {
-                                departmentTotals["Other Expenses", default: 0] += expense.amount
-                            } else {
-                                departmentTotals[expense.department, default: 0] += expense.amount
-                            }
+        Task {
+            do {
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                print("📊 fetchApprovedExpenses: Using customerId: \(customerId), projectId: \(projectId)")
+                
+                // Fetch all approved expenses for this project
+                let expensesSnapshot = try await FirebasePathHelper.shared
+                    .expensesCollection(customerId: customerId, projectId: projectId)
+                    .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
+                    .getDocuments()
+                
+                print("📊 fetchApprovedExpenses: Found \(expensesSnapshot.documents.count) approved expense documents")
+                
+                var departmentTotals: [String: Double] = [:]
+                var totalApproved: Double = 0
+                var parsedCount = 0
+                var failedCount = 0
+                
+                for document in expensesSnapshot.documents {
+                    do {
+                        var expense = try document.data(as: Expense.self)
+                        expense.id = document.documentID
+                        totalApproved += expense.amount
+                        parsedCount += 1
+                        
+                        if expense.isAnonymous == true {
+                            departmentTotals["Other Expenses", default: 0] += expense.amount
+                        } else {
+                            departmentTotals[expense.department, default: 0] += expense.amount
                         }
-                    }
-                    
-                    self?.approvedExpensesByDepartment = departmentTotals
-                    // Update total approved expenses if phases haven't loaded yet or if total is 0
-                    // Otherwise, loadPhases() will have the more accurate total (it processes all expenses)
-                    if self?.phases.isEmpty == true || self?.totalApprovedExpenses == 0 {
-                        self?.totalApprovedExpenses = totalApproved
+                    } catch {
+                        failedCount += 1
+                        print("⚠️ Failed to parse expense document \(document.documentID): \(error)")
                     }
                 }
+                
+                await MainActor.run {
+                    self.approvedExpensesByDepartment = departmentTotals
+                    // Only update totalApprovedExpenses if we successfully parsed at least one expense
+                    // or if we got 0 documents (meaning there really are no approved expenses)
+                    // This prevents overwriting a correct value from loadPhases() if there's a parsing issue
+                    if parsedCount > 0 || expensesSnapshot.documents.isEmpty {
+                        self.totalApprovedExpenses = totalApproved
+                        print("✅ fetchApprovedExpenses: Total approved expenses = ₹\(totalApproved) (Parsed: \(parsedCount), Failed: \(failedCount), Total docs: \(expensesSnapshot.documents.count))")
+                    } else {
+                        print("⚠️ fetchApprovedExpenses: All expenses failed to parse. Keeping existing totalApprovedExpenses value of ₹\(self.totalApprovedExpenses)")
+                    }
+                }
+            } catch {
+                print("❌ Error fetching approved expenses: \(error)")
+                // Don't overwrite existing value on error - keep the value from loadPhases()
             }
+        }
     }
 
     func fetchAllocatedBudgets() {
-        guard let projectId = project.id,
-              let customerId = customerId else {
-            print("❌ Customer ID or Project ID not found in fetchAllocatedBudgets")
+        guard let projectId = project.id else {
+            print("❌ Project ID not found in fetchAllocatedBudgets")
             return
         }
-        let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
-        phasesRef.getDocuments { [weak self] snapshot, error in
-            var totals: [String: Double] = [:]
-            if let documents = snapshot?.documents {
-                for doc in documents {
+        
+        Task {
+            do {
+                // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                
+                let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
+                let snapshot = try await phasesRef.getDocuments()
+                
+                var totals: [String: Double] = [:]
+                for doc in snapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
                         for (dept, amount) in phase.departments {
                             totals[dept, default: 0] += amount
                         }
                     }
                 }
-            }
-            DispatchQueue.main.async {
-                self?.allocatedBudgetsByDepartment = totals
+                
+                await MainActor.run {
+                    self.allocatedBudgetsByDepartment = totals
+                }
+            } catch {
+                print("❌ Error fetching allocated budgets: \(error)")
             }
         }
     }
@@ -376,9 +411,8 @@ class ProjectDetailViewModel: ObservableObject {
     
     // MARK: - Load Phase Extensions
     func loadPhaseExtensions() async {
-        guard let projectId = project.id,
-              let customerId = customerId else {
-            print("❌ Customer ID or Project ID not found in loadPhaseExtensions")
+        guard let projectId = project.id else {
+            print("❌ Project ID not found in loadPhaseExtensions")
             return
         }
         
@@ -389,6 +423,9 @@ class ProjectDetailViewModel: ObservableObject {
         }
         
         do {
+            // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
+            let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+            
             var extensionMap: [String: Bool] = [:]
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "dd/MM/yyyy"
