@@ -30,6 +30,16 @@ struct AddExpenseView: View {
         return formatter.string(from: NSNumber(value: amount)) ?? "₹0.00"
     }
     
+    private func formatDepartmentName(_ departmentName: String) -> String {
+        // Remove everything before and including the first underscore
+        if let underscoreIndex = departmentName.firstIndex(of: "_") {
+            let afterUnderscore = departmentName.index(after: underscoreIndex)
+            return String(departmentName[afterUnderscore...])
+        }
+        // If no underscore found, return the original name
+        return departmentName
+    }
+    
     private func fileIcon(for fileName: String) -> String {
         let lowercased = fileName.lowercased()
         if lowercased.hasSuffix(".pdf") {
@@ -515,7 +525,7 @@ struct AddExpenseView: View {
                         } label: {
                             HStack {
                                 TruncatedTextWithTooltip(
-                                    department,
+                                    formatDepartmentName(department),
                                     font: .body,
                                     foregroundColor: .primary,
                                     lineLimit: 1
@@ -538,7 +548,7 @@ struct AddExpenseView: View {
                         } else {
                             VStack(alignment: .leading, spacing: 4) {
                                 TruncatedTextWithTooltip(
-                                    viewModel.selectedDepartment,
+                                    formatDepartmentName(viewModel.selectedDepartment),
                                     font: .body,
                                     fontWeight: .medium,
                                     foregroundColor: .primary,
