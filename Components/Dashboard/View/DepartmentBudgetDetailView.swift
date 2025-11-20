@@ -368,8 +368,8 @@ struct DepartmentBudgetDetailView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        // Use state manager value if available for immediate updates
-                        let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
+                        // Use viewModel value which is phase-specific
+                        let budgetValue = viewModel.totalBudget
                         Text(department != "Other" ? budgetValue.formattedCurrency : "N/A")
                             .font(.title3)
                             .fontWeight(.bold)
@@ -387,8 +387,10 @@ struct DepartmentBudgetDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            // Use state manager value if available for immediate updates
-                            let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                            // CRITICAL: Always use viewModel.totalSpent which is phase-specific
+                            // Do NOT use stateManager.departmentBudgets[department]?.spent as it may aggregate across phases
+                            // viewModel.totalSpent is calculated from loadedExpenses which are already filtered by phase
+                            let spentValue = viewModel.totalSpent
                             Text(spentValue.formattedCurrency)
                                 .font(.title3)
                                 .fontWeight(.bold)
@@ -404,9 +406,10 @@ struct DepartmentBudgetDetailView: View {
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
-                            // Use state manager value if available for immediate updates
-                            let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
-                            let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                            // CRITICAL: Use viewModel values which are phase-specific
+                            // Do NOT use stateManager values as they may aggregate across phases
+                            let budgetValue = viewModel.totalBudget
+                            let spentValue = viewModel.totalSpent
                             let remainingValue = budgetValue - spentValue
                             Text(department != "Other" ? remainingValue.formattedCurrency : "N/A")
                                 .font(.title3)
@@ -444,9 +447,9 @@ struct DepartmentBudgetDetailView: View {
                     
                     Spacer()
                     
-                    // Use state manager value if available for immediate updates
-                    let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
-                    let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                    // Use viewModel values which are phase-specific
+                    let budgetValue = viewModel.totalBudget
+                    let spentValue = viewModel.totalSpent
                     let utilizationPercentage = budgetValue > 0 ? (spentValue / budgetValue) * 100 : 0
                     Text("\(Int(utilizationPercentage))%")
                         .font(.subheadline)
@@ -460,9 +463,9 @@ struct DepartmentBudgetDetailView: View {
                             .fill(Color(.systemGray5))
                             .frame(height: 8)
                         
-                        // Use state manager value if available for immediate updates
-                        let budgetValue = stateManager.departmentBudgets[department]?.total ?? viewModel.totalBudget
-                        let spentValue = stateManager.departmentBudgets[department]?.spent ?? viewModel.totalSpent
+                        // Use viewModel values which are phase-specific
+                        let budgetValue = viewModel.totalBudget
+                        let spentValue = viewModel.totalSpent
                         let remainingValue = budgetValue - spentValue
                         let utilizationPercentage = budgetValue > 0 ? (spentValue / budgetValue) * 100 : 0
                         
@@ -1284,10 +1287,26 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     loadedExpenses = expenses
                 }
                 
-                // Calculate totals
-                let totalSpent = loadedExpenses
-                    .filter { $0.status == .approved }
-                    .reduce(0) { $0 + $1.amount }
+                // Calculate totals - ONLY from expenses in the specific phase
+                // This ensures we don't aggregate across phases
+                // CRITICAL: loadedExpenses is already filtered by phaseId in the query,
+                // but we add an extra defensive check here to ensure accuracy
+                let totalSpent: Double
+                if let effectivePhaseId = effectivePhaseId {
+                    // Only count approved expenses that match the specific phase
+                    totalSpent = loadedExpenses
+                        .filter { expense in
+                            guard expense.status == .approved else { return false }
+                            // Double-check phaseId matches (defensive programming)
+                            return expense.phaseId == effectivePhaseId
+                        }
+                        .reduce(0) { $0 + $1.amount }
+                } else {
+                    // Fallback: count all approved expenses (shouldn't happen for non-"Other" departments)
+                    totalSpent = loadedExpenses
+                        .filter { $0.status == .approved }
+                        .reduce(0) { $0 + $1.amount }
+                }
                 
                 // For "Other" department, budget is 0 (no allocated budget for anonymous expenses)
                 var allocated: Double = 0
