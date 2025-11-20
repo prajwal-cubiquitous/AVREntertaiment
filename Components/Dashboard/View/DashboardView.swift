@@ -133,6 +133,7 @@ struct DashboardView: View {
     @State private var allPhases: [PhaseSummary] = []
     @State private var phaseEnabledMap: [String: Bool] = [:]
     @State private var phaseBudgetMap: [String: PhaseBudget] = [:]
+    @State private var phasesLoaded = false // Track if phases have been loaded
     @State private var phaseExtensionMap: [String: Bool] = [:] // Track if phase has accepted extension
     @State private var phaseAnonymousExpensesMap: [String: Double] = [:] // Track anonymous expenses per phase
     @State private var phaseDepartmentSpentMap: [String: [String: Double]] = [:] // Track spent per department per phase [phaseId: [department: spent]]
@@ -989,25 +990,35 @@ struct DashboardView: View {
                         endDate: tempApproverEndDate
                     )
                 } else {
-                    // Check if project is ACTIVE but has no active phases - show SUSPENDED in UI
+                    // Use project's actual status from Firebase (which is kept up-to-date)
+                    // Only compute displayed status if phases have been loaded to avoid flicker
                     let displayedStatus: ProjectStatus = {
-                        if let project = project, project.statusType == .ACTIVE {
-                            // Check if there are any active phases
+                        guard let project = project else { return .LOCKED }
+                        
+                        // If phases haven't loaded yet, just use the project's status from Firebase
+                        // This prevents showing incorrect status during initial load
+                        if !phasesLoaded {
+                            return project.statusType
+                        }
+                        
+                        // After phases are loaded, if project is ACTIVE but has no active phases, show STANDBY
+                        if project.statusType == .ACTIVE {
                             let hasActivePhases = allPhases.contains { phase in
                                 (phaseEnabledMap[phase.id] ?? true) && isPhaseInProgress(phase)
                             }
                             if !hasActivePhases {
-                                return .SUSPENDED
+                                return .STANDBY
                             }
                         }
-                        return project?.statusType ?? .LOCKED
+                        
+                        return project.statusType
                     }()
                     
                     ProjectStatsCard(
                         title: "Project Status",
                         value: displayedStatus.rawValue,
                         icon: "circle.fill",
-                        color: displayedStatus == .ACTIVE ? .green : (displayedStatus == .SUSPENDED ? .orange : .orange)
+                        color: displayedStatus == .ACTIVE ? .green : (displayedStatus == .STANDBY ? .orange : displayedStatus.color)
                     )
                 }
                 
@@ -1819,6 +1830,7 @@ struct DashboardView: View {
             }
             await MainActor.run { 
                 allPhases = collected
+                phasesLoaded = true // Mark phases as loaded
                 // Sync with state manager
                 stateManager.allPhases = collected
             }

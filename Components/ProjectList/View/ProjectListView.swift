@@ -336,14 +336,14 @@ struct ProjectListView: View {
                     await sharedStateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
                 }
             }
-            // Also check and update project statuses based on phases
-            Task {
+            // Check and update project statuses based on phases in background (don't block UI)
+            Task.detached(priority: .background) {
                 await viewModel.checkAndUpdateProjectStatusesBasedOnPhases()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PhaseUpdated"))) { _ in
-            // Check and update project statuses when a phase is created/updated
-            Task {
+            // Check and update project statuses when a phase is created/updated (in background)
+            Task.detached(priority: .background) {
                 await viewModel.checkAndUpdateProjectStatusesBasedOnPhases()
             }
         }

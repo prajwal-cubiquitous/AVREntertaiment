@@ -135,7 +135,8 @@ class ProjectListViewModel: ObservableObject {
             self.isLoading = false
             
             // Check and update project statuses based on active phases
-            Task {
+            // Run this in background to avoid blocking UI updates
+            Task.detached(priority: .background) {
                 await self.checkAndUpdateProjectStatusesBasedOnPhases()
             }
             
