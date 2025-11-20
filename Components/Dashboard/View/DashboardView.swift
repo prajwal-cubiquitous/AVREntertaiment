@@ -100,6 +100,18 @@ struct DashboardView: View {
         return isSuspended || isRestrictedStatus
     }
     
+    // Check if Dashboard, Analytics, and Chat should be disabled (for LOCKED and IN_REVIEW)
+    private var shouldDisableDashboardAnalyticsChat: Bool {
+        guard let project = project else { return false }
+        return project.statusType == .LOCKED || project.statusType == .IN_REVIEW
+    }
+    
+    // Check if project is ARCHIVED (only Analytics should be available)
+    private var isArchived: Bool {
+        guard let project = project else { return false }
+        return project.statusType == .ARCHIVE
+    }
+    
     // MARK: - Phase Data
     struct PhaseSummary: Identifiable, Hashable {
         let id: String
@@ -209,61 +221,100 @@ struct DashboardView: View {
                             // Action buttons (positioned absolutely)
                             if showingActionMenu {
                                 VStack(spacing: 12) {
-                                    if role == .ADMIN {
-                                        ActionMenuButton(icon: "person.2.badge.gearshape.fill", title: "Delegate", color: Color.purple) {
-                                            showingDelegate = true
-                                            showingActionMenu = false
-                                            HapticManager.selection()
+                                    // For ARCHIVE status, only show Analytics
+                                    if isArchived {
+                                        if role == .ADMIN {
+                                            ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
+                                                showingAnalytics = true
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            }
                                         }
-                                    }
-                                    
-                                    ActionMenuButton(icon: "chart.bar.fill", title: "Dashboard", color: Color.blue) {
-                                        showingActionMenu = false
-                                        HapticManager.selection()
-                                    }
-                                    
-                                    ActionMenuButton(
-                                        icon: "clock.badge.checkmark.fill",
-                                        title: "Pending Approvals",
-                                        color: Color.orange,
-                                        isDisabled: shouldDisableActions
-                                    ) {
-                                        if !shouldDisableActions {
-                                            showingPendingApprovals = true
-                                            showingActionMenu = false
-                                            HapticManager.selection()
-                                        } else {
-                                            HapticManager.notification(.error)
+                                    } else {
+                                        // For other statuses, show all options (with appropriate disabling)
+                                        if role == .ADMIN {
+                                            ActionMenuButton(icon: "person.2.badge.gearshape.fill", title: "Delegate", color: Color.purple) {
+                                                showingDelegate = true
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            }
                                         }
-                                    }
-                                    
-                                    ActionMenuButton(
-                                        icon: "plus.circle.fill",
-                                        title: "Add Expense",
-                                        color: Color.green,
-                                        isDisabled: shouldDisableActions
-                                    ) {
-                                        if !shouldDisableActions {
-                                            showingAddExpense = true
-                                            showingActionMenu = false
-                                            HapticManager.selection()
-                                        } else {
-                                            HapticManager.notification(.error)
+                                        
+                                        ActionMenuButton(
+                                            icon: "chart.bar.fill",
+                                            title: "Dashboard",
+                                            color: Color.blue,
+                                            isDisabled: shouldDisableDashboardAnalyticsChat
+                                        ) {
+                                            if !shouldDisableDashboardAnalyticsChat {
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            } else {
+                                                HapticManager.notification(.error)
+                                            }
                                         }
-                                    }
-                                    
-                                    if role == .ADMIN {
-                                        ActionMenuButton(icon: "chart.line.uptrend.xyaxis", title: "Analytics", color: Color.indigo) {
-                                            showingAnalytics = true
-                                            showingActionMenu = false
-                                            HapticManager.selection()
+                                        
+                                        ActionMenuButton(
+                                            icon: "clock.badge.checkmark.fill",
+                                            title: "Pending Approvals",
+                                            color: Color.orange,
+                                            isDisabled: shouldDisableActions
+                                        ) {
+                                            if !shouldDisableActions {
+                                                showingPendingApprovals = true
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            } else {
+                                                HapticManager.notification(.error)
+                                            }
                                         }
-                                    }
-                                    
-                                    ActionMenuButton(icon: "message.fill", title: "Chats", color: Color.teal) {
-                                        showingChats = true
-                                        showingActionMenu = false
-                                        HapticManager.selection()
+                                        
+                                        ActionMenuButton(
+                                            icon: "plus.circle.fill",
+                                            title: "Add Expense",
+                                            color: Color.green,
+                                            isDisabled: shouldDisableActions
+                                        ) {
+                                            if !shouldDisableActions {
+                                                showingAddExpense = true
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            } else {
+                                                HapticManager.notification(.error)
+                                            }
+                                        }
+                                        
+                                        if role == .ADMIN {
+                                            ActionMenuButton(
+                                                icon: "chart.line.uptrend.xyaxis",
+                                                title: "Analytics",
+                                                color: Color.indigo,
+                                                isDisabled: shouldDisableDashboardAnalyticsChat
+                                            ) {
+                                                if !shouldDisableDashboardAnalyticsChat {
+                                                    showingAnalytics = true
+                                                    showingActionMenu = false
+                                                    HapticManager.selection()
+                                                } else {
+                                                    HapticManager.notification(.error)
+                                                }
+                                            }
+                                        }
+                                        
+                                        ActionMenuButton(
+                                            icon: "message.fill",
+                                            title: "Chats",
+                                            color: Color.teal,
+                                            isDisabled: shouldDisableDashboardAnalyticsChat
+                                        ) {
+                                            if !shouldDisableDashboardAnalyticsChat {
+                                                showingChats = true
+                                                showingActionMenu = false
+                                                HapticManager.selection()
+                                            } else {
+                                                HapticManager.notification(.error)
+                                            }
+                                        }
                                     }
                                 }
                                 .padding(.bottom, 80) // Space for the main button
