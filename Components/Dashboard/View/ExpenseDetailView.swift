@@ -59,8 +59,8 @@ struct ExpenseDetailView: View {
                         // Expense Details Card
                         expenseDetailsCard
                         
-                        // Budget Context Card (if phase and department info available)
-                        if expense.phaseId != nil {
+                        // Budget Context Card (only show for pending expenses)
+                        if expense.phaseId != nil && expense.status == .pending {
                             budgetContextCard
                         }
                         
@@ -144,7 +144,8 @@ struct ExpenseDetailView: View {
             }
         }
         .onAppear {
-            if expense.phaseId != nil {
+            // Only load budget context for pending expenses
+            if expense.phaseId != nil && expense.status == .pending {
                 loadBudgetContext()
             }
         }
@@ -435,7 +436,15 @@ struct ExpenseDetailView: View {
                 
                 if let phase = try? phaseDoc.data(as: Phase.self) {
                     // Get allocated budget for this department in this phase
-                    let departmentBudget = phase.departments[expense.department] ?? 0
+                    // Try new format first (phaseId_departmentName), then old format (departmentName)
+                    let compositeKey = "\(phaseId)_\(expense.department)"
+                    var departmentBudget: Double = 0
+                    
+                    if let newFormatBudget = phase.departments[compositeKey] {
+                        departmentBudget = newFormatBudget
+                    } else if let oldFormatBudget = phase.departments[expense.department] {
+                        departmentBudget = oldFormatBudget
+                    }
                     
                     // Store phase name
                     await MainActor.run {

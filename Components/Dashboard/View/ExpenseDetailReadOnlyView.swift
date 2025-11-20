@@ -42,8 +42,8 @@ struct ExpenseDetailReadOnlyView: View {
                         // Expense Details Card
                         expenseDetailsCard
                         
-                        // Budget Context Card (if phase and department info available)
-                        if expense.phaseId != nil {
+                        // Budget Context Card (only show for pending expenses)
+                        if expense.phaseId != nil && expense.status == .pending {
                             budgetContextCard
                         }
                         
@@ -85,7 +85,8 @@ struct ExpenseDetailReadOnlyView: View {
         }
         .task {
             await loadAllNames()
-            if expense.phaseId != nil {
+            // Only load budget context for pending expenses
+            if expense.phaseId != nil && expense.status == .pending {
                 await loadBudgetContext()
             }
         }
