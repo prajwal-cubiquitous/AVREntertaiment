@@ -55,6 +55,10 @@ struct PendingApprovalsView: View {
         .onAppear {
             viewModel.loadPendingExpenses()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { _ in
+            // Reload expenses when an expense status is updated (approved/rejected)
+            viewModel.loadPendingExpenses()
+        }
         .alert("Confirm Action", isPresented: $viewModel.showingConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button(viewModel.pendingAction == .approve ? "Approve" : "Reject", role: viewModel.pendingAction == .approve ? .none : .destructive) {

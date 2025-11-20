@@ -266,42 +266,64 @@ class PendingApprovalsViewModel: ObservableObject {
         isLoading = true
         
         do {
-            
-            guard let projectId = project.id else{ return }
-            
-            
+            guard let projectId = project.id else { return }
+            let customerID = try await self.customerID
             let newStatus: ExpenseStatus = pendingAction == .approve ? .approved : .rejected
             
             // Update each selected expense
             for expenseId in selectedExpenses {
-                // Find the project and update the expense
-                
-                let projectsSnapshot = try await db.collection("customers")
-                    .document(customerID)
-                    .collection("projects")
-                    .document(projectId)
-                    .getDocument()
-                
-                    let expenseRef = projectsSnapshot.reference.collection("expenses").document(expenseId)
+                // Find the expense in pending expenses to get its details
+                if let expense = pendingExpenses.first(where: { $0.id == expenseId }) {
+                    let expenseRef = db.collection("customers")
+                        .document(customerID)
+                        .collection("projects")
+                        .document(projectId)
+                        .collection("expenses")
+                        .document(expenseId)
                     
-                    // Check if expense exists in this project
+                    // Check if expense exists
                     let expenseDoc = try await expenseRef.getDocument()
                     if expenseDoc.exists {
                         var updateData: [String: Any] = [
                             "status": newStatus.rawValue,
-                            "approvedAt": Date(),
-                            "approvedBy": currentUserPhone
+                            "updatedAt": Timestamp()
                         ]
+                        
+                        if newStatus == .approved {
+                            updateData["approvedAt"] = Timestamp()
+                            updateData["approvedBy"] = currentUserPhone
+                            updateData["rejectedAt"] = FieldValue.delete()
+                            updateData["rejectedBy"] = FieldValue.delete()
+                        } else {
+                            updateData["rejectedAt"] = Timestamp()
+                            updateData["rejectedBy"] = currentUserPhone
+                            updateData["approvedAt"] = FieldValue.delete()
+                            updateData["approvedBy"] = FieldValue.delete()
+                        }
                         
                         // Add admin approval note if current user is admin
                         if currentUserRole == .ADMIN {
-                            let adminNote = "Admin approved"
+                            let adminNote = newStatus == .approved ? "Admin approved" : "Admin rejected"
                             updateData["remark"] = adminNote
                         }
                         
                         try await expenseRef.updateData(updateData)
-                        break
+                        
+                        // Post notification for other listeners
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ExpenseStatusUpdated"),
+                            object: nil,
+                            userInfo: [
+                                "expenseId": expenseId,
+                                "phaseId": expense.phaseId as Any,
+                                "department": expense.department,
+                                "oldStatus": expense.status.rawValue,
+                                "newStatus": newStatus.rawValue,
+                                "amount": expense.amount
+                            ]
+                        )
                     }
+                }
             }
             
             // Refresh the list
