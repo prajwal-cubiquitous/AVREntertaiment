@@ -1986,19 +1986,19 @@ struct HandoverDateCard: View {
             } else {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
                     // Initial Handover Date (static display)
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Initial Handover Date")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(initialHandOverDateFormatted)
-                                .font(.body)
-                                .foregroundStyle(.primary)
-                        }
-                        Spacer()
-                    }
-                    
-                    Divider()
+//                    HStack {
+//                        VStack(alignment: .leading, spacing: 4) {
+//                            Text("Initial Handover Date")
+//                                .font(.caption)
+//                                .foregroundStyle(.secondary)
+//                            Text(initialHandOverDateFormatted)
+//                                .font(.body)
+//                                .foregroundStyle(.primary)
+//                        }
+//                        Spacer()
+//                    }
+//                    
+//                    Divider()
                     
                     // Current Handover Date
                     HStack {
