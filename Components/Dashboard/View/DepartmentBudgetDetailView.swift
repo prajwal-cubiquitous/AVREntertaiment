@@ -1094,70 +1094,31 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                 let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
                 
                 // Special handling for "Other" department (anonymous expenses)
-                // First, determine which phaseId to use for filtering expenses
-                // This prevents merging expenses across phases with the same department name
+                // CRITICAL: We need to find the exact phaseId and department key to query expenses correctly
                 var effectivePhaseId: String? = phaseId
                 var actualDepartmentKey: String? = nil // Store the actual department key with ID prefix
                 
-                // If phaseId is not provided, we need to find the first phase that contains this department
-                // to match the budget calculation logic (which only uses the first phase)
                 if department != "Other" {
-                    let phasesSnapshot = try await FirebasePathHelper.shared
-                        .phasesCollection(customerId: customerID, projectId: projectId)
-                        .order(by: "phaseNumber")
-                        .getDocuments()
-                    
-                    // Find the first phase that contains this department and get the actual department key
-                    for doc in phasesSnapshot.documents {
-                        let currentPhaseId = doc.documentID
-                        if let phase = try? doc.data(as: Phase.self) {
-                            let compositeKey = "\(currentPhaseId)_\(department)"
-                            
-                            // Check for department key - try new format first, then old format
-                            var foundKey: String? = nil
-                            if phase.departments[compositeKey] != nil {
-                                foundKey = compositeKey
-                            } else if phase.departments[department] != nil {
-                                foundKey = department
-                            } else {
-                                // Try to find by matching display name (for cases where key has ID prefix)
-                                foundKey = phase.departments.keys.first { key in
-                                    // Check if the key's display name matches the department
-                                    if let underscoreIndex = key.firstIndex(of: "_") {
-                                        let afterUnderscore = String(key[key.index(after: underscoreIndex)...])
-                                        return afterUnderscore == department
-                                    }
-                                    return key == department
-                                }
-                            }
-                            
-                            if let key = foundKey {
-                                effectivePhaseId = currentPhaseId
-                                actualDepartmentKey = key
-                                break
-                            }
-                        }
-                    }
-                    
-                    // If phaseId was provided, find the actual department key for that phase
-                    if effectivePhaseId == nil, let requiredPhaseId = phaseId {
+                    // If phaseId is provided, use it directly and find the department key
+                    if let providedPhaseId = phaseId {
                         let phaseDoc = try await FirebasePathHelper.shared
                             .phasesCollection(customerId: customerID, projectId: projectId)
-                            .document(requiredPhaseId)
+                            .document(providedPhaseId)
                             .getDocument()
                         
                         if let phase = try? phaseDoc.data(as: Phase.self) {
-                            let compositeKey = "\(requiredPhaseId)_\(department)"
+                            let compositeKey = "\(providedPhaseId)_\(department)"
                             
-                            // Check for department key - try new format first, then old format
+                            // Check for department key - try new format first (phaseId_departmentName)
                             if phase.departments[compositeKey] != nil {
                                 actualDepartmentKey = compositeKey
-                                effectivePhaseId = requiredPhaseId
+                                effectivePhaseId = providedPhaseId
                             } else if phase.departments[department] != nil {
+                                // Old format (just department name)
                                 actualDepartmentKey = department
-                                effectivePhaseId = requiredPhaseId
+                                effectivePhaseId = providedPhaseId
                             } else {
-                                // Try to find by matching display name
+                                // Try to find by matching display name (extract name after underscore)
                                 actualDepartmentKey = phase.departments.keys.first { key in
                                     if let underscoreIndex = key.firstIndex(of: "_") {
                                         let afterUnderscore = String(key[key.index(after: underscoreIndex)...])
@@ -1166,7 +1127,46 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                                     return key == department
                                 }
                                 if actualDepartmentKey != nil {
-                                    effectivePhaseId = requiredPhaseId
+                                    effectivePhaseId = providedPhaseId
+                                }
+                            }
+                        }
+                    } else {
+                        // No phaseId provided - find the first phase that contains this department
+                        // This matches the budget calculation logic
+                        let phasesSnapshot = try await FirebasePathHelper.shared
+                            .phasesCollection(customerId: customerID, projectId: projectId)
+                            .order(by: "phaseNumber")
+                            .getDocuments()
+                        
+                        // Find the first phase that contains this department and get the actual department key
+                        for doc in phasesSnapshot.documents {
+                            let currentPhaseId = doc.documentID
+                            if let phase = try? doc.data(as: Phase.self) {
+                                let compositeKey = "\(currentPhaseId)_\(department)"
+                                
+                                // Check for department key - try new format first, then old format
+                                var foundKey: String? = nil
+                                if phase.departments[compositeKey] != nil {
+                                    foundKey = compositeKey
+                                } else if phase.departments[department] != nil {
+                                    foundKey = department
+                                } else {
+                                    // Try to find by matching display name (for cases where key has ID prefix)
+                                    foundKey = phase.departments.keys.first { key in
+                                        // Check if the key's display name matches the department
+                                        if let underscoreIndex = key.firstIndex(of: "_") {
+                                            let afterUnderscore = String(key[key.index(after: underscoreIndex)...])
+                                            return afterUnderscore == department
+                                        }
+                                        return key == department
+                                    }
+                                }
+                                
+                                if let key = foundKey {
+                                    effectivePhaseId = currentPhaseId
+                                    actualDepartmentKey = key
+                                    break // Use first matching phase
                                 }
                             }
                         }
@@ -1203,73 +1203,81 @@ class DepartmentBudgetDetailViewModel: ObservableObject {
                     }
                 } else {
                     // Load expenses for the specific department
-                    // Use the actual department key if found, otherwise fall back to display name
-                    let departmentKeyToQuery = actualDepartmentKey ?? department
-                    
-                    // Query expenses - try with the actual key first
-                    var baseQuery = FirebasePathHelper.shared
-                        .expensesCollection(customerId: customerID, projectId: projectId)
-                        .whereField("department", isEqualTo: departmentKeyToQuery)
-                    
-                    // Build query conditionally based on effective phaseId
-                    let query: Query
-                    if let effectivePhaseId = effectivePhaseId {
-                        query = baseQuery.whereField("phaseId", isEqualTo: effectivePhaseId)
-                    } else {
-                        query = baseQuery
+                    // CRITICAL: We MUST have a phaseId to filter expenses correctly
+                    // Without phaseId, we cannot distinguish between departments in different phases
+                    guard let effectivePhaseId = effectivePhaseId else {
+                        // If no phaseId found, return empty array
+                        // This prevents showing expenses from wrong phases
+                        await MainActor.run {
+                            self.expenses = []
+                            self.totalSpent = 0
+                            self.isLoading = false
+                        }
+                        return
                     }
                     
-                    let expensesSnapshot = try await query
+                    // Query expenses - ALWAYS filter by phaseId FIRST to prevent cross-phase contamination
+                    // This is the most important filter - it ensures we only get expenses from the correct phase
+                    let baseQuery = FirebasePathHelper.shared
+                        .expensesCollection(customerId: customerID, projectId: projectId)
+                        .whereField("phaseId", isEqualTo: effectivePhaseId)
+                    
+                    let expensesSnapshot = try await baseQuery
                         .order(by: "createdAt", descending: true)
                         .getDocuments()
                     
-                    // If no expenses found with the key, try querying all expenses and filtering by display name
+                    // Parse and filter expenses in memory
+                    // This ensures we only get expenses that match both phaseId AND department
                     var expenses = expensesSnapshot.documents.compactMap { doc -> Expense? in
                         do {
                             var expense = try doc.data(as: Expense.self)
                             expense.id = doc.documentID
-                            return expense
-                        } catch {
-                            return nil
-                        }
-                    }
-                    
-                    // If no expenses found, try a broader query and filter by display name
-                    if expenses.isEmpty && actualDepartmentKey != nil && actualDepartmentKey != department {
-                        let allExpensesQuery: Query
-                        if let effectivePhaseId = effectivePhaseId {
-                            allExpensesQuery = FirebasePathHelper.shared
-                                .expensesCollection(customerId: customerID, projectId: projectId)
-                                .whereField("phaseId", isEqualTo: effectivePhaseId)
-                        } else {
-                            allExpensesQuery = FirebasePathHelper.shared
-                                .expensesCollection(customerId: customerID, projectId: projectId)
-                        }
-                        
-                        let allExpensesSnapshot = try await allExpensesQuery
-                            .order(by: "createdAt", descending: true)
-                            .getDocuments()
-                        
-                        expenses = allExpensesSnapshot.documents.compactMap { doc -> Expense? in
-                            do {
-                                var expense = try doc.data(as: Expense.self)
-                                expense.id = doc.documentID
-                                
-                                // Filter by display name match
+                            
+                            // CRITICAL: Double-check phaseId matches (defensive programming)
+                            guard let expensePhaseId = expense.phaseId, expensePhaseId == effectivePhaseId else {
+                                return nil
+                            }
+                            
+                            // Verify department matches
+                            // Expenses are stored with format: "phaseId_departmentName" or just "departmentName"
+                            let expenseDeptMatches: Bool
+                            
+                            if let actualKey = actualDepartmentKey {
+                                // We have the actual department key from phase - match exactly
+                                if expense.department == actualKey {
+                                    expenseDeptMatches = true
+                                } else {
+                                    // Also check if expense has phaseId prefix and matches display name
+                                    let expenseDeptDisplayName: String
+                                    if let underscoreIndex = expense.department.firstIndex(of: "_") {
+                                        expenseDeptDisplayName = String(expense.department[expense.department.index(after: underscoreIndex)...])
+                                    } else {
+                                        expenseDeptDisplayName = expense.department
+                                    }
+                                    
+                                    let actualKeyDisplayName: String
+                                    if let underscoreIndex = actualKey.firstIndex(of: "_") {
+                                        actualKeyDisplayName = String(actualKey[actualKey.index(after: underscoreIndex)...])
+                                    } else {
+                                        actualKeyDisplayName = actualKey
+                                    }
+                                    
+                                    expenseDeptMatches = expenseDeptDisplayName == department && actualKeyDisplayName == department
+                                }
+                            } else {
+                                // No actual key found - match by display name
                                 let expenseDeptDisplayName: String
                                 if let underscoreIndex = expense.department.firstIndex(of: "_") {
                                     expenseDeptDisplayName = String(expense.department[expense.department.index(after: underscoreIndex)...])
                                 } else {
                                     expenseDeptDisplayName = expense.department
                                 }
-                                
-                                if expenseDeptDisplayName == department {
-                                    return expense
-                                }
-                                return nil
-                            } catch {
-                                return nil
+                                expenseDeptMatches = expenseDeptDisplayName == department
                             }
+                            
+                            return expenseDeptMatches ? expense : nil
+                        } catch {
+                            return nil
                         }
                     }
                     

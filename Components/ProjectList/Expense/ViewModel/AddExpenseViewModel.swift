@@ -1153,11 +1153,28 @@ class AddExpenseViewModel: ObservableObject {
         Task {
             do {
                 let phase = selectedPhase
+                
+                // Ensure department name includes phaseId prefix for uniqueness
+                // This prevents expenses from appearing in wrong phases
+                let departmentKey: String
+                if !selectedPhaseId.isEmpty {
+                    // Check if selectedDepartment already has phaseId prefix
+                    if selectedDepartment.hasPrefix("\(selectedPhaseId)_") {
+                        departmentKey = selectedDepartment
+                    } else {
+                        // Add phaseId prefix to ensure uniqueness
+                        departmentKey = "\(selectedPhaseId)_\(selectedDepartment)"
+                    }
+                } else {
+                    // Fallback to selectedDepartment if no phaseId (shouldn't happen)
+                    departmentKey = selectedDepartment
+                }
+                
                 let expenseData: [String: Any] = [
                     "projectId": projectId,
                     "date": formatDate(expenseDate),
                     "amount": amountValue,
-                    "department": selectedDepartment,
+                    "department": departmentKey, // Use department key with phaseId prefix
                     "phaseId": selectedPhaseId,
                     "phaseName": phase?.name ?? "",
                     "categories": nonEmptyCategories,
@@ -1250,10 +1267,26 @@ class AddExpenseViewModel: ObservableObject {
         isLoading = true
         
         let phase = selectedPhase
+        
+        // Ensure department name includes phaseId prefix for uniqueness
+        let departmentKey: String
+        if !selectedPhaseId.isEmpty {
+            // Check if selectedDepartment already has phaseId prefix
+            if selectedDepartment.hasPrefix("\(selectedPhaseId)_") {
+                departmentKey = selectedDepartment
+            } else {
+                // Add phaseId prefix to ensure uniqueness
+                departmentKey = "\(selectedPhaseId)_\(selectedDepartment)"
+            }
+        } else {
+            // Fallback to selectedDepartment if no phaseId (shouldn't happen)
+            departmentKey = selectedDepartment
+        }
+        
         var updateData: [String: Any] = [
             "date": formatDate(expenseDate),
             "amount": amountValue,
-            "department": selectedDepartment,
+            "department": departmentKey, // Use department key with phaseId prefix
             "phaseId": selectedPhaseId,
             "phaseName": phase?.name ?? "",
             "categories": nonEmptyCategories,
