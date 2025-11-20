@@ -358,20 +358,30 @@ class AddExpenseViewModel: ObservableObject {
                 var phasesList: [PhaseInfo] = []
                 let dateFormatter = DateFormatter()
                 dateFormatter.dateFormat = "dd/MM/yyyy"
+                let calendar = Calendar.current
+                
+                // Normalize reference date to start of day for accurate comparison
                 let referenceDate = date ?? expenseDate
+                let normalizedReferenceDate = calendar.startOfDay(for: referenceDate)
                 
                 for doc in phasesSnapshot.documents {
                     if let phase = try? doc.data(as: Phase.self) {
                         // Check if phase is in timeline
+                        // Normalize dates to start of day to handle same-day comparisons correctly
                         let startDate = phase.startDate.flatMap { dateFormatter.date(from: $0) }
+                            .map { calendar.startOfDay(for: $0) }
                         let endDate = phase.endDate.flatMap { dateFormatter.date(from: $0) }
+                            .map { calendar.startOfDay(for: $0) }
                         
                         let isInTimeline: Bool = {
                             switch (startDate, endDate) {
                             case (nil, nil): return true
-                            case (let s?, nil): return s <= referenceDate
-                            case (nil, let e?): return referenceDate <= e
-                            case (let s?, let e?): return s <= referenceDate && referenceDate <= e
+                            case (let s?, nil): return s <= normalizedReferenceDate
+                            case (nil, let e?): return normalizedReferenceDate <= e
+                            case (let s?, let e?): 
+                                // If end date is today and reference date is today, include it
+                                // This ensures phases ending today are eligible when selected date is today
+                                return s <= normalizedReferenceDate && normalizedReferenceDate <= e
                             }
                         }()
                         
