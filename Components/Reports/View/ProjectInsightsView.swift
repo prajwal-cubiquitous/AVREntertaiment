@@ -219,7 +219,7 @@ struct ProjectInsightsView: View {
             return .indigo
         case "SUSPENDED":
             return .orange
-        case "REVIEW_REJECTED":
+        case "DECLINED":
             return .red
         case "MAINTENANCE":
             return .purple
@@ -245,8 +245,8 @@ struct ProjectInsightsView: View {
             return "Locked"
         case "SUSPENDED":
             return "Suspended"
-        case "REVIEW_REJECTED":
-            return "Review Rejected"
+        case "DECLINED":
+            return "Declined"
         case "MAINTENANCE":
             return "Maintenance"
         case "ARCHIVE":

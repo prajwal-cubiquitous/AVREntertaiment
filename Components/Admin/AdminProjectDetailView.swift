@@ -733,7 +733,7 @@ struct ModernStatusCard: View {
         var statuses = ProjectStatus.allCases.filter { status in
             status != .IN_REVIEW &&
             status != .LOCKED &&
-            status != .REVIEW_REJECTED &&
+            status != .DECLINED &&
             status != .ARCHIVE &&
             status != .SUSPENDED
         }

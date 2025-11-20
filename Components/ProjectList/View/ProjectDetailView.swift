@@ -380,12 +380,30 @@ struct ProjectDetailView: View {
     
     /// A prominent button at the bottom of the screen.
     private var addExpenseButton: some View {
-        Group {
-            let isDisabled = project.isSuspended == true || project.statusType == .ARCHIVE
-            let buttonText = project.isSuspended == true ? "Project Suspended" : (project.statusType == .ARCHIVE ? "Project Archived" : "Add New Expense")
-            let buttonIcon = project.isSuspended == true ? "pause.circle.fill" : (project.statusType == .ARCHIVE ? "archivebox.fill" : "plus")
-            
-            Button(action: {
+        let isSuspended = project.isSuspended == true
+        let isRestrictedStatus = project.statusType == .IN_REVIEW || 
+                                 project.statusType == .LOCKED || 
+                                 project.statusType == .DECLINED || 
+                                 project.statusType == .ARCHIVE
+        let isDisabled = isSuspended || isRestrictedStatus
+        
+        let (buttonText, buttonIcon): (String, String) = {
+            if isSuspended {
+                return ("Project Suspended", "pause.circle.fill")
+            } else if project.statusType == .ARCHIVE {
+                return ("Project Archived", "archivebox.fill")
+            } else if project.statusType == .IN_REVIEW {
+                return ("Project In Review", "clock.fill")
+            } else if project.statusType == .LOCKED {
+                return ("Project Locked", "lock.fill")
+            } else if project.statusType == .DECLINED {
+                return ("Project Declined", "xmark.circle.fill")
+            } else {
+                return ("Add New Expense", "plus")
+            }
+        }()
+        
+        return Button(action: {
                 if isDisabled {
                     HapticManager.notification(.error)
                     return
@@ -407,25 +425,6 @@ struct ProjectDetailView: View {
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView(project: project)
             }
-        }
-        .sheet(isPresented: $showingChats) {
-            if role == .ADMIN {
-                ChatsView(
-                    project: project,
-                    currentUserRole: .ADMIN
-                )
-                .presentationDetents([.large])
-                .environmentObject(navigationManager)
-            } else {
-                ChatsView(
-                    project: project,
-                    currentUserPhone: phoneNumber,
-                    currentUserRole: role ?? .USER
-                )
-                .presentationDetents([.large])
-                .environmentObject(navigationManager)
-            }
-        }
     }
 }
 
@@ -557,10 +556,20 @@ private struct PhaseBreakdownView: View {
                     }
                 }
             } else {
-                EmptyStateRow(
-                    icon: "calendar.badge.clock",
-                    text: "No active phase at the moment"
-                )
+                VStack(spacing: DesignSystem.Spacing.medium) {
+                    EmptyStateRow(
+                        icon: "calendar.badge.clock",
+                        text: "No active phase at the moment"
+                    )
+                    
+                    // View All Phases button - show if there are any phases (current or expired)
+                    if !viewModel.phases.isEmpty {
+                        ViewAllPhasesButton(
+                            viewModel: viewModel,
+                            projectId: project.id ?? ""
+                        )
+                    }
+                }
                 .padding(DesignSystem.Spacing.medium)
                 .cardStyle()
             }

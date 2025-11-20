@@ -8,7 +8,7 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case ACTIVE
     case SUSPENDED
     case COMPLETED
-    case REVIEW_REJECTED
+    case DECLINED
     case MAINTENANCE
     case ARCHIVE
 }
@@ -34,7 +34,7 @@ struct Project: Identifiable, Codable, Equatable, Hashable {
     let isSuspended: Bool? // Whether the project is currently suspended
     let suspendedDate: String? // Date until which the project is suspended
     let suspensionReason: String? // Reason for suspension
-    let rejectionReason: String? // Reason for rejection when status is REVIEW_REJECTED
+    let rejectionReason: String? // Reason for rejection when status is DECLINED
     let rejectedBy: String? // User who rejected the project
     let rejectedAt: Timestamp? // Timestamp when project was rejected
     let teamMembers: [String]

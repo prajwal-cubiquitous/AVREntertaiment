@@ -103,7 +103,7 @@ struct ProjectListView: View {
                                     viewModel.updateStatusFilter(nil)
                                 }
                                 Divider()
-                                ForEach([ProjectStatus.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .REVIEW_REJECTED, .ARCHIVE], id: \.self) { status in
+                                ForEach([ProjectStatus.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .DECLINED, .ARCHIVE], id: \.self) { status in
                                     Button(status.displayText) {
                                         viewModel.updateStatusFilter(status)
                                     }
@@ -185,8 +185,8 @@ struct ProjectListView: View {
             .navigationDestination(item: $navigationManager.activeProjectId) { projectNavigationItem in
                 let projectId = projectNavigationItem.id
                 if let project = viewModel.project(for: projectId) {
-                    // If project is REVIEW_REJECTED and user is ADMIN, show edit view
-                    if role == .ADMIN && project.statusType == .REVIEW_REJECTED {
+                    // If project is DECLINED and user is ADMIN, show edit view
+                    if role == .ADMIN && project.statusType == .DECLINED {
                         CreateProjectView(projectToEdit: project)
                     } else if role == .USER {
                         ProjectDetailView(project: project,
@@ -483,11 +483,11 @@ struct ProjectListView: View {
         }
         
         do {
-            // Update project status to REVIEW_REJECTED so admin can edit and resubmit
+            // Update project status to DECLINED so admin can edit and resubmit
             try await FirebasePathHelper.shared
                 .projectDocument(customerId: customerId, projectId: projectId)
                 .updateData([
-                    "status": ProjectStatus.REVIEW_REJECTED.rawValue,
+                    "status": ProjectStatus.DECLINED.rawValue,
                     "rejectionReason": reason,
                     "rejectedBy": viewModel.phoneNumber,
                     "rejectedAt": Timestamp(),
@@ -750,8 +750,8 @@ struct ProjectListView: View {
                                 HapticManager.selection()
                             })
                         } else if role == .ADMIN {
-                            // If project is REVIEW_REJECTED, navigate to edit view, otherwise to dashboard
-                            if project.statusType == .REVIEW_REJECTED {
+                            // If project is DECLINED, navigate to edit view, otherwise to dashboard
+                            if project.statusType == .DECLINED {
                                 NavigationLink(destination: CreateProjectView(projectToEdit: project).environmentObject(navigationManager)) {
                                     ProjectCell(
                                         project: project,
@@ -777,8 +777,8 @@ struct ProjectListView: View {
                                 })
                             }
                         } else {
-                            // For USER role, disable navigation if project is IN_REVIEW or REVIEW_REJECTED
-                            if role == .USER && (project.statusType == .IN_REVIEW || project.statusType == .REVIEW_REJECTED) {
+                            // For USER role, disable navigation if project is IN_REVIEW or DECLINED
+                            if role == .USER && (project.statusType == .IN_REVIEW || project.statusType == .DECLINED) {
                                 ProjectCell(
                                     project: project,
                                     role: role,

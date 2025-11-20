@@ -65,8 +65,12 @@ class PendingApprovalsViewModel: ObservableObject {
         }
         
         // Apply department filter
+        // Compare using display names (without phase ID prefix)
         if let departmentFilter = selectedDepartmentFilter {
-            filtered = filtered.filter { $0.department == departmentFilter }
+            filtered = filtered.filter { expense in
+                let expenseDeptDisplay = extractDepartmentName(from: expense.department)
+                return expenseDeptDisplay == departmentFilter
+            }
         }
         
         return filtered.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
@@ -176,7 +180,11 @@ class PendingApprovalsViewModel: ObservableObject {
             var departments: Set<String> = []
             for doc in phasesSnapshot.documents {
                 if let phase = try? doc.data(as: Phase.self) {
-                    departments.formUnion(phase.departments.keys)
+                    // Extract department names without phase ID prefix for display
+                    for deptKey in phase.departments.keys {
+                        let displayName = extractDepartmentName(from: deptKey)
+                        departments.insert(displayName)
+                    }
                 }
             }
             
@@ -185,6 +193,15 @@ class PendingApprovalsViewModel: ObservableObject {
         } catch {
             print("Error loading departments: \(error)")
         }
+    }
+    
+    // Helper function to extract department name (everything after first underscore)
+    private func extractDepartmentName(from departmentString: String) -> String {
+        if let underscoreIndex = departmentString.firstIndex(of: "_") {
+            let departmentName = String(departmentString[departmentString.index(after: underscoreIndex)...])
+            return departmentName.isEmpty ? departmentString : departmentName
+        }
+        return departmentString
     }
     
     private func loadAvailableDepartmentsAdmin() async {
@@ -201,7 +218,11 @@ class PendingApprovalsViewModel: ObservableObject {
             var departments: Set<String> = []
             for doc in phasesSnapshot.documents {
                 if let phase = try? doc.data(as: Phase.self) {
-                    departments.formUnion(phase.departments.keys)
+                    // Extract department names without phase ID prefix for display
+                    for deptKey in phase.departments.keys {
+                        let displayName = extractDepartmentName(from: deptKey)
+                        departments.insert(displayName)
+                    }
                 }
             }
             

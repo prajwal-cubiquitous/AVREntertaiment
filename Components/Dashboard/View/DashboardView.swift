@@ -89,6 +89,17 @@ struct DashboardView: View {
         authService.currentCustomerId
     }
     
+    // Computed property to check if actions should be disabled
+    private var shouldDisableActions: Bool {
+        guard let project = project else { return false }
+        let isSuspended = project.isSuspended == true
+        let isRestrictedStatus = project.statusType == .IN_REVIEW || 
+                                 project.statusType == .LOCKED || 
+                                 project.statusType == .DECLINED || 
+                                 project.statusType == .ARCHIVE
+        return isSuspended || isRestrictedStatus
+    }
+    
     // MARK: - Phase Data
     struct PhaseSummary: Identifiable, Hashable {
         let id: String
@@ -211,19 +222,28 @@ struct DashboardView: View {
                                         HapticManager.selection()
                                     }
                                     
-                                    ActionMenuButton(icon: "clock.badge.checkmark.fill", title: "Pending Approvals", color: Color.orange) {
-                                        showingPendingApprovals = true
-                                        showingActionMenu = false
-                                        HapticManager.selection()
+                                    ActionMenuButton(
+                                        icon: "clock.badge.checkmark.fill",
+                                        title: "Pending Approvals",
+                                        color: Color.orange,
+                                        isDisabled: shouldDisableActions
+                                    ) {
+                                        if !shouldDisableActions {
+                                            showingPendingApprovals = true
+                                            showingActionMenu = false
+                                            HapticManager.selection()
+                                        } else {
+                                            HapticManager.notification(.error)
+                                        }
                                     }
                                     
                                     ActionMenuButton(
                                         icon: "plus.circle.fill",
                                         title: "Add Expense",
                                         color: Color.green,
-                                        isDisabled: project?.isSuspended == true || project?.statusType == .ARCHIVE
+                                        isDisabled: shouldDisableActions
                                     ) {
-                                        if project?.isSuspended != true && project?.statusType != .ARCHIVE {
+                                        if !shouldDisableActions {
                                             showingAddExpense = true
                                             showingActionMenu = false
                                             HapticManager.selection()

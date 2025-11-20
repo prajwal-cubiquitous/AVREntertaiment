@@ -288,9 +288,9 @@ class ProjectListViewModel: ObservableObject {
         }
         
         // Sort projects by status order when showing all projects (no filter)
-        // Order: IN_REVIEW, ACTIVE, MAINTENANCE, COMPLETED, REVIEW_REJECTED, ARCHIVE
+        // Order: IN_REVIEW, ACTIVE, MAINTENANCE, COMPLETED, DECLINED, ARCHIVE
         if selectedStatusFilter == nil {
-            let statusOrder: [ProjectStatus] = [.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .REVIEW_REJECTED, .ARCHIVE]
+            let statusOrder: [ProjectStatus] = [.IN_REVIEW, .ACTIVE, .MAINTENANCE, .COMPLETED, .DECLINED, .ARCHIVE]
             
             return filtered.sorted { project1, project2 in
                 let status1 = project1.statusType

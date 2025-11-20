@@ -585,7 +585,7 @@ struct CreateProjectView: View {
     // MARK: - Main Content
     private var mainContent: some View {
         VStack(spacing: DesignSystem.Spacing.medium) {
-            // MARK: - Rejection Reason Banner (if project is REVIEW_REJECTED)
+            // MARK: - Rejection Reason Banner (if project is DECLINED)
             if shouldShowRejectionBanner {
                 rejectionReasonBanner(reason: rejectionReasonText)
             }
@@ -615,7 +615,7 @@ struct CreateProjectView: View {
     // MARK: - Rejection Banner Helpers
     private var shouldShowRejectionBanner: Bool {
         guard let project = projectToEdit,
-              project.statusType == .REVIEW_REJECTED,
+              project.statusType == .DECLINED,
               let reason = project.rejectionReason,
               !reason.isEmpty else {
             return false

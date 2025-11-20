@@ -263,7 +263,7 @@ struct ProjectCell: View {
                 .padding(.top, 4)
             }
             
-            if project.statusType == .REVIEW_REJECTED, let reason = project.rejectionReason, !reason.isEmpty {
+            if project.statusType == .DECLINED, let reason = project.rejectionReason, !reason.isEmpty {
                 HStack(spacing: DesignSystem.Spacing.extraSmall) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.caption2)
@@ -505,7 +505,7 @@ extension ProjectStatus {
         case .IN_REVIEW: return .cyan
         case .LOCKED: return .indigo
         case .SUSPENDED: return .orange            
-        case .REVIEW_REJECTED: return .red
+        case .DECLINED: return .red
         case .MAINTENANCE: return .purple
         case .ARCHIVE: return .gray
         }
@@ -518,7 +518,7 @@ extension ProjectStatus {
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
         case .SUSPENDED: return "SUSPENDED"
-        case .REVIEW_REJECTED: return "DECLINED"
+        case .DECLINED: return "DECLINED"
         case .MAINTENANCE: return "MAINTENANCE"
         case .ARCHIVE: return "ARCHIVE"
         }
