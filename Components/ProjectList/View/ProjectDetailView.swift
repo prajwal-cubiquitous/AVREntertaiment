@@ -151,24 +151,6 @@ struct ProjectDetailView: View {
                         .foregroundColor(.primary)
                         .symbolRenderingMode(.hierarchical)
                 }
-                
-                // 3-dots Menu in navigation bar
-                Menu {
-                    // Add menu items here as needed
-                    Button {
-                        HapticManager.selection()
-                        // Add action here
-                    } label: {
-                        Label("Project Options", systemImage: "ellipsis.circle")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
             }
         }
         .safeAreaInset(edge: .bottom) {
@@ -264,6 +246,22 @@ struct ProjectDetailView: View {
                 viewModel.fetchApprovedExpenses()
                 // Also reload phases to update phase-level approved amounts
                 viewModel.loadPhases()
+            }
+        }
+        .sheet(isPresented: $showingChats) {
+            if role == .ADMIN {
+                ChatsView(
+                    project: project,
+                    currentUserRole: .ADMIN
+                )
+                .presentationDetents([.large])
+            } else {
+                ChatsView(
+                    project: project,
+                    currentUserPhone: phoneNumber,
+                    currentUserRole: role ?? .USER
+                )
+                .presentationDetents([.large])
             }
         }
         .sheet(isPresented: $showingExpenseChat) {
@@ -1783,11 +1781,11 @@ private struct ProjectHeaderView: View {
     
     // Computed property to determine displayed status
     private var displayedStatus: ProjectStatus {
-        // If project is ACTIVE but has no active phases, show SUSPENDED in UI
+        // If project is ACTIVE but has no active phases, show STANDBY in UI
         if project.statusType == .ACTIVE && project.isSuspended != true {
             // Check if there are any active phases
             if viewModel.currentPhases.isEmpty {
-                return .SUSPENDED
+                return .STANDBY
             }
         }
         return project.statusType
@@ -1886,9 +1884,9 @@ private struct ProjectHeaderView: View {
                                 .frame(maxWidth: 200, alignment: .trailing)
                             }
                         }
-                    } else if displayedStatus == .SUSPENDED && project.statusType == .ACTIVE {
-                        // Show orange SUSPENDED status when ACTIVE but no active phases (UI-only)
-                        StatusViewDetial(status: .SUSPENDED)
+                    } else if displayedStatus == .STANDBY && project.statusType == .ACTIVE {
+                        // Show orange STANDBY status when ACTIVE but no active phases (UI-only)
+                        StatusViewDetial(status: .STANDBY)
                     } else {
                         StatusViewDetial(status: project.statusType)
                     }

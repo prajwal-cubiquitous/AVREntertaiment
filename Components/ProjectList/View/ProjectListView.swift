@@ -336,6 +336,16 @@ struct ProjectListView: View {
                     await sharedStateManager.loadTeamMembers(projectId: projectId, customerId: customerId)
                 }
             }
+            // Also check and update project statuses based on phases
+            Task {
+                await viewModel.checkAndUpdateProjectStatusesBasedOnPhases()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PhaseUpdated"))) { _ in
+            // Check and update project statuses when a phase is created/updated
+            Task {
+                await viewModel.checkAndUpdateProjectStatusesBasedOnPhases()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in
             // Update state manager when expense status changes

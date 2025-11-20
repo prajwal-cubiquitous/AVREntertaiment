@@ -134,10 +134,9 @@ class ProjectListViewModel: ObservableObject {
             self.projects = loadedProjects.sorted { $0.createdAt.dateValue() > $1.createdAt.dateValue() }
             self.isLoading = false
             
-            // Check and update project statuses based on planned date
+            // Check and update project statuses based on active phases
             Task {
-                // Removed automatic status validation - status updates are now manual only
-                // await self.checkAndUpdateProjectStatuses()
+                await self.checkAndUpdateProjectStatusesBasedOnPhases()
             }
             
             // Update TempApprover statuses for all projects
@@ -148,6 +147,123 @@ class ProjectListViewModel: ObservableObject {
             // Fetch pending expenses for notifications
             Task {
                 await self.fetchPendingExpenses()
+            }
+        }
+    }
+    
+    // MARK: - Project Status Update Based on Active Phases
+    
+    /// Checks and updates project statuses based on active phases:
+    /// - If ACTIVE but no active phases -> set to STANDBY
+    /// - If STANDBY and has active phases -> set to ACTIVE if handoverDate >= today, else set to MAINTENANCE
+    func checkAndUpdateProjectStatusesBasedOnPhases() async {
+        guard let customerId = customerId else {
+            print("❌ Customer ID not found in checkAndUpdateProjectStatusesBasedOnPhases")
+            return
+        }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "dd/MM/yyyy"
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        
+        for project in projects {
+            guard let projectId = project.id else { continue }
+            
+            // Skip if project is not ACTIVE or STANDBY
+            guard project.statusType == .ACTIVE || project.statusType == .STANDBY else { continue }
+            
+            // Skip if project is suspended (isSuspended = true)
+            if project.isSuspended == true { continue }
+            
+            do {
+                // Check if project has active phases
+                let phasesSnapshot = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .getDocuments()
+                
+                var hasActivePhase = false
+                var activePhaseEndDates: [Date] = []
+                
+                for phaseDoc in phasesSnapshot.documents {
+                    if let phase = try? phaseDoc.data(as: Phase.self) {
+                        // Check if phase is enabled
+                        guard phase.isEnabledValue else { continue }
+                        
+                        // Parse phase dates
+                        let startDate = phase.startDate.flatMap { dateFormatter.date(from: $0) }
+                        let endDate = phase.endDate.flatMap { dateFormatter.date(from: $0) }
+                        
+                        // Check if phase is active (in progress)
+                        let isActive: Bool
+                        if let start = startDate, let end = endDate {
+                            let phaseStart = calendar.startOfDay(for: start)
+                            let phaseEnd = calendar.startOfDay(for: end)
+                            isActive = phaseStart <= today && today <= phaseEnd
+                        } else if let start = startDate {
+                            let phaseStart = calendar.startOfDay(for: start)
+                            isActive = phaseStart <= today
+                        } else if let end = endDate {
+                            let phaseEnd = calendar.startOfDay(for: end)
+                            isActive = today <= phaseEnd
+                        } else {
+                            isActive = true // No dates means always active
+                        }
+                        
+                        if isActive {
+                            hasActivePhase = true
+                            if let end = endDate {
+                                activePhaseEndDates.append(end)
+                            }
+                        }
+                    }
+                }
+                
+                // Update status based on active phases
+                var updateData: [String: Any] = [:]
+                var needsUpdate = false
+                
+                if project.statusType == .ACTIVE && !hasActivePhase {
+                    // ACTIVE but no active phases -> set to STANDBY
+                    updateData["status"] = ProjectStatus.STANDBY.rawValue
+                    needsUpdate = true
+                    print("📊 Project \(projectId): ACTIVE but no active phases -> updating to STANDBY")
+                } else if project.statusType == .STANDBY && hasActivePhase {
+                    // STANDBY but has active phases -> check handover date
+                    if let handoverDateStr = project.handoverDate,
+                       let handoverDate = dateFormatter.date(from: handoverDateStr) {
+                        let handover = calendar.startOfDay(for: handoverDate)
+                        
+                        if handover >= today {
+                            // handoverDate >= today -> set to ACTIVE
+                            updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                            needsUpdate = true
+                            print("📊 Project \(projectId): STANDBY with active phases, handoverDate >= today -> updating to ACTIVE")
+                        } else {
+                            // handoverDate < today -> set to MAINTENANCE
+                            updateData["status"] = ProjectStatus.MAINTENANCE.rawValue
+                            needsUpdate = true
+                            print("📊 Project \(projectId): STANDBY with active phases, handoverDate < today -> updating to MAINTENANCE")
+                        }
+                    } else {
+                        // No handover date, but has active phases -> set to ACTIVE
+                        updateData["status"] = ProjectStatus.ACTIVE.rawValue
+                        needsUpdate = true
+                        print("📊 Project \(projectId): STANDBY with active phases, no handover date -> updating to ACTIVE")
+                    }
+                }
+                
+                if needsUpdate {
+                    updateData["updatedAt"] = Timestamp()
+                    try await FirebasePathHelper.shared
+                        .projectDocument(customerId: customerId, projectId: projectId)
+                        .updateData(updateData)
+                    
+                    // Post notification to refresh project list
+                    NotificationCenter.default.post(name: NSNotification.Name("ProjectUpdated"), object: nil)
+                }
+            } catch {
+                print("❌ Error checking/updating project status for \(projectId): \(error)")
             }
         }
     }

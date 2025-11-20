@@ -7,6 +7,7 @@ enum ProjectStatus: String, Codable, CaseIterable {
     case LOCKED
     case ACTIVE
     case SUSPENDED
+    case STANDBY
     case COMPLETED
     case DECLINED
     case MAINTENANCE

@@ -738,7 +738,8 @@ struct ModernStatusCard: View {
             status != .LOCKED &&
             status != .DECLINED &&
             status != .ARCHIVE &&
-            status != .SUSPENDED
+            status != .SUSPENDED &&
+            status != .STANDBY
         }
         
         // Convert current status string → enum safely

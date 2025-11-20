@@ -27,11 +27,11 @@ struct ProjectCell: View {
     
     // Computed property to determine displayed status
     private var displayedStatus: ProjectStatus {
-        // If project is ACTIVE but has no active phases, show SUSPENDED in UI
+        // If project is ACTIVE but has no active phases, show STANDBY in UI
         if project.statusType == .ACTIVE && project.isSuspended != true {
             // If hasActivePhases is explicitly provided, use it; otherwise assume true (default behavior)
             if let hasActivePhases = hasActivePhases, !hasActivePhases {
-                return .SUSPENDED
+                return .STANDBY
             }
         }
         return project.statusType
@@ -504,7 +504,8 @@ extension ProjectStatus {
         case .COMPLETED: return .blue
         case .IN_REVIEW: return .cyan
         case .LOCKED: return .indigo
-        case .SUSPENDED: return .orange            
+        case .SUSPENDED: return .red
+        case .STANDBY: return .orange
         case .DECLINED: return .red
         case .MAINTENANCE: return .purple
         case .ARCHIVE: return .gray
@@ -518,6 +519,7 @@ extension ProjectStatus {
         case .IN_REVIEW: return "IN REVIEW"
         case .LOCKED: return "LOCKED"
         case .SUSPENDED: return "SUSPENDED"
+        case .STANDBY: return "STANDBY"
         case .DECLINED: return "DECLINED"
         case .MAINTENANCE: return "MAINTENANCE"
         case .ARCHIVE: return "ARCHIVE"
