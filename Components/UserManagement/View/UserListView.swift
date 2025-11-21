@@ -112,6 +112,8 @@ struct UserRow: View {
             return .blue
         case .USER:
             return .green
+        case .HEAD:
+            return .yellow
         }
     }
 } 

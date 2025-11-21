@@ -458,6 +458,8 @@ class ProjectListViewModel: ObservableObject {
             case .USER:
                 // USER doesn't see pending expense notifications (they can't approve)
                 projectsToCheck = []
+            case .HEAD:
+                return
             }
             
             // Fetch pending expenses only from relevant projects

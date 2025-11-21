@@ -11,12 +11,12 @@ struct RoleManagementView: View {
                     roleCard(
                         role: .ADMIN,
                         title: "Administrator",
-                        description: "System administrator with complete control over the application",
+                        description: "System administrator for support, security, and backups.",
                         permissions: [
-                            "Create and manage projects",
-                            "Manage users and roles",
-                            "View all reports and analytics",
-                            "System configuration"
+                            "Maintain system configuration and integrations",
+                            "Manage data backups and recovery",
+                            "Resolve user access and login issues",
+                            "Monitor system health and audit logs"
                         ]
                     )
                     
@@ -33,7 +33,7 @@ struct RoleManagementView: View {
                     
                     // Information card: Production Head (maps to admin-level permissions)
                     roleCard(
-                        role: .ADMIN,
+                        role: .HEAD,
                         title: "Production Head",
                         description: "Full administrative access to manage projects, users, and approvals",
                         permissions: [
@@ -50,9 +50,7 @@ struct RoleManagementView: View {
                         permissions: [
                             "View assigned projects",
                             "Submit expenses",
-                            "View personal reports",
-                            "Update profile"
-                        ]
+                            "View personal reports"                        ]
                     )
                 } header: {
                     Text("System Roles")
@@ -118,6 +116,10 @@ struct RoleManagementView: View {
             return .blue
         case .USER:
             return .green
+        case .HEAD:
+            return .orange
+        @unknown default:
+            return .gray
         }
     }
 } 
