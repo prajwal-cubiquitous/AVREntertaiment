@@ -132,6 +132,27 @@ struct ExpenseDetailReadOnlyView: View {
             
             // Department and Categories
             VStack(alignment: .leading, spacing: 8) {
+                
+                HStack {
+                    Text("Phase:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    if let phaseName = phaseName ?? expense.phaseName {
+                        HStack(spacing: 4) {
+                            TruncatedTextWithTooltip(
+                                phaseName,
+                                font: .subheadline,
+                                fontWeight: .medium,
+                                foregroundColor: .primary,
+                                lineLimit: 1,
+                                truncationLength: 15
+                            )
+                        }
+                    }
+                    Spacer()
+                }
+
                 HStack {
                     Text("Department:")
                         .font(.subheadline)

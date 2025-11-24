@@ -147,9 +147,12 @@ struct ExpenseDetailView: View {
             }
         }
         .onAppear {
-            // Only load budget context for pending expenses
+            // Only load budget context for pending expenses (this also loads phase name)
             if expense.phaseId != nil && expense.status == .pending {
                 loadBudgetContext()
+            } else if expense.phaseId != nil && expense.phaseName == nil {
+                // Load phase name if missing for approved/rejected expenses
+                loadPhaseName()
             }
             // Load submitter name
             loadSubmitterName()
@@ -190,8 +193,28 @@ struct ExpenseDetailView: View {
                 .cornerRadius(8)
             }
             
-            // Department and Categories
+            // Phase, Department and Categories
             VStack(alignment: .leading, spacing: 8) {
+                // Phase (if available)
+                if let phaseName = phaseName ?? expense.phaseName {
+                    HStack {
+                        Text("Phase:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        TruncatedTextWithTooltip(
+                            phaseName,
+                            font: .subheadline,
+                            fontWeight: .medium,
+                            foregroundColor: .primary,
+                            lineLimit: 1,
+                            truncationLength: 15
+                        )
+                        
+                        Spacer()
+                    }
+                }
+                
                 HStack {
                     Text("Department:")
                         .font(.subheadline)
@@ -472,6 +495,31 @@ struct ExpenseDetailView: View {
                 await MainActor.run {
                     self.submitterName = expense.submittedBy.formatPhoneNumber
                 }
+            }
+        }
+    }
+    
+    // MARK: - Load Phase Name
+    private func loadPhaseName() {
+        guard let phaseId = expense.phaseId else { return }
+        
+        Task {
+            do {
+                let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
+                
+                // Fetch phase to get phase name
+                let phaseDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: expense.projectId)
+                    .document(phaseId)
+                    .getDocument()
+                
+                if let phase = try? phaseDoc.data(as: Phase.self) {
+                    await MainActor.run {
+                        self.phaseName = phase.phaseName
+                    }
+                }
+            } catch {
+                print("Error loading phase name: \(error.localizedDescription)")
             }
         }
     }

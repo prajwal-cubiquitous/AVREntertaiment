@@ -16,7 +16,7 @@ struct RoleManagementView: View {
                             "Maintain system configuration and integrations",
                             "Manage data backups and recovery",
                             "Resolve user access and login issues",
-                            "Monitor system health and audit logs"
+                            "Monitor system health and audit logs "
                         ]
                     )
                     

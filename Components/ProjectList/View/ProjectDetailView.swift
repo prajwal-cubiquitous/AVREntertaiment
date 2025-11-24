@@ -24,6 +24,7 @@ struct ProjectDetailView: View {
     @State private var showingExpenseChat = false
     @State private var expenseForChat: Expense? = nil
     @State private var showingProjectMenu = false
+    @State private var showingProjectNamePopup = false
     @ObservedObject private var viewModel: ProjectDetailViewModel
     let role: UserRole?
     let phoneNumber: String
@@ -48,12 +49,17 @@ struct ProjectDetailView: View {
 
     var body: some View {
         ZStack {
+            // Main content
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.large) {
                     // MARK: - Main Header Card
-                    ProjectHeaderView(project: project, viewModel: viewModel)
-                        .cardStyle()
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                    ProjectHeaderView(
+                        project: project,
+                        viewModel: viewModel,
+                        showingProjectNamePopup: $showingProjectNamePopup
+                    )
+                    .cardStyle()
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
 
                     // MARK: - Key Info Card
                     KeyInformationView(
@@ -101,11 +107,11 @@ struct ProjectDetailView: View {
             }
             .coordinateSpace(name: "scroll")
             
-            // Full-screen dropdown overlay - appears above everything
-            if isTeamMembersDropdownVisible {
-                TeamMembersDropdownOverlay(
-                    teamMembers: project.teamMembers,
-                    isVisible: $isTeamMembersDropdownVisible
+            // Project Name Modal - centered overlay
+            if showingProjectNamePopup {
+                ProjectNameModalView(
+                    projectName: project.name,
+                    isPresented: $showingProjectNamePopup
                 )
                 .zIndex(10000)
             }
@@ -274,6 +280,9 @@ struct ProjectDetailView: View {
                 )
                 .presentationDetents([.large])
             }
+        }
+        .sheet(isPresented: $isTeamMembersDropdownVisible) {
+            TeamMembersModalView(teamMembers: project.teamMembers)
         }
         .onChange(of: navigationManager.activeExpenseId) { oldValue, newValue in
             if let expenseItem = newValue {
@@ -839,6 +848,7 @@ private struct CurrentPhaseView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .zIndex(1000)
                 }
             }
             .sheet(isPresented: $showingRequestForm) {
@@ -1361,6 +1371,7 @@ private struct ProjectDetailPhaseCardView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .zIndex(1000)
                 }
             }
             .sheet(isPresented: $showingRequestForm) {
@@ -1774,6 +1785,7 @@ private struct EmptyStateRow: View {
 private struct ProjectHeaderView: View {
     let project: Project
     let viewModel: ProjectDetailViewModel
+    @Binding var showingProjectNamePopup: Bool
     @State private var managerName: String?
     @State private var managerPhone: String?
     @State private var isLoadingManager = false
@@ -1795,12 +1807,27 @@ private struct ProjectHeaderView: View {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                    TruncatedTextWithTooltip(
-                        project.name,
-                        font: DesignSystem.Typography.largeTitle,
-                        foregroundColor: .primary,
-                        lineLimit: 2
-                    )
+                    HStack(spacing: DesignSystem.Spacing.small) {
+                        TruncatedTextWithTooltip(
+                            project.name,
+                            font: DesignSystem.Typography.largeTitle,
+                            foregroundColor: .primary,
+                            lineLimit: 2
+                        )
+                        
+                        // Ellipsis button to show full project name
+                        Button {
+                            HapticManager.selection()
+                            showingProjectNamePopup = true
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                     
 //                    // Description
 //                    if !project.description.isEmpty {
@@ -2118,93 +2145,74 @@ private struct TeamMemberDetail: Identifiable {
     let name: String?
 }
 
-// MARK: - Team Members Dropdown Overlay
-private struct TeamMembersDropdownOverlay: View {
+// MARK: - Team Members Modal View
+private struct TeamMembersModalView: View {
     let teamMembers: [String]
-    @Binding var isVisible: Bool
+    @Environment(\.dismiss) private var dismiss
     @State private var teamMemberDetails: [TeamMemberDetail] = []
     @State private var isLoading = false
     
     var body: some View {
-        ZStack {
-            // Background overlay to dismiss on tap outside
-            Color.black.opacity(0.2)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    HapticManager.selection()
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        isVisible = false
-                    }
-                }
-            
-            // Dropdown card - positioned in center
-            VStack(alignment: .leading, spacing: 0) {
-                // Header
-                HStack {
-                    Text("Team Members")
-                        .font(DesignSystem.Typography.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        HapticManager.selection()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            isVisible = false
-                        }
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(DesignSystem.Spacing.medium)
-                .background(Color(UIColor.systemBackground))
+        NavigationView {
+            ZStack {
+                Color(UIColor.systemGroupedBackground)
+                    .ignoresSafeArea()
                 
-                Divider()
-                
-                // Content
                 if isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                            .padding(DesignSystem.Spacing.large)
-                        Spacer()
-                    }
+                    ProgressView()
+                        .scaleEffect(1.2)
                 } else if teamMemberDetails.isEmpty {
-                    VStack(spacing: DesignSystem.Spacing.small) {
+                    VStack(spacing: DesignSystem.Spacing.medium) {
                         Image(systemName: "person.2.badge.plus")
-                            .font(.title2)
+                            .font(.system(size: 48))
                             .foregroundColor(.secondary)
-                        Text("No team members")
+                            .symbolRenderingMode(.hierarchical)
+                        
+                        Text("No Team Members")
+                            .font(DesignSystem.Typography.headline)
+                            .foregroundColor(.primary)
+                        
+                        Text("There are no team members assigned to this project.")
                             .font(DesignSystem.Typography.callout)
                             .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, DesignSystem.Spacing.large)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(DesignSystem.Spacing.large)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(teamMemberDetails) { detail in
-                                TeamMemberDropdownRow(detail: detail)
+                                TeamMemberModalRow(detail: detail)
                                 
                                 if detail.id != teamMemberDetails.last?.id {
                                     Divider()
-                                        .padding(.leading, DesignSystem.Spacing.medium + 28 + DesignSystem.Spacing.medium)
+                                        .padding(.leading, DesignSystem.Spacing.medium + 44 + DesignSystem.Spacing.medium)
                                 }
                             }
                         }
+                        .padding(.vertical, DesignSystem.Spacing.small)
                     }
-                    .frame(maxHeight: min(400, CGFloat(teamMemberDetails.count) * 70))
                 }
             }
-            .background(Color(UIColor.systemBackground))
-            .cornerRadius(DesignSystem.CornerRadius.large)
-            .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
-            .frame(width: UIScreen.main.bounds.width - (DesignSystem.Spacing.medium * 4))
+            .navigationTitle("Team Members")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        HapticManager.selection()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                }
+            }
         }
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .onAppear {
             if teamMemberDetails.isEmpty {
                 Task {
@@ -2302,24 +2310,35 @@ private struct TeamMembersDropdownOverlay: View {
     }
 }
 
-// MARK: - Team Member Dropdown Row
-private struct TeamMemberDropdownRow: View {
+// MARK: - Team Member Modal Row
+private struct TeamMemberModalRow: View {
     let detail: TeamMemberDetail
     
     var body: some View {
         HStack(spacing: DesignSystem.Spacing.medium) {
-            Image(systemName: "person.circle.fill")
-                .font(.title3)
-                .foregroundColor(.blue)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 28, height: 28)
+            // Avatar
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.1))
+                    .frame(width: 44, height: 44)
+                
+                Image(systemName: "person.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.blue)
+            }
             
+            // Name and Phone
             VStack(alignment: .leading, spacing: 4) {
                 if let name = detail.name, !name.isEmpty {
                     Text(name)
                         .font(DesignSystem.Typography.callout)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
+                } else {
+                    Text("Unknown")
+                        .font(DesignSystem.Typography.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.secondary)
                 }
                 
                 Text(detail.phoneNumber)
@@ -2329,12 +2348,82 @@ private struct TeamMemberDropdownRow: View {
             
             Spacer()
         }
-        .padding(DesignSystem.Spacing.medium)
+        .padding(.horizontal, DesignSystem.Spacing.medium)
+        .padding(.vertical, DesignSystem.Spacing.small)
         .contentShape(Rectangle())
     }
 }
 
 
+
+// MARK: - Project Name Modal View
+private struct ProjectNameModalView: View {
+    let projectName: String
+    @Binding var isPresented: Bool
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Semi-transparent background overlay
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea(.all)
+                    .onTapGesture {
+                        HapticManager.selection()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isPresented = false
+                        }
+                    }
+                
+                // Modal content - centered
+                VStack(spacing: 0) {
+                    // Title
+                    Text("Project Name")
+                        .font(DesignSystem.Typography.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DesignSystem.Spacing.large)
+                        .padding(.top, DesignSystem.Spacing.large)
+                        .padding(.bottom, DesignSystem.Spacing.medium)
+                    
+                    // Content
+                    Text(projectName)
+                        .font(DesignSystem.Typography.body)
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DesignSystem.Spacing.large)
+                        .padding(.bottom, DesignSystem.Spacing.large)
+                    
+                    // OK Button
+                    Button {
+                        HapticManager.selection()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isPresented = false
+                        }
+                    } label: {
+                        Text("OK")
+                            .font(DesignSystem.Typography.callout)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, DesignSystem.Spacing.medium)
+                            .background(Color.accentColor)
+                            .cornerRadius(DesignSystem.CornerRadius.medium)
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.large)
+                    .padding(.bottom, DesignSystem.Spacing.large)
+                }
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(DesignSystem.CornerRadius.large)
+                .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+                .frame(width: min(320, geometry.size.width - (DesignSystem.Spacing.large * 2)))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .allowsHitTesting(true)
+    }
+}
 
 // You would also need the StatusView from our previous conversations
 // Here it is for completeness:
