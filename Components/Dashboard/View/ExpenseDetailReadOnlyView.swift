@@ -396,7 +396,7 @@ struct ExpenseDetailReadOnlyView: View {
                 .foregroundColor(.primary)
             
             VStack(spacing: DesignSystem.Spacing.small) {
-                // Show updated timestamp if available
+                // Show updated timestamp if available         
                 if expense.status == .approved {
                     DetailRow(title: "Approved at", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
                 } else if expense.status == .rejected {
