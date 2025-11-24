@@ -289,18 +289,33 @@ class PendingApprovalsViewModel: ObservableObject {
                             "updatedAt": Timestamp()
                         ]
                         
-                        if newStatus == .approved {
-                            updateData["approvedAt"] = Timestamp()
-                            updateData["approvedBy"] = currentUserPhone
-                            updateData["rejectedAt"] = FieldValue.delete()
-                            updateData["rejectedBy"] = FieldValue.delete()
-                        } else {
-                            updateData["rejectedAt"] = Timestamp()
-                            updateData["rejectedBy"] = currentUserPhone
-                            updateData["approvedAt"] = FieldValue.delete()
-                            updateData["approvedBy"] = FieldValue.delete()
+                        if currentUserRole == .ADMIN{
+                            if newStatus == .approved {
+                                updateData["approvedAt"] = Timestamp()
+                                updateData["approvedBy"] = "Admin"
+                                updateData["rejectedAt"] = FieldValue.delete()
+                                updateData["rejectedBy"] = FieldValue.delete()
+                            } else {
+                                updateData["rejectedAt"] = Timestamp()
+                                updateData["rejectedBy"] = "Admin"
+                                updateData["approvedAt"] = FieldValue.delete()
+                                updateData["approvedBy"] = FieldValue.delete()
+                            }
+                        }else{
+                            if newStatus == .approved {
+                                updateData["approvedAt"] = Timestamp()
+                                updateData["approvedBy"] = currentUserPhone
+                                updateData["rejectedAt"] = FieldValue.delete()
+                                updateData["rejectedBy"] = FieldValue.delete()
+                            } else {
+                                updateData["rejectedAt"] = Timestamp()
+                                updateData["rejectedBy"] = currentUserPhone
+                                updateData["approvedAt"] = FieldValue.delete()
+                                updateData["approvedBy"] = FieldValue.delete()
+                            }
+
                         }
-                        
+
                         // Add admin approval note if current user is admin
                         if currentUserRole == .ADMIN {
                             let adminNote = newStatus == .approved ? "Admin approved" : "Admin rejected"

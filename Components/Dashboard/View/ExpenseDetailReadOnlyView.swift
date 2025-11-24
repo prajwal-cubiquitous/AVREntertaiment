@@ -397,7 +397,11 @@ struct ExpenseDetailReadOnlyView: View {
             
             VStack(spacing: DesignSystem.Spacing.small) {
                 // Show updated timestamp if available
-                DetailRow(title: "Last Updated", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                if expense.status == .approved {
+                    DetailRow(title: "Approved at", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                } else if expense.status == .rejected {
+                    DetailRow(title: "Rejected at", value: expense.updatedAt.dateValue().formatted(date: .abbreviated, time: .shortened))
+                }
                 
                 // Approved By / Rejected By
                 if expense.status == .approved, let approvedBy = expense.approvedBy {
