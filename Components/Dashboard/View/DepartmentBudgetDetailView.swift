@@ -66,6 +66,8 @@ struct DepartmentBudgetDetailView: View {
     @State private var showingAddDepartmentSheet = false
     @State private var pendingDeleteAfterAdd = false
     @State private var phaseIdForDelete: String? = nil
+    @State private var showingSuccessAlert = false
+    @State private var updatedBudgetAmount: Double = 0
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -280,6 +282,8 @@ struct DepartmentBudgetDetailView: View {
                         await viewModel.loadExpenses(for: department, projectId: projectId)
                         await MainActor.run {
                             showingEditBudget = false
+                            updatedBudgetAmount = newBudget
+                            showingSuccessAlert = true
                         }
                     }
                 }
@@ -321,6 +325,11 @@ struct DepartmentBudgetDetailView: View {
             }
         } message: {
             Text("Are you sure you want to delete this department? This will remove it from all phases. This action cannot be undone.")
+        }
+        .alert("Budget Updated", isPresented: $showingSuccessAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Your \(department) current budget is \(Int(updatedBudgetAmount).formattedCurrency)")
         }
         .sheet(isPresented: $showingAddDepartmentSheet, onDismiss: {
             if pendingDeleteAfterAdd, let phaseIdToDelete = phaseIdForDelete {
