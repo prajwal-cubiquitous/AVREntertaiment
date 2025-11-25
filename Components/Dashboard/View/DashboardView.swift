@@ -5051,6 +5051,10 @@ private struct AddPhaseSheet: View {
     @State private var dateConfirmationType: DateConfirmationType = .handoverAndMaintenance
     @State private var pendingEndDate: Date?
     
+    // Success alert states
+    @State private var showSuccessAlert = false
+    @State private var createdPhaseBudget: Double = 0
+    
     private enum Field { case phaseName, departmentName, departmentBudget }
     
     private enum DateConfirmationType {
@@ -5472,6 +5476,15 @@ private struct AddPhaseSheet: View {
                     Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
                 }
             }
+            .alert("Phase Created", isPresented: $showSuccessAlert) {
+                Button("OK") {
+                    onSaved()
+                    dismiss()
+                }
+            } message: {
+                let formattedBudget = formatIndianNumber(createdPhaseBudget)
+                Text("Phase created successful with the phase budget of ₹\(formattedBudget)")
+            }
         }
     }
     
@@ -5737,6 +5750,11 @@ private struct AddPhaseSheet: View {
                 
                 try await phaseRef.setData(from: phaseData)
                 
+                // Calculate total phase budget from departments
+                let totalBudget = departments.reduce(0.0) { sum, dept in
+                    sum + (Double(removeFormatting(from: dept.amount)) ?? 0)
+                }
+                
                 // Update project budget after adding phase
                 await updateProjectBudget(projectId: projectId, customerId: customerId)
                 
@@ -5753,8 +5771,8 @@ private struct AddPhaseSheet: View {
                 
                 await MainActor.run {
                     isSaving = false
-                    onSaved()
-                    dismiss()
+                    createdPhaseBudget = totalBudget
+                    showSuccessAlert = true
                 }
                 
             } catch {
@@ -6056,6 +6074,11 @@ private struct EditPhaseSheet: View {
     @State private var dateConfirmationType: DateConfirmationType = .handoverAndMaintenance
     @State private var pendingEndDate: Date?
     
+    // Success alert states
+    @State private var showSuccessAlert = false
+    @State private var updatedStartDate: String = ""
+    @State private var updatedEndDate: String = ""
+    
     private enum Field { case phaseName }
     
     private enum DateConfirmationType {
@@ -6222,6 +6245,14 @@ private struct EditPhaseSheet: View {
                 } else {
                     Text("The selected end date (\(dateStr)) is greater than the current handover date. Handover date will be set to \(dateStr).")
                 }
+            }
+            .alert("Phase Updated", isPresented: $showSuccessAlert) {
+                Button("OK") {
+                    onSaved()
+                    dismiss()
+                }
+            } message: {
+                Text("Phase start and end date now is \(updatedStartDate) - \(updatedEndDate)")
             }
         }
     }
@@ -6455,14 +6486,25 @@ private struct EditPhaseSheet: View {
                 // Update handover date after phase timeline is edited (this will handle the logic internally)
                 await updateHandoverDate(projectId: projectId, customerId: customerId)
                 
-                await MainActor.run {
-                    isSaving = false
-                    onSaved()
-                    dismiss()
-                }
-                
                 // Post notification to refresh phases
                 NotificationCenter.default.post(name: NSNotification.Name("PhaseUpdated"), object: nil)
+                
+                // Show success alert if dates were changed
+                if startDateChanged || endDateChanged {
+                    await MainActor.run {
+                        isSaving = false
+                        updatedStartDate = startDateStr
+                        updatedEndDate = endDateStr
+                        showSuccessAlert = true
+                    }
+                } else {
+                    // No date change, just dismiss
+                    await MainActor.run {
+                        isSaving = false
+                        onSaved()
+                        dismiss()
+                    }
+                }
                 
             } catch {
                 await MainActor.run {
