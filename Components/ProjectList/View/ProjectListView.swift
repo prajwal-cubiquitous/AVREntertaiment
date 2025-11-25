@@ -70,9 +70,8 @@ struct ProjectListView: View {
                         
                         Spacer(minLength: 4)
                         
-                        // Show notification bell only for APPROVER role (they can approve expenses)
-                        // ADMIN and USER don't need this notification bell
-                        if role == .APPROVER && !viewModel.projects.isEmpty {
+                        // Show notification bell for all roles
+                        if !viewModel.projects.isEmpty {
                             Button {
                                 HapticManager.selection()
                                 viewModel.showingFullNotifications = true
@@ -383,8 +382,10 @@ struct ProjectListView: View {
                 // }
             }
         }
-        .sheet(isPresented: $viewModel.showingFullNotifications) {
-            NotificationView(viewModel: viewModel)
+        .overlay {
+            if viewModel.showingFullNotifications {
+                ProjectListNotificationPopupView(viewModel: viewModel)
+            }
         }
         .sheet(isPresented: $isShowingMenuSheet) {
             MenuSheetView()
