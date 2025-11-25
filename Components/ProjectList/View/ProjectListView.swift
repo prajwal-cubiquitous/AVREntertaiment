@@ -24,6 +24,8 @@ struct ProjectListView: View {
     @State private var showingReports = false
     @State private var searchText: String = ""
     @State private var showingBusinessNameAlert = false
+    @State private var selectedDeclinedProject: Project?
+    @State private var showingDeclinedProjectEdit = false
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -384,7 +386,24 @@ struct ProjectListView: View {
         }
         .overlay {
             if viewModel.showingFullNotifications {
-                ProjectListNotificationPopupView(viewModel: viewModel, role: role)
+                ProjectListNotificationPopupView(
+                    viewModel: viewModel,
+                    role: role,
+                    onProjectSelected: { project in
+                        Task { @MainActor in
+                            selectedDeclinedProject = project
+                            viewModel.showingFullNotifications = false
+                            // Small delay to allow popup to close before showing sheet
+                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                            showingDeclinedProjectEdit = true
+                        }
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showingDeclinedProjectEdit) {
+            if let project = selectedDeclinedProject {
+                CreateProjectView(projectToEdit: project)
             }
         }
         .sheet(isPresented: $isShowingMenuSheet) {

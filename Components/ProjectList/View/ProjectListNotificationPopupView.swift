@@ -11,11 +11,10 @@ import FirebaseFirestore
 struct ProjectListNotificationPopupView: View {
     @ObservedObject var viewModel: ProjectListViewModel
     let role: UserRole
+    let onProjectSelected: (Project) -> Void
     @State private var declinedProjects: [Project] = []
     @State private var userNames: [String: String] = [:] // rejectedBy: name
     @State private var isLoading = false
-    @State private var selectedProject: Project?
-    @State private var showingCreateProject = false
     
     var body: some View {
         ZStack {
@@ -48,11 +47,6 @@ struct ProjectListNotificationPopupView: View {
         .onAppear {
             if role == .ADMIN {
                 loadDeclinedProjects()
-            }
-        }
-        .sheet(isPresented: $showingCreateProject) {
-            if let project = selectedProject {
-                CreateProjectView(projectToEdit: project)
             }
         }
     }
@@ -205,12 +199,7 @@ struct ProjectListNotificationPopupView: View {
                             rejectedByName: userNames[project.rejectedBy ?? ""] ?? project.rejectedBy?.formatPhoneNumber ?? "Unknown",
                             onTap: {
                                 HapticManager.selection()
-                                selectedProject = project
-                                viewModel.showingFullNotifications = false
-                                // Small delay to allow popup to close before showing sheet
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    showingCreateProject = true
-                                }
+                                onProjectSelected(project)
                             }
                         )
                         
