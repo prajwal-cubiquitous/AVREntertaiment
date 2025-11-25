@@ -211,6 +211,13 @@ struct AVREntertainmentApp: App {
                                 if let requestId = requestId {
                                     navigationManager.setRequestId(requestId)
                                 }
+                            } else if screen == "project_creation" {
+                                // Navigate to project creation screen for rejected projects
+                                if let projectId = projectId {
+                                    // Set projectId which will trigger navigation to CreateProjectView in ProjectListView
+                                    // The ProjectListView will handle fetching the project and showing CreateProjectView
+                                    navigationManager.setProjectId(projectId)
+                                }
                             }
                         } else {
                             // Views not ready, store for later
@@ -402,6 +409,19 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
                         userInfo: ["screen": screen, "requestId": requestId, "customerId": customerId]
                     )
                     print("📝 Navigate to request: \(requestId)")
+                }
+                
+            case "project_creation":
+                // Handle project creation screen navigation (for rejected projects)
+                if let projectId = userInfo["projectId"] as? String,
+                   let type = userInfo["type"] as? String,
+                   type == "project_declined" {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("NavigateFromNotification"),
+                        object: nil,
+                        userInfo: ["screen": screen, "projectId": projectId, "type": type]
+                    )
+                    print("📝 Navigate to project creation (rejected): \(projectId)")
                 }
                 
             default:

@@ -53,33 +53,36 @@ struct CreateProjectView: View {
                     }
                     
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        // Clear saved data button (only when saved data exists)
-                        if viewModel.hasSavedLocalData {
-                            Button(action: {
-                                HapticManager.selection()
-                                showingClearFormConfirmation = true
-                            }) {
-                                Image(systemName: "arrow.counterclockwise.circle.fill")
-                                    .foregroundColor(.orange)
-                                    .symbolRenderingMode(.hierarchical)
-                            }
-                            .help("Clear saved form data")
-                        }
-                        
-                        // Save Draft button (only when there's any data)
-                        if viewModel.hasAnyData {
-                            Button(action: {
-                                HapticManager.selection()
-                                viewModel.saveDraft()
-                            }) {
-                                if viewModel.isSavingDraft {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Label("Save Draft", systemImage: "square.and.arrow.down")
+                        // Hide icons when rejection reason is showing (project is rejected)
+                        if !shouldShowRejectionBanner {
+                            // Clear saved data button (only when saved data exists)
+                            if viewModel.hasSavedLocalData {
+                                Button(action: {
+                                    HapticManager.selection()
+                                    showingClearFormConfirmation = true
+                                }) {
+                                    Image(systemName: "arrow.counterclockwise.circle.fill")
+                                        .foregroundColor(.orange)
+                                        .symbolRenderingMode(.hierarchical)
                                 }
+                                .help("Clear saved form data")
                             }
-                            .disabled(viewModel.isSavingDraft)
+                            
+                            // Save Draft button (only when there's any data)
+                            if viewModel.hasAnyData {
+                                Button(action: {
+                                    HapticManager.selection()
+                                    viewModel.saveDraft()
+                                }) {
+                                    if viewModel.isSavingDraft {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Label("Save Draft", systemImage: "square.and.arrow.down")
+                                    }
+                                }
+                                .disabled(viewModel.isSavingDraft)
+                            }
                         }
                     }
                 }

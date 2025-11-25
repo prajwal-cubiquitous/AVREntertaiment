@@ -161,6 +161,10 @@ class NavigationManager: ObservableObject {
         case "request_detail":
             if let requestId = intent.requestId { setRequestId(requestId) }
 
+        case "project_creation":
+            // Navigate to project creation screen for rejected projects
+            if let id = intent.projectId { setProjectId(id) }
+
         default:
             print("⚠️ Unknown screen: \(intent.screen)")
         }
