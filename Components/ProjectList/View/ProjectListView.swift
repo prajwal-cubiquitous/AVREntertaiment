@@ -26,6 +26,7 @@ struct ProjectListView: View {
     @State private var showingBusinessNameAlert = false
     @State private var selectedDeclinedProject: Project?
     @State private var showingDeclinedProjectEdit = false
+    @State private var selectedInReviewProject: Project?
     @StateObject var viewModel: ProjectListViewModel
     @StateObject private var sharedStateManager = DashboardStateManager()
     @EnvironmentObject var navigationManager: NavigationManager
@@ -391,11 +392,21 @@ struct ProjectListView: View {
                     role: role,
                     onProjectSelected: { project in
                         Task { @MainActor in
-                            selectedDeclinedProject = project
-                            viewModel.showingFullNotifications = false
-                            // Small delay to allow popup to close before showing sheet
-                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
-                            showingDeclinedProjectEdit = true
+                            if role == .ADMIN {
+                                // For ADMIN: Open CreateProjectView for declined projects
+                                selectedDeclinedProject = project
+                                viewModel.showingFullNotifications = false
+                                // Small delay to allow popup to close before showing sheet
+                                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                                showingDeclinedProjectEdit = true
+                            } else if role == .APPROVER {
+                                // For APPROVER: Open ProjectApprovalReviewView for IN_REVIEW projects
+                                selectedInReviewProject = project
+                                viewModel.showingFullNotifications = false
+                                // Small delay to allow popup to close before showing sheet
+                                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                                projectToReview = project
+                            }
                         }
                     }
                 )
@@ -724,10 +735,12 @@ struct ProjectListView: View {
         }
     }
     
-    /// Notification badge count - declined projects for ADMIN, pending expenses for others
+    /// Notification badge count - declined projects for ADMIN, IN_REVIEW for APPROVER, pending expenses for others
     private var notificationBadgeCount: Int {
         if role == .ADMIN {
             return viewModel.projects.filter { $0.statusType == .DECLINED }.count
+        } else if role == .APPROVER {
+            return viewModel.projects.filter { $0.statusType == .IN_REVIEW }.count
         } else {
             return viewModel.pendingExpenses.count
         }
