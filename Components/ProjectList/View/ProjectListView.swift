@@ -81,8 +81,8 @@ struct ProjectListView: View {
                                         .font(.title3)
                                         .foregroundColor(.primary)
                                     
-                                    if !viewModel.pendingExpenses.isEmpty {
-                                        Text("\(viewModel.pendingExpenses.count)")
+                                    if shouldShowNotificationBadge {
+                                        Text("\(notificationBadgeCount)")
                                             .font(.caption2)
                                             .foregroundColor(.white)
                                             .padding(4)
@@ -384,7 +384,7 @@ struct ProjectListView: View {
         }
         .overlay {
             if viewModel.showingFullNotifications {
-                ProjectListNotificationPopupView(viewModel: viewModel)
+                ProjectListNotificationPopupView(viewModel: viewModel, role: role)
             }
         }
         .sheet(isPresented: $isShowingMenuSheet) {
@@ -703,6 +703,20 @@ struct ProjectListView: View {
         return baseProjects.filter { project in
             project.name.lowercased().contains(searchTerm)
         }
+    }
+    
+    /// Notification badge count - declined projects for ADMIN, pending expenses for others
+    private var notificationBadgeCount: Int {
+        if role == .ADMIN {
+            return viewModel.projects.filter { $0.statusType == .DECLINED }.count
+        } else {
+            return viewModel.pendingExpenses.count
+        }
+    }
+    
+    /// Whether to show notification badge
+    private var shouldShowNotificationBadge: Bool {
+        notificationBadgeCount > 0
     }
     
     // MARK: - Helper Properties
