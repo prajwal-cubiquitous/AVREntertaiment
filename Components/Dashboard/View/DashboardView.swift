@@ -2475,6 +2475,7 @@ private struct AddDepartmentSheet: View {
     @State private var errorMessage: String?
     @State private var departmentNameError: String?
     @State private var existingDepartmentNames: [String] = []
+    @State private var showingSuccessAlert = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case name, budget }
@@ -2691,6 +2692,14 @@ private struct AddDepartmentSheet: View {
                 focusedField = .name
                 loadExistingDepartmentNames()
             }
+            .alert("Department Created", isPresented: $showingSuccessAlert) {
+                Button("OK") {
+                    onSaved()
+                    dismiss()
+                }
+            } message: {
+                Text("Department created successfully")
+            }
         }
     }
 
@@ -2736,8 +2745,7 @@ private struct AddDepartmentSheet: View {
                         await updateProjectBudget(projectId: projectId, customerId: customerId)
                         await MainActor.run {
                             isSaving = false
-                            onSaved()
-                            dismiss()
+                            showingSuccessAlert = true
                         }
                     }
                 }

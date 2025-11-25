@@ -68,6 +68,7 @@ struct DepartmentBudgetDetailView: View {
     @State private var phaseIdForDelete: String? = nil
     @State private var showingSuccessAlert = false
     @State private var updatedBudgetAmount: Double = 0
+    @State private var showingDeleteSuccessAlert = false
     
     private var filteredExpenses: [Expense] {
         var expenses = viewModel.expenses
@@ -319,12 +320,19 @@ struct DepartmentBudgetDetailView: View {
                         projectId: projectId
                     )
                     await MainActor.run {
-                        dismiss()
+                        showingDeleteSuccessAlert = true
                     }
                 }
             }
         } message: {
             Text("Are you sure you want to delete this department? This will remove it from all phases. This action cannot be undone.")
+        }
+        .alert("Department Deleted", isPresented: $showingDeleteSuccessAlert) {
+            Button("OK") {
+                dismiss()
+            }
+        } message: {
+            Text("Department deleted successfully")
         }
         .alert("Budget Updated", isPresented: $showingSuccessAlert) {
             Button("OK") { }
@@ -2041,6 +2049,7 @@ struct AddDepartmentSheetForDelete: View {
     @State private var budgetText: String = "0"
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var showingSuccessAlert = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case name, budget }
@@ -2173,6 +2182,14 @@ struct AddDepartmentSheetForDelete: View {
                 }
             }
             .onAppear { focusedField = .name }
+            .alert("Department Created", isPresented: $showingSuccessAlert) {
+                Button("OK") {
+                    onSaved()
+                    dismiss()
+                }
+            } message: {
+                Text("Department created successfully")
+            }
         }
     }
 
@@ -2217,8 +2234,7 @@ struct AddDepartmentSheetForDelete: View {
                 
                 await MainActor.run {
                     isSaving = false
-                    onSaved()
-                    dismiss()
+                    showingSuccessAlert = true
                 }
             } catch {
                 await MainActor.run {
