@@ -284,12 +284,43 @@ struct ProjectDetailView: View {
         .sheet(isPresented: $isTeamMembersDropdownVisible) {
             TeamMembersModalView(teamMembers: project.teamMembers)
         }
+        .sheet(isPresented: $showingChats) {
+            if role == .ADMIN {
+                ChatsView(
+                    project: project,
+                    currentUserRole: .ADMIN
+                )
+                .presentationDetents([.large])
+            } else {
+                ChatsView(
+                    project: project,
+                    currentUserPhone: phoneNumber,
+                    currentUserRole: role ?? .USER
+                )
+                .presentationDetents([.large])
+            }
+        }
         .onChange(of: navigationManager.activeExpenseId) { oldValue, newValue in
             if let expenseItem = newValue {
                 // Check screen type to determine if we should show chat or detail
                 let showChat = navigationManager.expenseScreenType == .chat
                 handleExpenseChange(expenseItem.id, showChat: showChat)
             }
+        }
+        .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
+            if let chatItem = newValue {
+                print("💬 Chat navigation trigger detected in ProjectDetailView for chat ID: \(chatItem.id)")
+                // Open ChatsView sheet - it will handle navigation to the specific chat
+                showingChats = true
+            }
+        }
+        .navigationDestination(item: $navigationManager.activeChatId) { chatNavigationItem in
+            ChatNavigationDestinationView(
+                chatId: chatNavigationItem.id,
+                project: project,
+                role: role ?? .USER,
+                phoneNumber: phoneNumber
+            )
         }
     }
     

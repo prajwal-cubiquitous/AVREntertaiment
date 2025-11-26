@@ -59,14 +59,11 @@ struct UnifiedNotificationPopupView: View {
             }
         }
         .onAppear {
-            // Load notifications immediately from local storage (instant, no async needed)
-            if let projectId = project.id {
-                notificationViewModel.loadSavedNotifications(for: projectId)
-            } else {
-                notificationViewModel.loadSavedNotifications()
-            }
+            // For DashboardView: Always load project-specific notifications
+            // This ensures admin users only see notifications for the current project
+            reloadNotifications()
             
-            // Load phase requests if admin
+            // Load phase requests if admin (always project-specific)
             if role == .ADMIN, let projectId = project.id, let customerId = customerId {
                 Task {
                     await phaseRequestNotificationViewModel.loadPendingRequests(
@@ -76,13 +73,31 @@ struct UnifiedNotificationPopupView: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NotificationManagerUpdated"))) { _ in
-            // Reload notifications when NotificationManager updates (when notification is removed)
-            if let projectId = project.id {
-                notificationViewModel.loadSavedNotifications(for: projectId)
-            } else {
-                notificationViewModel.loadSavedNotifications()
+        .onChange(of: isPresented) { newValue in
+            // Reload notifications when popup is shown to ensure fresh data
+            if newValue {
+                // Small delay to ensure NotificationManager has latest data
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    reloadNotifications()
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NotificationManagerUpdated"))) { _ in
+            // Reload project-specific notifications when NotificationManager updates
+            // For DashboardView, always filter by project to show only current project notifications
+            reloadNotifications()
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func reloadNotifications() {
+        // Always load project-specific notifications for DashboardView
+        if let projectId = project.id {
+            notificationViewModel.loadSavedNotifications(for: projectId)
+            print("📬 Reloaded notifications for project: \(projectId), count: \(notificationViewModel.savedNotifications.count)")
+        } else {
+            print("⚠️ No projectId available for loading notifications")
         }
     }
     
@@ -153,12 +168,9 @@ struct UnifiedNotificationPopupView: View {
             AllNotificationsView(
                 notifications: notificationViewModel.savedNotifications,
                 project: project,
+                role: role,
                 onNotificationTap: { notification in
-                    NotificationManager.shared.removeNotification(byId: notification.id)
-                    let data = notification.data.mapValues { $0.value }
-                    NotificationManager.shared.handleNavigation(data: data)
-                    showingAllNotifications = false
-                    isPresented = false
+                    // This will be handled in the view itself
                 }
             )
         }
@@ -268,21 +280,30 @@ struct UnifiedNotificationPopupView: View {
                     message: notification.body,
                     timeAgo: timeAgoString(from: notification.date)
                 ) {
+                    HapticManager.selection()
                     // Remove notification when clicked
                     NotificationManager.shared.removeNotification(byId: notification.id)
                     
                     // Handle navigation when tapped
                     let data = notification.data.mapValues { $0.value }
-                    NotificationManager.shared.handleNavigation(data: data)
                     
-                    // Reload notifications to reflect removal
-                    if let projectId = project.id {
-                        notificationViewModel.loadSavedNotifications(for: projectId)
-                    } else {
-                        notificationViewModel.loadSavedNotifications()
+                    // Close notification popup first
+                    isPresented = false
+                    
+                    // Small delay to allow popup to close smoothly
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        // Handle navigation with role awareness and current project context
+                        NotificationManager.shared.handleNavigation(
+                            data: data,
+                            currentRole: role,
+                            currentProjectId: project.id
+                        )
                     }
                     
-                    isPresented = false
+                    // Reload project-specific notifications to reflect removal
+                    if let projectId = project.id {
+                        notificationViewModel.loadSavedNotifications(for: projectId)
+                    }
                 }
                 
                 // Add divider between items (not after last item)
@@ -501,6 +522,7 @@ struct AllPhaseRequestsView: View {
 struct AllNotificationsView: View {
     let notifications: [AppNotification]
     let project: Project
+    let role: UserRole?
     let onNotificationTap: (AppNotification) -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var notificationViewModel = NotificationViewModel()
@@ -587,12 +609,29 @@ struct AllNotificationsView: View {
                             message: notification.body,
                             timeAgo: timeAgoString(from: notification.date)
                         ) {
-                            onNotificationTap(notification)
-                            // Reload notifications after removal
+                            HapticManager.selection()
+                            // Remove notification when clicked
+                            NotificationManager.shared.removeNotification(byId: notification.id)
+                            
+                            // Handle navigation when tapped
+                            let data = notification.data.mapValues { $0.value }
+                            
+                            // Close sheet first
+                            dismiss()
+                            
+                            // Small delay to allow sheet to close smoothly
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                // Handle navigation with role awareness and current project context
+                                NotificationManager.shared.handleNavigation(
+                                    data: data,
+                                    currentRole: role,
+                                    currentProjectId: project.id
+                                )
+                            }
+                            
+                            // Reload project-specific notifications after removal
                             if let projectId = project.id {
                                 notificationViewModel.loadSavedNotifications(for: projectId)
-                            } else {
-                                notificationViewModel.loadSavedNotifications()
                             }
                         }
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))

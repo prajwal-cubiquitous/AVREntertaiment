@@ -145,15 +145,38 @@ class NotificationManager: ObservableObject {
     
     // MARK: - Handle Navigation
     
-    /// Handles navigation based on notification data
-    /// - Parameter data: Notification data dictionary
-    func handleNavigation(data: [String: Any]) {
+    /// Handles navigation based on notification data with role-aware flow
+    /// - Parameters:
+    ///   - data: Notification data dictionary
+    ///   - currentRole: Current user role (ADMIN, APPROVER, or USER)
+    ///   - currentProjectId: Optional current project ID if already in a project view
+    func handleNavigation(data: [String: Any], currentRole: UserRole? = nil, currentProjectId: String? = nil) {
         // Extract navigation parameters from data
-        guard data["screen"] != nil else {
+        guard let screen = data["screen"] as? String else {
+            print("⚠️ Notification navigation: No screen specified in data")
+            return
+        }
+        
+        let projectId = data["projectId"] as? String
+        let chatId = data["chatId"] as? String
+        let expenseId = data["expenseId"] as? String
+        let phaseId = data["phaseId"] as? String
+        let requestId = data["requestId"] as? String
+        let customerId = data["customerId"] as? String
+        
+        print("🔔 Notification navigation triggered: screen=\(screen), projectId=\(projectId ?? "nil"), role=\(currentRole?.rawValue ?? "nil")")
+        
+        // Determine if we need to navigate to project first
+        // For screens that require a project context, we always need projectId
+        let requiresProject = ["project_detail", "chat_detail", "expense_detail", "expense_chat", "phase_detail", "project_creation"].contains(screen)
+        
+        if requiresProject && projectId == nil {
+            print("⚠️ Notification navigation: Screen \(screen) requires projectId but none provided")
             return
         }
         
         // Post notification for navigation (existing system)
+        // The navigation will be handled by AVREntertainmentApp.swift which knows the user role
         NotificationCenter.default.post(
             name: Notification.Name("NavigateFromNotification"),
             object: nil,

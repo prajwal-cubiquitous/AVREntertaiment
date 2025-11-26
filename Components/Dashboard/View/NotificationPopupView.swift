@@ -14,6 +14,7 @@ struct NotificationPopupView: View {
     let role: UserRole?
     let phoneNumber: String
     @Binding var isPresented: Bool
+    @EnvironmentObject var navigationManager: NavigationManager
     
     
     var body: some View {
@@ -124,12 +125,25 @@ struct NotificationPopupView: View {
                                 message: notification.body,
                                 timeAgo: timeAgoString(from: notification.date)
                             ) {
+                                HapticManager.selection()
                                 // Remove notification when clicked
                                 NotificationManager.shared.removeNotification(byId: notification.id)
                                 
                                 // Handle navigation when tapped
                                 let data = notification.data.mapValues { $0.value }
-                                NotificationManager.shared.handleNavigation(data: data)
+                                
+                                // Close notification popup first
+                                isPresented = false
+                                
+                                // Small delay to allow popup to close smoothly
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    // Handle navigation with role awareness and current project context
+                                    NotificationManager.shared.handleNavigation(
+                                        data: data,
+                                        currentRole: role,
+                                        currentProjectId: project.id
+                                    )
+                                }
                                 
                                 // Reload notifications to reflect removal
                                 if let projectId = project.id {
@@ -137,8 +151,6 @@ struct NotificationPopupView: View {
                                 } else {
                                     notificationViewModel.loadSavedNotifications()
                                 }
-                                
-                                isPresented = false
                             }
                             
                             // Add divider between items (not after last item)

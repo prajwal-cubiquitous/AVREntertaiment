@@ -169,50 +169,81 @@ struct AVREntertainmentApp: App {
                                 if let projectId = projectId {
                                     navigationManager.setProjectId(projectId)
                                 }
-                            } else if screen == "chat_detail" {
+                            } else if screen == "chat_detail" || screen == "chat_screen" {
+                                // For chat notifications: Navigate to project first, then open ChatsView
                                 if let projectId = projectId {
-                                    navigationManager.setProjectId(projectId)
-                                }
-                                if let chatId = chatId {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        navigationManager.setChatId(chatId)
+                                    // Check if we're already in the target project
+                                    let currentProjectId = navigationManager.activeProjectId?.id
+                                    
+                                    if currentProjectId == projectId {
+                                        // Already in the target project, just set chatId directly
+                                        print("📍 Already in project \(projectId), setting chatId directly")
+                                        if let chatId = chatId {
+                                            // Small delay to ensure DashboardView is ready
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                                navigationManager.setChatId(chatId)
+                                            }
+                                        }
+                                    } else {
+                                        // Need to navigate to project first
+                                        navigationManager.setProjectId(projectId)
+                                        // Delay chat navigation to ensure project view is loaded
+                                        // DashboardView/ProjectDetailView will open ChatsView sheet, which will then navigate to specific chat
+                                        if let chatId = chatId {
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                                navigationManager.setChatId(chatId)
+                                            }
+                                        }
                                     }
                                 }
-                            } else if screen == "expense_detail" || screen == "expert_detail" {
+                            } else if screen == "expense_detail" || screen == "expert_detail" || screen == "expense_review" {
+                                // For expense notifications: Navigate to project first, then to expense
                                 if let projectId = projectId {
                                     navigationManager.setProjectId(projectId)
-                                }
-                                if let expenseId = expenseId {
-                                    // Delay expense navigation to ensure project is fully loaded and DashboardView is ready
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                        navigationManager.setExpenseId(expenseId, screenType: .detail)
+                                    if let expenseId = expenseId {
+                                        // Delay expense navigation to ensure project is fully loaded
+                                        // DashboardView/ProjectDetailView will handle showing expense detail
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                            navigationManager.setExpenseId(expenseId, screenType: .detail)
+                                        }
                                     }
                                 }
                             } else if screen == "expense_chat" {
+                                // For expense chat notifications: Navigate to project first, then to expense chat
                                 if let projectId = projectId {
                                     navigationManager.setProjectId(projectId)
-                                }
-                                if let expenseId = expenseId {
-                                    // Delay expense chat navigation to ensure project is fully loaded and DashboardView is ready
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                        navigationManager.setExpenseId(expenseId, screenType: .chat)
+                                    if let expenseId = expenseId {
+                                        // Delay expense chat navigation to ensure project is fully loaded
+                                        // DashboardView/ProjectDetailView will handle showing expense chat
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                            navigationManager.setExpenseId(expenseId, screenType: .chat)
+                                        }
                                     }
                                 }
                             } else if screen == "phase_detail" {
+                                // For phase notifications: Navigate to project first, then to phase
                                 if let projectId = projectId {
                                     navigationManager.setProjectId(projectId)
-                                }
-                                if let phaseId = phaseId {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        navigationManager.setPhaseId(phaseId)
+                                    if let phaseId = phaseId {
+                                        // Delay phase navigation to ensure project is fully loaded
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                            navigationManager.setPhaseId(phaseId)
+                                        }
                                     }
                                 }
                             } else if screen == "request_detail" {
-                                if let requestId = requestId {
-                                    navigationManager.setRequestId(requestId)
+                                // For request notifications: Navigate to project first, then to request
+                                if let projectId = projectId {
+                                    navigationManager.setProjectId(projectId)
+                                    if let requestId = requestId {
+                                        // Delay request navigation to ensure project is fully loaded
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                            navigationManager.setRequestId(requestId)
+                                        }
+                                    }
                                 }
-                            } else if screen == "project_creation" {
-                                // Navigate to project creation screen for rejected projects
+                            } else if screen == "project_creation" || screen == "project_review" {
+                                // Navigate to project creation/review screen for rejected projects
                                 if let projectId = projectId {
                                     // Set projectId which will trigger navigation to CreateProjectView in ProjectListView
                                     // The ProjectListView will handle fetching the project and showing CreateProjectView

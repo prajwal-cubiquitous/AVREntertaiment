@@ -159,11 +159,22 @@ class NavigationManager: ObservableObject {
             if let phaseId = intent.phaseId { setPhaseId(phaseId) }
 
         case "request_detail":
+            if let projectId = intent.projectId { setProjectId(projectId) }
             if let requestId = intent.requestId { setRequestId(requestId) }
 
-        case "project_creation":
-            // Navigate to project creation screen for rejected projects
+        case "project_creation", "project_review":
+            // Navigate to project creation/review screen for rejected projects
             if let id = intent.projectId { setProjectId(id) }
+            
+        case "chat_screen":
+            // For customer chat notifications - same as chat_detail
+            if let projectId = intent.projectId { setProjectId(projectId) }
+            if let chatId = intent.chatId { setChatId(chatId) }
+            
+        case "expense_review":
+            // For admin/customer expense review - same as expense_detail
+            if let projectId = intent.projectId { setProjectId(projectId) }
+            if let expenseId = intent.expenseId { setExpenseId(expenseId, screenType: .detail) }
 
         default:
             print("⚠️ Unknown screen: \(intent.screen)")

@@ -403,16 +403,22 @@ struct DashboardView: View {
                     if role == .APPROVER || role == .ADMIN {
                         Button {
                             HapticManager.selection()
-                            showingNotifications = true
-                            // Load phase requests when opening notifications (Admin only)
-                            if role == .ADMIN, let projectId = project?.id {
-                                Task {
-                                    await phaseRequestNotificationViewModel.loadPendingRequests(
-                                        projectId: projectId,
-                                        customerId: customerId
-                                    )
+                            // Reload notifications when opening popup to ensure fresh data
+                            if let projectId = project?.id {
+                                // Reload project-specific notifications
+                                notificationViewModel.loadSavedNotifications(for: projectId)
+                                
+                                // Reload phase requests when opening notifications (Admin only)
+                                if role == .ADMIN {
+                                    Task {
+                                        await phaseRequestNotificationViewModel.loadPendingRequests(
+                                            projectId: projectId,
+                                            customerId: customerId
+                                        )
+                                    }
                                 }
                             }
+                            showingNotifications = true
                         } label: {
                             ZStack(alignment: .topTrailing) {
                                 Image(systemName: "bell")
@@ -738,8 +744,7 @@ struct DashboardView: View {
             if let expenseItem = newValue {
                 // Check screen type to determine if we should show chat or detail
                 let showChat = navigationManager.expenseScreenType == .chat
-                showingExpenseChat = true
-//                handleExpenseChange(expenseItem.id, showChat: showChat)
+                handleExpenseChange(expenseItem.id, showChat: showChat)
             }
         }
         .onChange(of: navigationManager.activePhaseId) { newValue in
@@ -767,6 +772,19 @@ struct DashboardView: View {
         .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
             if let chatItem = newValue {
                 print("💬 Chat navigation trigger detected in DashboardView for chat ID: \(chatItem.id)")
+                print("💬 Current project: \(project?.id ?? "nil"), showingChats will be set to true")
+                // Open ChatsView sheet first
+                showingChats = true
+                print("💬 showingChats set to true, ChatsView should open")
+                // ChatsView has navigationDestination for activeChatId, which will navigate to the specific chat
+                // The chatId is already set in navigationManager, so ChatsView will pick it up when it appears
+            } else if newValue == nil {
+                print("💬 activeChatId cleared")
+            }
+        }
+        .onChange(of: showingChats) { newValue in
+            if newValue {
+                print("💬 ChatsView sheet is now showing: \(newValue)")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { notification in

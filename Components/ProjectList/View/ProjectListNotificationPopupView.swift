@@ -100,12 +100,10 @@ struct ProjectListNotificationPopupView: View {
             AllNotificationsListView(
                 notifications: notificationViewModel.savedNotifications,
                 onNotificationTap: { notification in
-                    NotificationManager.shared.removeNotification(byId: notification.id)
-                    let data = notification.data.mapValues { $0.value }
-                    NotificationManager.shared.handleNavigation(data: data)
-                    showingAllNotifications = false
-                    viewModel.showingFullNotifications = false
-                }
+                    // This will be handled in the view itself
+                },
+                role: role,
+                projects: viewModel.projects
             )
         }
     }
@@ -531,15 +529,29 @@ struct ProjectListNotificationPopupView: View {
                 NotificationPopupRowView(
                     icon: iconForNotification(notification),
                     iconColor: colorForNotification(notification),
-                    title: notification.title,
-                    message: notification.body,
+                    title: formattedNotificationTitle(for: notification),
+                    message: formattedNotificationMessage(for: notification),
                     timeAgo: timeAgoString(from: notification.date)
                 ) {
+                    HapticManager.selection()
                     NotificationManager.shared.removeNotification(byId: notification.id)
                     let data = notification.data.mapValues { $0.value }
-                    NotificationManager.shared.handleNavigation(data: data)
-                    notificationViewModel.loadSavedNotifications()
+                    
+                    // Close notification popup first
                     viewModel.showingFullNotifications = false
+                    
+                    // Small delay to allow popup to close smoothly
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        // Handle navigation with role awareness
+                        NotificationManager.shared.handleNavigation(
+                            data: data,
+                            currentRole: role,
+                            currentProjectId: nil
+                        )
+                    }
+                    
+                    // Reload notifications
+                    notificationViewModel.loadSavedNotifications()
                 }
                 
                 if index < itemsToShow.count - 1 {
@@ -610,6 +622,97 @@ struct ProjectListNotificationPopupView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
+    // MARK: - Notification Formatting
+    
+    /// Formats notification title based on notification type and data
+    private func formattedNotificationTitle(for notification: AppNotification) -> String {
+        // Try to get projectId from multiple sources
+        let projectId = notification.projectId ?? 
+                       notification.data["projectId"]?.value as? String
+        
+        // Check screen type or notification type
+        let screen = notification.data["screen"]?.value as? String
+        let type = notification.data["type"]?.value as? String
+        
+        // Debug logging
+        print("🔔 Formatting notification: title='\(notification.title)', projectId=\(projectId ?? "nil"), screen=\(screen ?? "nil"), type=\(type ?? "nil")")
+        
+        // Handle chat notifications - check multiple conditions
+        let isChatNotification = screen == "chat_detail" || 
+                                 screen == "chat_screen" || 
+                                 type == "chat_message" || 
+                                 type == "project_communication" ||
+                                 notification.title.localizedCaseInsensitiveContains("Communication") || 
+                                 notification.title.localizedCaseInsensitiveContains("chat") || 
+                                 notification.body.localizedCaseInsensitiveContains("sent a new message")
+        
+        if isChatNotification {
+            // Try to get project name
+            if let projectId = projectId, let project = viewModel.project(for: projectId) {
+                print("✅ Found project '\(project.name)' for chat notification")
+                return "\(project.name) received chat msg"
+            } else {
+                // If no projectId but it's a chat notification, try to find project from body
+                // The body might contain project info or we can search all projects
+                // For now, return formatted title without project name
+                print("⚠️ No projectId for chat notification, using original title")
+                return notification.title
+            }
+        }
+        
+        // For other notification types, require projectId
+        guard let projectId = projectId else {
+            return notification.title
+        }
+        
+        // Get project name from viewModel
+        guard let project = viewModel.project(for: projectId) else {
+            print("⚠️ Project not found for ID: \(projectId) in notification formatting")
+            return notification.title
+        }
+        
+        // Handle other notification types
+        if let screen = screen {
+            switch screen {
+            case "expense_detail", "expense_review":
+                return "\(project.name) - Expense Update"
+            case "expense_chat":
+                return "\(project.name) - Expense Chat"
+            case "phase_detail":
+                return "\(project.name) - Phase Update"
+            case "request_detail":
+                return "\(project.name) - Phase Request"
+            case "project_detail", "project_detail1":
+                return "\(project.name) - Project Update"
+            default:
+                break
+            }
+        }
+        
+        // Handle by type if screen is not available
+        if let type = type {
+            switch type {
+            case "expense_submitted", "expense_approved", "expense_rejected":
+                return "\(project.name) - Expense Update"
+            case "phase_updated", "phase_created":
+                return "\(project.name) - Phase Update"
+            case "project_rejected":
+                return "\(project.name) - Project Rejected"
+            default:
+                break
+            }
+        }
+        
+        // Default: return original title
+        return notification.title
+    }
+    
+    /// Formats notification message based on notification type
+    private func formattedNotificationMessage(for notification: AppNotification) -> String {
+        // Return the original body message
+        return notification.body
     }
     
     // MARK: - Declined Projects List (ADMIN) - Keep for backward compatibility
@@ -1006,6 +1109,8 @@ struct AllPhaseRequestsListView: View {
 struct AllNotificationsListView: View {
     let notifications: [AppNotification]
     let onNotificationTap: (AppNotification) -> Void
+    let role: UserRole
+    let projects: [Project] // Add projects to access project names
     @Environment(\.dismiss) private var dismiss
     @StateObject private var notificationViewModel = NotificationViewModel()
     
@@ -1051,6 +1156,86 @@ struct AllNotificationsListView: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
     
+    // MARK: - Notification Formatting
+    
+    /// Formats notification title based on notification type and data
+    private func formattedNotificationTitle(for notification: AppNotification) -> String {
+        // Try to get projectId from multiple sources
+        let projectId = notification.projectId ?? 
+                       notification.data["projectId"]?.value as? String
+        
+        guard let projectId = projectId else {
+            // If no projectId, check if title contains "New Project Communication"
+            // and try to extract project info from body or other data
+            if notification.title.contains("New Project Communication") || 
+               notification.title.contains("Project Communication") {
+                // Try to find project from body message or other notification data
+                return notification.title
+            }
+            return notification.title
+        }
+        
+        // Get project name from projects array
+        guard let project = projects.first(where: { $0.id == projectId }) else {
+            print("⚠️ Project not found for ID: \(projectId) in AllNotificationsListView formatting")
+            return notification.title
+        }
+        
+        // Check screen type or notification type
+        let screen = notification.data["screen"]?.value as? String
+        let type = notification.data["type"]?.value as? String
+        
+        // Handle chat notifications
+        if screen == "chat_detail" || screen == "chat_screen" || 
+           type == "chat_message" || type == "project_communication" ||
+           notification.title.contains("Communication") || 
+           notification.title.contains("chat") || 
+           notification.body.contains("sent a new message") {
+            return "\(project.name) received chat msg"
+        }
+        
+        // Handle other notification types
+        if let screen = screen {
+            switch screen {
+            case "expense_detail", "expense_review":
+                return "\(project.name) - Expense Update"
+            case "expense_chat":
+                return "\(project.name) - Expense Chat"
+            case "phase_detail":
+                return "\(project.name) - Phase Update"
+            case "request_detail":
+                return "\(project.name) - Phase Request"
+            case "project_detail", "project_detail1":
+                return "\(project.name) - Project Update"
+            default:
+                break
+            }
+        }
+        
+        // Handle by type if screen is not available
+        if let type = type {
+            switch type {
+            case "expense_submitted", "expense_approved", "expense_rejected":
+                return "\(project.name) - Expense Update"
+            case "phase_updated", "phase_created":
+                return "\(project.name) - Phase Update"
+            case "project_rejected":
+                return "\(project.name) - Project Rejected"
+            default:
+                break
+            }
+        }
+        
+        // Default: return original title
+        return notification.title
+    }
+    
+    /// Formats notification message based on notification type
+    private func formattedNotificationMessage(for notification: AppNotification) -> String {
+        // Return the original body message
+        return notification.body
+    }
+    
     var body: some View {
         NavigationStack {
             Group {
@@ -1078,11 +1263,28 @@ struct AllNotificationsListView: View {
                             NotificationPopupRowView(
                                 icon: iconForNotification(notification),
                                 iconColor: colorForNotification(notification),
-                                title: notification.title,
-                                message: notification.body,
+                                title: formattedNotificationTitle(for: notification),
+                                message: formattedNotificationMessage(for: notification),
                                 timeAgo: timeAgoString(from: notification.date)
                             ) {
-                                onNotificationTap(notification)
+                                HapticManager.selection()
+                                NotificationManager.shared.removeNotification(byId: notification.id)
+                                let data = notification.data.mapValues { $0.value }
+                                
+                                // Close sheet first
+                                dismiss()
+                                
+                                // Small delay to allow sheet to close smoothly
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    // Handle navigation with role awareness
+                                    NotificationManager.shared.handleNavigation(
+                                        data: data,
+                                        currentRole: role,
+                                        currentProjectId: nil
+                                    )
+                                }
+                                
+                                // Reload notifications
                                 notificationViewModel.loadSavedNotifications()
                             }
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
