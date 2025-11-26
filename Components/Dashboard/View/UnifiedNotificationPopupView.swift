@@ -17,6 +17,11 @@ struct UnifiedNotificationPopupView: View {
     let customerId: String?
     @Binding var isPresented: Bool
     let onPhaseRequestTap: (PhaseRequestItem) -> Void
+    @State private var showingAllPhaseRequests = false
+    @State private var showingAllNotifications = false
+    
+    // Limit number of items shown in popup
+    private let maxItemsToShow = 3
     
     var body: some View {
         GeometryReader { geometry in
@@ -132,21 +137,47 @@ struct UnifiedNotificationPopupView: View {
             }
             .frame(maxHeight: 400)
         }
+        .sheet(isPresented: $showingAllPhaseRequests) {
+            AllPhaseRequestsView(
+                requests: phaseRequestNotificationViewModel.pendingRequests,
+                project: project,
+                customerId: customerId,
+                onRequestTap: { request in
+                    showingAllPhaseRequests = false
+                    isPresented = false
+                    onPhaseRequestTap(request)
+                }
+            )
+        }
+        .sheet(isPresented: $showingAllNotifications) {
+            AllNotificationsView(
+                notifications: notificationViewModel.savedNotifications,
+                project: project,
+                onNotificationTap: { notification in
+                    NotificationManager.shared.removeNotification(byId: notification.id)
+                    let data = notification.data.mapValues { $0.value }
+                    NotificationManager.shared.handleNavigation(data: data)
+                    showingAllNotifications = false
+                    isPresented = false
+                }
+            )
+        }
     }
     
     // MARK: - Phase Requests Section
     
     private var phaseRequestsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header
+            // Section header with View All button
             HStack {
-                Text("Phase Requests")
+                Text("PHASE REQUESTS")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.secondary)
                     .textCase(.uppercase)
                 
                 Spacer()
                 
+                // Badge with count
                 Text("\(phaseRequestNotificationViewModel.pendingRequestsCount)")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white)
@@ -158,8 +189,9 @@ struct UnifiedNotificationPopupView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
             
-            // Phase request items
-            ForEach(Array(phaseRequestNotificationViewModel.pendingRequests.enumerated()), id: \.element.id) { index, request in
+            // Phase request items (limited)
+            let itemsToShow = Array(phaseRequestNotificationViewModel.pendingRequests.prefix(maxItemsToShow))
+            ForEach(Array(itemsToShow.enumerated()), id: \.element.id) { index, request in
                 PhaseRequestNotificationRow(
                     request: request,
                     onTap: {
@@ -168,10 +200,28 @@ struct UnifiedNotificationPopupView: View {
                     }
                 )
                 
-                if index < phaseRequestNotificationViewModel.pendingRequests.count - 1 {
+                if index < itemsToShow.count - 1 {
                     Divider()
                         .padding(.leading, 56)
                 }
+            }
+            
+            // View All button if there are more items
+            if phaseRequestNotificationViewModel.pendingRequests.count > maxItemsToShow {
+                Button {
+                    HapticManager.selection()
+                    showingAllPhaseRequests = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("View All (\(phaseRequestNotificationViewModel.pendingRequests.count))")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -180,22 +230,37 @@ struct UnifiedNotificationPopupView: View {
     
     private var fcmNotificationsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Section header (only show if there are phase requests above)
-            if role == .ADMIN && !phaseRequestNotificationViewModel.pendingRequests.isEmpty {
+            // Section header (always show for admin, or if no phase requests)
+            if role == .ADMIN {
                 HStack {
-                    Text("Notifications")
+                    Text("NOTIFICATIONS")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.secondary)
                         .textCase(.uppercase)
                     
                     Spacer()
+                    
+                    // Badge with count
+                    if notificationViewModel.savedNotifications.count > 0 {
+                        Text("\(notificationViewModel.savedNotifications.count)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue)
+                            .clipShape(Capsule())
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
             }
             
-            // FCM notification items
-            ForEach(Array(notificationViewModel.savedNotifications.enumerated()), id: \.element.id) { index, notification in
+            // FCM notification items (limited for admin)
+            let itemsToShow = role == .ADMIN 
+                ? Array(notificationViewModel.savedNotifications.prefix(maxItemsToShow))
+                : Array(notificationViewModel.savedNotifications)
+            
+            ForEach(Array(itemsToShow.enumerated()), id: \.element.id) { index, notification in
                 NotificationPopupRowView(
                     icon: iconForNotification(notification),
                     iconColor: colorForNotification(notification),
@@ -221,10 +286,28 @@ struct UnifiedNotificationPopupView: View {
                 }
                 
                 // Add divider between items (not after last item)
-                if index < notificationViewModel.savedNotifications.count - 1 {
+                if index < itemsToShow.count - 1 {
                     Divider()
                         .padding(.leading, 56)
                 }
+            }
+            
+            // View All button for admin if there are more items
+            if role == .ADMIN && notificationViewModel.savedNotifications.count > maxItemsToShow {
+                Button {
+                    HapticManager.selection()
+                    showingAllNotifications = true
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("View All (\(notificationViewModel.savedNotifications.count))")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -306,7 +389,7 @@ struct UnifiedNotificationPopupView: View {
 
 // MARK: - Phase Request Notification Row
 
-private struct PhaseRequestNotificationRow: View {
+struct PhaseRequestNotificationRow: View {
     let request: PhaseRequestItem
     let onTap: () -> Void
     
@@ -374,6 +457,159 @@ private struct PhaseRequestNotificationRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - All Phase Requests View
+
+struct AllPhaseRequestsView: View {
+    let requests: [PhaseRequestItem]
+    let project: Project
+    let customerId: String?
+    let onRequestTap: (PhaseRequestItem) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(requests) { request in
+                    PhaseRequestNotificationRow(
+                        request: request,
+                        onTap: {
+                            onRequestTap(request)
+                        }
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+            }
+            .navigationTitle("Phase Requests")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        HapticManager.selection()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - All Notifications View
+
+struct AllNotificationsView: View {
+    let notifications: [AppNotification]
+    let project: Project
+    let onNotificationTap: (AppNotification) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var notificationViewModel = NotificationViewModel()
+    
+    private func iconForNotification(_ notification: AppNotification) -> String {
+        if let screen = notification.data["screen"]?.value as? String {
+            switch screen {
+            case "chat_detail":
+                return "bubble.left.and.bubble.right.fill"
+            case "expense_detail", "expense_chat":
+                return "doc.text.fill"
+            case "phase_detail":
+                return "folder.fill"
+            case "request_detail":
+                return "doc.badge.plus"
+            default:
+                return "bell.fill"
+            }
+        }
+        return "bell.fill"
+    }
+    
+    private func colorForNotification(_ notification: AppNotification) -> Color {
+        if let screen = notification.data["screen"]?.value as? String {
+            switch screen {
+            case "chat_detail":
+                return .blue
+            case "expense_detail", "expense_chat":
+                return .green
+            case "phase_detail":
+                return .purple
+            case "request_detail":
+                return .orange
+            default:
+                return .gray
+            }
+        }
+        return .gray
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
+    var body: some View {
+        NavigationStack {
+            if notifications.isEmpty {
+                VStack(spacing: 20) {
+                    Image(systemName: "bell.slash.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.secondary.opacity(0.6))
+                        .symbolRenderingMode(.hierarchical)
+                    
+                    Text("No Notifications")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text("You're all caught up!")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("Notifications")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            HapticManager.selection()
+                            dismiss()
+                        }
+                    }
+                }
+            } else {
+                List {
+                    ForEach(notifications) { notification in
+                        NotificationPopupRowView(
+                            icon: iconForNotification(notification),
+                            iconColor: colorForNotification(notification),
+                            title: notification.title,
+                            message: notification.body,
+                            timeAgo: timeAgoString(from: notification.date)
+                        ) {
+                            onNotificationTap(notification)
+                            // Reload notifications after removal
+                            if let projectId = project.id {
+                                notificationViewModel.loadSavedNotifications(for: projectId)
+                            } else {
+                                notificationViewModel.loadSavedNotifications()
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    }
+                }
+                .navigationTitle("Notifications")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            HapticManager.selection()
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
