@@ -45,6 +45,10 @@ class PhaseRequestNotificationViewModel: ObservableObject {
         action: RequestAction,
         reason: String
     ) async {
+        // Debug logging
+        print("🔄 handleRequestAction called with action: \(action == .accept ? "ACCEPT" : "REJECT")")
+        print("📋 Request ID: \(request.id), Phase ID: \(request.phaseId), Project ID: \(projectId)")
+        
         guard let customerId = customerId else {
             print("❌ Customer ID not found in handleRequestAction")
             return
@@ -67,7 +71,15 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                 .collection("requests")
                 .document(request.id)
             
-            let status = action == .accept ? "ACCEPTED" : "REJECTED"
+            // Determine status based on action - explicitly check both cases
+            let status: String
+            if action == .accept {
+                status = "ACCEPTED"
+                print("✅ Setting status to ACCEPTED")
+            } else {
+                status = "REJECTED"
+                print("❌ Setting status to REJECTED")
+            }
             
             // Update request document (reason is optional)
             var updateData: [String: Any] = [
@@ -80,7 +92,9 @@ class PhaseRequestNotificationViewModel: ObservableObject {
                 updateData["reasonToReact"] = reason.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             
+            print("💾 Updating request with data: status=\(status), hasReason=\(!reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
             try await requestRef.updateData(updateData)
+            print("✅ Request updated successfully with status: \(status)")
             
             // If accepted, update phase end date and log to changes collection
             if action == .accept {

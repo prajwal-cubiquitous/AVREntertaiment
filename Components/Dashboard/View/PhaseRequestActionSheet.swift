@@ -17,6 +17,15 @@ struct PhaseRequestActionSheet: View {
     let onDismiss: () -> Void
     @Binding var reasonToReact: String
     
+    // Store closures in local variables to ensure they're captured correctly
+    private var acceptAction: () -> Void {
+        onAccept
+    }
+    
+    private var rejectAction: () -> Void {
+        onReject
+    }
+    
     @Environment(\.dismiss) private var dismiss
     @State private var isProcessing = false
     @State private var processingAction: RequestAction? = nil // Track which action is processing
@@ -47,6 +56,38 @@ struct PhaseRequestActionSheet: View {
     
     private var isRejectProcessing: Bool {
         isProcessing && processingAction == .reject
+    }
+    
+    // MARK: - Action Handlers
+    
+    private func handleAcceptAction() {
+        guard !isProcessing else {
+            print("⚠️ Already processing, ignoring accept action")
+            return
+        }
+        print("✅✅✅ Accept button tapped - handleAcceptAction called")
+        print("✅ Request ID: \(request.id)")
+        isProcessing = true
+        processingAction = .accept
+        HapticManager.impact(.medium)
+        print("📞 Calling onAccept closure")
+        // Call the stored closure
+        acceptAction()
+    }
+    
+    private func handleRejectAction() {
+        guard !isProcessing else {
+            print("⚠️ Already processing, ignoring reject action")
+            return
+        }
+        print("❌❌❌ Reject button tapped - handleRejectAction called")
+        print("❌ Request ID: \(request.id)")
+        isProcessing = true
+        processingAction = .reject
+        HapticManager.impact(.medium)
+        print("📞 Calling onReject closure")
+        // Call the stored closure
+        rejectAction()
     }
     
     var body: some View {
@@ -163,17 +204,15 @@ struct PhaseRequestActionSheet: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Action Buttons Section
-                Section {
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Action Buttons - Outside Form to avoid SwiftUI Form button issues
+                VStack(spacing: 12) {
                     HStack(spacing: 12) {
                         // Accept Button (Left)
-                        Button(action: {
-                            guard !isProcessing else { return }
-                            isProcessing = true
-                            processingAction = .accept
-                            HapticManager.impact(.medium)
-                            onAccept()
-                        }) {
+                        Button {
+                            handleAcceptAction()
+                        } label: {
                             HStack(spacing: 6) {
                                 if isAcceptProcessing {
                                     ProgressView()
@@ -193,15 +232,13 @@ struct PhaseRequestActionSheet: View {
                             .cornerRadius(10)
                         }
                         .disabled(!canAccept || isProcessing)
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                         
                         // Reject Button (Right)
-                        Button(action: {
-                            guard !isProcessing else { return }
-                            isProcessing = true
-                            processingAction = .reject
-                            HapticManager.impact(.medium)
-                            onReject()
-                        }) {
+                        Button {
+                            handleRejectAction()
+                        } label: {
                             HStack(spacing: 6) {
                                 if isRejectProcessing {
                                     ProgressView()
@@ -221,9 +258,13 @@ struct PhaseRequestActionSheet: View {
                             .cornerRadius(10)
                         }
                         .disabled(!canReject || isProcessing)
+                        .buttonStyle(.plain)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 4)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color(.systemGroupedBackground))
             }
             .navigationTitle("Phase Request")
             .navigationBarTitleDisplayMode(.inline)

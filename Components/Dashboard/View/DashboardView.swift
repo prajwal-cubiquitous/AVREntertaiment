@@ -601,16 +601,22 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showingRequestActionSheet) {
             if let request = selectedRequest, let projectId = project?.id {
+                // Explicitly capture values to avoid closure capture issues
+                let capturedRequest = request
+                let capturedProjectId = projectId
+                let capturedCustomerId = customerId
+                
                 PhaseRequestActionSheet(
-                    request: request,
-                    projectId: projectId,
-                    customerId: customerId,
+                    request: capturedRequest,
+                    projectId: capturedProjectId,
+                    customerId: capturedCustomerId,
                     onAccept: {
-                        Task {
+                        print("📞 onAccept closure called for request: \(capturedRequest.id)")
+                        Task { @MainActor in
                             await phaseRequestNotificationViewModel.handleRequestAction(
-                                request: request,
-                                projectId: projectId,
-                                customerId: customerId,
+                                request: capturedRequest,
+                                projectId: capturedProjectId,
+                                customerId: capturedCustomerId,
                                 action: .accept,
                                 reason: phaseRequestNotificationViewModel.reasonToReact
                             )
@@ -620,33 +626,38 @@ struct DashboardView: View {
                             
                             // Reload pending requests
                             await phaseRequestNotificationViewModel.loadPendingRequests(
-                                projectId: projectId,
-                                customerId: customerId
+                                projectId: capturedProjectId,
+                                customerId: capturedCustomerId
                             )
                             // Reload phases and extensions
                             await loadPhases()
                             // Wait for phases to fully load
                             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                             await loadPhaseExtensions()
+                            
+                            // Close sheet after action completes
+                            showingRequestActionSheet = false
                         }
-                        showingRequestActionSheet = false
                     },
                     onReject: {
-                        Task {
+                        print("📞 onReject closure called for request: \(capturedRequest.id)")
+                        Task { @MainActor in
                             await phaseRequestNotificationViewModel.handleRequestAction(
-                                request: request,
-                                projectId: projectId,
-                                customerId: customerId,
+                                request: capturedRequest,
+                                projectId: capturedProjectId,
+                                customerId: capturedCustomerId,
                                 action: .reject,
                                 reason: phaseRequestNotificationViewModel.reasonToReact
                             )
                             // Reload pending requests
                             await phaseRequestNotificationViewModel.loadPendingRequests(
-                                projectId: projectId,
-                                customerId: customerId
+                                projectId: capturedProjectId,
+                                customerId: capturedCustomerId
                             )
+                            
+                            // Close sheet after action completes
+                            showingRequestActionSheet = false
                         }
-                        showingRequestActionSheet = false
                     },
                     onDismiss: {
                         showingRequestActionSheet = false
