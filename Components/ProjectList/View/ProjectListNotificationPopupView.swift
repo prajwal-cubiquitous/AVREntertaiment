@@ -12,6 +12,7 @@ struct ProjectListNotificationPopupView: View {
     @ObservedObject var viewModel: ProjectListViewModel
     let role: UserRole
     let onProjectSelected: (Project) -> Void
+    var onPhaseRequestSelected: ((PhaseRequestItem, Project) -> Void)? = nil
     @State private var declinedProjects: [Project] = []
     @State private var inReviewProjects: [Project] = []
     @State private var userNames: [String: String] = [:] // rejectedBy: name
@@ -86,12 +87,17 @@ struct ProjectListNotificationPopupView: View {
                 projectMap: phaseRequestProjectMap,
                 projects: viewModel.projects,
                 onRequestTap: { request in
-                    // Navigate to project for this request
+                    // Show phase request sheet for this request
                     if let projectId = phaseRequestProjectMap[request.id],
                        let project = viewModel.projects.first(where: { $0.id == projectId }) {
                         showingAllPhaseRequests = false
-                        viewModel.showingFullNotifications = false
-                        onProjectSelected(project)
+                        // Use phase request callback if available, otherwise fallback to project selection
+                        if let onPhaseRequestSelected = onPhaseRequestSelected {
+                            onPhaseRequestSelected(request, project)
+                        } else {
+                            viewModel.showingFullNotifications = false
+                            onProjectSelected(project)
+                        }
                     }
                 }
             )
@@ -398,12 +404,17 @@ struct ProjectListNotificationPopupView: View {
                 PhaseRequestNotificationRow(
                     request: request,
                     onTap: {
-                        // Find project for this request and navigate
+                        // Find project for this request and show phase request sheet
                         if let projectId = phaseRequestProjectMap[request.id],
                            let project = viewModel.projects.first(where: { $0.id == projectId }) {
                             HapticManager.selection()
-                            viewModel.showingFullNotifications = false
-                            onProjectSelected(project)
+                            // Use phase request callback if available, otherwise fallback to project selection
+                            if let onPhaseRequestSelected = onPhaseRequestSelected {
+                                onPhaseRequestSelected(request, project)
+                            } else {
+                                viewModel.showingFullNotifications = false
+                                onProjectSelected(project)
+                            }
                         }
                     }
                 )

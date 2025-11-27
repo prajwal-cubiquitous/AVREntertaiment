@@ -929,23 +929,60 @@ struct DashboardView: View {
         }
         
         Task {
-            // Load the specific request by ID from customer's requests collection
-            // This function will also extract projectId from the request data
-            if let (request, projectId) = await phaseRequestNotificationViewModel.loadRequestByIdWithProject(
+            // Get projectId - prefer current project, fallback to navigationManager
+            var projectId = project?.id ?? navigationManager.activeProjectId?.id
+            
+            // If project is not loaded yet, wait for it
+            if projectId == nil && navigationManager.activeProjectId != nil {
+                // Wait for project to be available (navigation might be in progress)
+                var attempts = 0
+                while projectId == nil && attempts < 10 {
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                    projectId = project?.id ?? navigationManager.activeProjectId?.id
+                    attempts += 1
+                }
+            }
+            
+            guard let projectId = projectId else {
+                print("⚠️ Project ID not available for request: \(requestId)")
+                navigationManager.setRequestId(nil)
+                return
+            }
+            
+            // First, try loading from phase's requests subcollection (where phase requests are actually stored)
+            var request: PhaseRequestItem? = nil
+            var foundProjectId: String? = nil
+            
+            if let (loadedRequest, loadedProjectId) = await phaseRequestNotificationViewModel.loadRequestFromPhaseSubcollection(
                 requestId: requestId,
+                projectId: projectId,
                 customerId: customerId
             ) {
+                request = loadedRequest
+                foundProjectId = loadedProjectId
+            } else {
+                // If not found in phase subcollection, try customer's requests collection (for backward compatibility)
+                if let (loadedRequest, loadedProjectId) = await phaseRequestNotificationViewModel.loadRequestByIdWithProject(
+                    requestId: requestId,
+                    customerId: customerId
+                ) {
+                    request = loadedRequest
+                    foundProjectId = loadedProjectId
+                }
+            }
+            
+            if let request = request, let foundProjectId = foundProjectId {
                 // If we're not in the correct project, we need to navigate to it first
-                if let currentProjectId = project?.id, currentProjectId != projectId {
+                if let currentProjectId = self.project?.id, currentProjectId != foundProjectId {
                     // Navigate to the correct project first
-                    navigationManager.setProjectId(projectId)
+                    navigationManager.setProjectId(foundProjectId)
                     // Wait a bit for project to load, then show request
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 }
                 
                 // Reload pending requests to ensure we have the latest data
                 await phaseRequestNotificationViewModel.loadPendingRequests(
-                    projectId: projectId,
+                    projectId: foundProjectId,
                     customerId: customerId
                 )
                 

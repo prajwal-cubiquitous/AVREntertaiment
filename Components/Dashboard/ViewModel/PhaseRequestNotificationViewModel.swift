@@ -275,6 +275,89 @@ class PhaseRequestNotificationViewModel: ObservableObject {
         }
     }
     
+    /// Load a specific request by ID from phase's requests subcollection
+    /// Searches through all phases in the project to find the request
+    /// Returns the request and its projectId
+    func loadRequestFromPhaseSubcollection(requestId: String, projectId: String, customerId: String) async -> (PhaseRequestItem, String)? {
+        do {
+            // Get all phases for this project
+            let phasesSnapshot = try await FirebasePathHelper.shared
+                .phasesCollection(customerId: customerId, projectId: projectId)
+                .getDocuments()
+            
+            // Search through all phases to find the request
+            for phaseDoc in phasesSnapshot.documents {
+                let phaseId = phaseDoc.documentID
+                guard let phase = try? phaseDoc.data(as: Phase.self) else { continue }
+                
+                // Try to get the request from this phase's requests subcollection
+                let requestDoc = try await FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phaseId)
+                    .collection("requests")
+                    .document(requestId)
+                    .getDocument()
+                
+                if requestDoc.exists, let requestData = requestDoc.data() {
+                    // Found the request!
+                    if let reason = requestData["reason"] as? String,
+                       let extendedDate = requestData["extendedDate"] as? String,
+                       let userID = requestData["userID"] as? String,
+                       let createdAt = requestData["createdAt"] as? Timestamp {
+                        
+                        // Fetch user details
+                        var userName: String? = nil
+                        var userPhoneNumber: String? = nil
+                        
+                        do {
+                            var cleanUserID = userID.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if cleanUserID.hasPrefix("+91") {
+                                cleanUserID = String(cleanUserID.dropFirst(3))
+                            }
+                            cleanUserID = cleanUserID.trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            let db = Firestore.firestore()
+                            let userDoc = try await db.collection("users")
+                                .document(cleanUserID)
+                                .getDocument()
+                            
+                            if userDoc.exists {
+                                if let user = try? userDoc.data(as: User.self) {
+                                    userName = user.name
+                                    userPhoneNumber = user.phoneNumber
+                                } else if let userData = userDoc.data() {
+                                    userName = userData["name"] as? String
+                                    userPhoneNumber = userData["phoneNumber"] as? String ?? cleanUserID
+                                }
+                            }
+                        } catch {
+                            // Continue without user details
+                        }
+                        
+                        let request = PhaseRequestItem(
+                            id: requestId,
+                            phaseId: phaseId,
+                            phaseName: phase.phaseName,
+                            reason: reason,
+                            extendedDate: extendedDate,
+                            userID: userID,
+                            userName: userName,
+                            userPhoneNumber: userPhoneNumber,
+                            createdAt: createdAt
+                        )
+                        
+                        return (request, projectId)
+                    }
+                }
+            }
+            
+            return nil
+        } catch {
+            print("Error loading request from phase subcollection: \(error)")
+            return nil
+        }
+    }
+    
     /// Load a specific request by ID from customer's requests collection
     /// Returns the request and its projectId
     func loadRequestByIdWithProject(requestId: String, customerId: String) async -> (PhaseRequestItem, String)? {

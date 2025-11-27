@@ -408,6 +408,20 @@ struct ProjectListView: View {
                                 projectToReview = project
                             }
                         }
+                    },
+                    onPhaseRequestSelected: { request, project in
+                        Task { @MainActor in
+                            viewModel.showingFullNotifications = false
+                            // Navigate to project first, then set request ID so DashboardView can show the sheet
+                            if let projectId = project.id {
+                                // Set project ID to navigate to DashboardView
+                                navigationManager.setProjectId(projectId)
+                                // Small delay to allow navigation to start
+                                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                                // Set request ID - DashboardView will detect this and show the sheet
+                                navigationManager.setRequestId(request.id)
+                            }
+                        }
                     }
                 )
             }
