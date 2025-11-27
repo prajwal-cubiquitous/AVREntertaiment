@@ -52,11 +52,11 @@ struct ProjectListNotificationPopupView: View {
                     adminNotificationsListView
                 }
             } else if role == .APPROVER {
-                // For APPROVER: Show IN_REVIEW projects
-                if inReviewProjects.isEmpty && !isLoading {
+                // For APPROVER: Show sections with IN_REVIEW projects and notifications
+                if hasNoApproverNotifications {
                     emptyStateView
                 } else {
-                    inReviewProjectsListView
+                    approverNotificationsListView
                 }
             } else {
                 // For other roles: Show pending expenses (existing behavior)
@@ -74,10 +74,13 @@ struct ProjectListNotificationPopupView: View {
                 notificationViewModel.loadSavedNotifications()
             } else if role == .APPROVER {
                 loadInReviewProjects()
+                notificationViewModel.loadSavedNotifications()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NotificationManagerUpdated"))) { _ in
             if role == .ADMIN {
+                notificationViewModel.loadSavedNotifications()
+            } else if role == .APPROVER {
                 notificationViewModel.loadSavedNotifications()
             }
         }
@@ -119,6 +122,12 @@ struct ProjectListNotificationPopupView: View {
     private var hasNoAdminNotifications: Bool {
         declinedProjects.isEmpty && 
         allPhaseRequests.isEmpty && 
+        notificationViewModel.savedNotifications.isEmpty && 
+        !isLoading
+    }
+    
+    private var hasNoApproverNotifications: Bool {
+        inReviewProjects.isEmpty && 
         notificationViewModel.savedNotifications.isEmpty && 
         !isLoading
     }
@@ -792,8 +801,9 @@ struct ProjectListNotificationPopupView: View {
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.showingFullNotifications)
     }
     
-    // MARK: - IN_REVIEW Projects List (APPROVER)
-    private var inReviewProjectsListView: some View {
+    // MARK: - Approver Notifications List View
+    
+    private var approverNotificationsListView: some View {
         VStack(spacing: 0) {
             // Header
             Text("Notifications")
@@ -805,24 +815,24 @@ struct ProjectListNotificationPopupView: View {
             
             Divider()
             
-            // IN_REVIEW projects list
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(inReviewProjects) { project in
-                        InReviewProjectNotificationCell(
-                            project: project,
-                            onTap: {
-                                HapticManager.selection()
-                                onProjectSelected(project)
-                            }
-                        )
+                    // IN_REVIEW Projects Section
+                    if !inReviewProjects.isEmpty {
+                        inReviewProjectsSection
                         
-                        if project.id != inReviewProjects.last?.id {
+                        if !notificationViewModel.savedNotifications.isEmpty {
                             Divider()
-                                .padding(.leading, 16)
+                                .padding(.vertical, 8)
                         }
                     }
+                    
+                    // Normal Notifications Section
+                    if !notificationViewModel.savedNotifications.isEmpty {
+                        normalNotificationsSection
+                    }
                 }
+                .padding(.vertical, 8)
             }
             .frame(maxHeight: 400)
             
@@ -855,6 +865,69 @@ struct ProjectListNotificationPopupView: View {
         .scaleEffect(viewModel.showingFullNotifications ? 1.0 : 0.9)
         .opacity(viewModel.showingFullNotifications ? 1.0 : 0.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.showingFullNotifications)
+    }
+    
+    // MARK: - IN_REVIEW Projects Section
+    
+    private var inReviewProjectsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Section header
+            HStack {
+                Text("IN REVIEW")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                
+                Spacer()
+                
+                // Badge with count
+                Text("\(inReviewProjects.count)")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange)
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            
+            // IN_REVIEW project items (limited)
+            let itemsToShow = Array(inReviewProjects.prefix(maxItemsToShow))
+            ForEach(Array(itemsToShow.enumerated()), id: \.element.id) { index, project in
+                InReviewProjectNotificationCell(
+                    project: project,
+                    onTap: {
+                        HapticManager.selection()
+                        onProjectSelected(project)
+                    }
+                )
+                
+                if index < itemsToShow.count - 1 {
+                    Divider()
+                        .padding(.leading, 56)
+                }
+            }
+            
+            // View All button if there are more items
+            if inReviewProjects.count > maxItemsToShow {
+                Button {
+                    HapticManager.selection()
+                    // Show all IN_REVIEW projects in a sheet
+                    // For now, just show all in the same view
+                } label: {
+                    HStack {
+                        Spacer()
+                        Text("View All (\(inReviewProjects.count))")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
     
     // MARK: - Pending Expenses List (Other Roles)
@@ -1014,31 +1087,68 @@ struct InReviewProjectNotificationCell: View {
         Button(action: {
             onTap()
         }) {
-            VStack(alignment: .leading, spacing: 10) {
-                // Project name (smaller, grey - like section header)
-                Text(project.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                
-                // Project name (bold, primary color - main title)
-                Text(project.name)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                
-                // Updated date
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                    Text(dateFormatter.string(from: project.updatedAt.dateValue()))
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+            HStack(spacing: 12) {
+                // Icon with badge
+                ZStack(alignment: .topTrailing) {
+                    // Background circle
+                    Circle()
+                        .fill(Color.orange.opacity(0.15))
+                        .frame(width: 40, height: 40)
+                    
+                    // SF Symbol icon
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.orange)
+                        .symbolRenderingMode(.hierarchical)
                 }
+                
+                // Content
+                VStack(alignment: .leading, spacing: 6) {
+                    // Project name
+                    Text(project.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    // Status badge and date
+                    HStack(spacing: 8) {
+                        // Status badge
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 6, height: 6)
+                            Text("IN REVIEW")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.orange)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(Color.orange.opacity(0.12))
+                        )
+                        
+                        // Date
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.secondary)
+                            Text(dateFormatter.string(from: project.updatedAt.dateValue()))
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                // Chevron
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.5))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
