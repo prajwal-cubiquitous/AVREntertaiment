@@ -75,6 +75,8 @@ struct DashboardView: View {
     @State private var phaseToStart: PhaseSummary? = nil
     @State private var showingExpenseChat = false
     @State private var expenseForChat: Expense? = nil
+    @State private var showingExpenseDetail = false
+    @State private var selectedExpenseForDetail: Expense? = nil
     @StateObject private var notificationViewModel = NotificationViewModel()
     @State private var showingNotifications = false
     let role: UserRole?
@@ -580,6 +582,15 @@ struct DashboardView: View {
                 .presentationDetents([.large])
             }
         }
+        .sheet(isPresented: $showingExpenseDetail) {
+            if let expense = selectedExpenseForDetail {
+                if expense.status == .pending {
+                    ExpenseDetailView(expense: expense, role: role, stateManager: stateManager)
+                } else {
+                    ExpenseDetailReadOnlyView(expense: expense)
+                }
+            }
+        }
         .overlay {
             if showingNotifications, let project = project {
                 UnifiedNotificationPopupView(
@@ -884,13 +895,14 @@ struct DashboardView: View {
                             // Clear navigation after showing
                             navigationManager.setExpenseId(nil)
                         } else {
-                            // Show expense detail (existing behavior)
-                            // Load project and show detail
+                            // For expense detail: Show PendingApprovalsView first, then expense detail
+                            // Load project and show PendingApprovalsView
                             Task {
                                 if let project = try? await viewModel.fetchProject(byId: projectId) {
                                     await MainActor.run {
                                         selectedProject = project
                                         showProjectDetail = true
+                                        // Keep expenseId set so PendingApprovalsView can navigate to it
                                     }
                                 }
                             }

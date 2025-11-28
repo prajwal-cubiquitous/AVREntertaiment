@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
 
 struct PendingApprovalsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -18,6 +19,8 @@ struct PendingApprovalsView: View {
     @State private var selectedExpenseForChat: Expense?
     var project: Project
     let role: UserRole?
+    @EnvironmentObject var navigationManager: NavigationManager
+    
     init(role: UserRole? = nil, project: Project, phoneNumber: String) {
         self._viewModel = StateObject(wrappedValue: PendingApprovalsViewModel(role: role, project: project,phoneNumber: phoneNumber))
         self.project = project
@@ -54,6 +57,27 @@ struct PendingApprovalsView: View {
         }
         .onAppear {
             viewModel.loadPendingExpenses()
+            
+            // Check if there's already an expenseId set (from notification navigation)
+            if let expenseItem = navigationManager.activeExpenseId {
+                let showChat = navigationManager.expenseScreenType == .chat
+                if !showChat {
+                    print("📋 PendingApprovalsView: ExpenseId already set on appear, expenseId: \(expenseItem.id)")
+                    // Find and show the expense detail
+                    handleExpenseNavigation(expenseId: expenseItem.id)
+                }
+            }
+        }
+        .onChange(of: navigationManager.activeExpenseId) { oldValue, newValue in
+            if let expenseItem = newValue {
+                // Check if we should show expense detail (not chat)
+                let showChat = navigationManager.expenseScreenType == .chat
+                if !showChat {
+                    print("📋 PendingApprovalsView: Expense navigation detected, expenseId: \(expenseItem.id)")
+                    // Find and show the expense detail
+                    handleExpenseNavigation(expenseId: expenseItem.id)
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ExpenseStatusUpdated"))) { _ in
             // Reload expenses when an expense status is updated (approved/rejected)
@@ -69,7 +93,11 @@ struct PendingApprovalsView: View {
         }
         .sheet(isPresented: $showingExpenseDetail) {
             if let expense = selectedExpense {
-                ExpenseDetailView(expense: expense, role: viewModel.currentUserRole)
+                if expense.status == .pending {
+                    ExpenseDetailView(expense: expense, role: viewModel.currentUserRole)
+                } else {
+                    ExpenseDetailReadOnlyView(expense: expense)
+                }
             }
         }
         .sheet(isPresented: $showingExpenseChat) {
@@ -245,6 +273,65 @@ struct PendingApprovalsView: View {
             }
             .padding(.horizontal, DesignSystem.Spacing.medium)
             .padding(.bottom, 100) // Space for floating buttons
+        }
+    }
+    
+    // MARK: - Handle Expense Navigation
+    private func handleExpenseNavigation(expenseId: String) {
+        // Wait for expenses to load, then find and show the expense
+        Task {
+            // Wait a bit for expenses to load if they haven't yet
+            if viewModel.filteredExpenses.isEmpty {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            }
+            
+            // Try to find the expense in the loaded expenses
+            if let expense = viewModel.filteredExpenses.first(where: { $0.id == expenseId }) {
+                await MainActor.run {
+                    selectedExpense = expense
+                    showingExpenseDetail = true
+                    // Clear navigation after showing
+                    navigationManager.setExpenseId(nil)
+                }
+            } else {
+                // Expense not found in pending list, might be approved/rejected
+                // Try to load it directly from Firebase
+                await loadExpenseDirectly(expenseId: expenseId)
+            }
+        }
+    }
+    
+    private func loadExpenseDirectly(expenseId: String) async {
+        guard let projectId = project.id,
+              let customerId = try? await FirebasePathHelper.shared.fetchEffectiveUserID() else {
+            return
+        }
+        
+        do {
+            let expenseDoc = try await FirebasePathHelper.shared
+                .expensesCollection(customerId: customerId, projectId: projectId)
+                .document(expenseId)
+                .getDocument()
+            
+            if expenseDoc.exists, var expense = try? expenseDoc.data(as: Expense.self) {
+                expense.id = expenseDoc.documentID
+                await MainActor.run {
+                    selectedExpense = expense
+                    showingExpenseDetail = true
+                    // Clear navigation after showing
+                    navigationManager.setExpenseId(nil)
+                }
+            } else {
+                // Expense not found, clear navigation
+                await MainActor.run {
+                    navigationManager.setExpenseId(nil)
+                }
+            }
+        } catch {
+            print("❌ Error loading expense: \(error)")
+            await MainActor.run {
+                navigationManager.setExpenseId(nil)
+            }
         }
     }
     

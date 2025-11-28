@@ -132,6 +132,15 @@ struct NotificationPopupView: View {
                                 // Handle navigation when tapped
                                 let data = notification.data.mapValues { $0.value }
                                 
+                                // Debug: Check if expenseId is in notification data
+                                if let screen = data["screen"] as? String, screen == "expense_detail" || screen == "expense_review" {
+                                    if let expenseId = data["expenseId"] as? String {
+                                        print("📋 Notification click: expense_detail, expenseId: \(expenseId)")
+                                    } else {
+                                        print("⚠️ Notification click: expense_detail but no expenseId in data")
+                                    }
+                                }
+                                
                                 // Close notification popup first
                                 isPresented = false
                                 

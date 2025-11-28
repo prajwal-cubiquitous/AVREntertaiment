@@ -557,6 +557,15 @@ struct ProjectListNotificationPopupView: View {
                     NotificationManager.shared.removeNotification(byId: notification.id)
                     let data = notification.data.mapValues { $0.value }
                     
+                    // Debug: Check if expenseId is in notification data
+                    if let screen = data["screen"] as? String, screen == "expense_detail" || screen == "expense_review" {
+                        if let expenseId = data["expenseId"] as? String {
+                            print("📋 ProjectListNotificationPopupView: expense_detail, expenseId: \(expenseId)")
+                        } else {
+                            print("⚠️ ProjectListNotificationPopupView: expense_detail but no expenseId in data")
+                        }
+                    }
+                    
                     // Close notification popup first
                     viewModel.showingFullNotifications = false
                     
@@ -1391,6 +1400,15 @@ struct AllNotificationsListView: View {
                                 HapticManager.selection()
                                 NotificationManager.shared.removeNotification(byId: notification.id)
                                 let data = notification.data.mapValues { $0.value }
+                                
+                                // Debug: Check if expenseId is in notification data
+                                if let screen = data["screen"] as? String, screen == "expense_detail" || screen == "expense_review" {
+                                    if let expenseId = data["expenseId"] as? String {
+                                        print("📋 ProjectListNotificationPopupView (List): expense_detail, expenseId: \(expenseId)")
+                                    } else {
+                                        print("⚠️ ProjectListNotificationPopupView (List): expense_detail but no expenseId in data")
+                                    }
+                                }
                                 
                                 // Close sheet first
                                 dismiss()

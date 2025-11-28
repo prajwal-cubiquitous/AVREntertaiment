@@ -616,6 +616,15 @@ struct AllNotificationsView: View {
                             // Handle navigation when tapped
                             let data = notification.data.mapValues { $0.value }
                             
+                            // Debug: Check if expenseId is in notification data
+                            if let screen = data["screen"] as? String, screen == "expense_detail" || screen == "expense_review" {
+                                if let expenseId = data["expenseId"] as? String {
+                                    print("📋 UnifiedNotificationPopupView: expense_detail, expenseId: \(expenseId)")
+                                } else {
+                                    print("⚠️ UnifiedNotificationPopupView: expense_detail but no expenseId in data")
+                                }
+                            }
+                            
                             // Close sheet first
                             dismiss()
                             
