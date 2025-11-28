@@ -373,7 +373,17 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
             NotificationManager.shared.handleNavigation(data: data)
         }
         
-        if let screen = userInfo["screen"] as? String {
+        // Check type field to determine if expense notification should be chat
+        let notificationType = userInfo["type"] as? String
+        let isExpenseChat = notificationType == "expense_chat_staff" || notificationType == "expense_chat_customer"
+        
+        // Determine actual screen - if type indicates expense_chat, override screen
+        var actualScreen = userInfo["screen"] as? String
+        if isExpenseChat && (actualScreen == "expense_detail" || actualScreen == "expense_review") {
+            actualScreen = "expense_chat"
+        }
+        
+        if let screen = actualScreen {
             switch screen {
             case "project_detail":
                 if let projectId = userInfo["projectId"] as? String {
@@ -419,7 +429,6 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
                         object: nil,
                         userInfo: ["screen": screen, "expenseId": expenseId,  "projectId": projectId]
                     )
-                    print("💬 Navigate to expense chat: \(expenseId)")
                 }
                 
             case "phase_detail":
@@ -462,6 +471,4 @@ extension AppDelegate : UNUserNotificationCenterDelegate {
         
         completionHandler()
     }
-
-    
 }

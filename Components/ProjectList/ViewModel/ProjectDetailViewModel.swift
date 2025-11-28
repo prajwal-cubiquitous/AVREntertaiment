@@ -91,7 +91,6 @@ class ProjectDetailViewModel: ObservableObject {
             do {
                 // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
                 let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
-                print("📊 loadPhases: Using customerId: \(customerId), projectId: \(projectId)")
                 
                 let phasesRef = FirebasePathHelper.shared.phasesCollection(customerId: customerId, projectId: projectId)
                 let snapshot = try await phasesRef.order(by: "phaseNumber").getDocuments()
@@ -156,7 +155,7 @@ class ProjectDetailViewModel: ObservableObject {
                     }
                 }
                 
-                print("📊 Processed \(processedCount) approved expenses, \(failedCount) failed, Total: ₹\(totalApproved)")
+                // Processed expenses: \(processedCount) approved, \(failedCount) failed, Total: ₹\(totalApproved)
                 
                 // Process phases
                 var phasesList: [PhaseInfo] = []
@@ -222,9 +221,7 @@ class ProjectDetailViewModel: ObservableObject {
                     self.currentPhases = self.getCurrentPhases(from: phasesList)
                     self.expiredPhases = self.getExpiredPhases(from: phasesList)
                     // Always update totalApprovedExpenses with the calculated value
-                    let previousValue = self.totalApprovedExpenses
                     self.totalApprovedExpenses = totalApproved
-                    print("✅ loadPhases: Total approved expenses calculated: ₹\(totalApproved) from \(expensesSnapshot.documents.count) expense documents (Previous: ₹\(previousValue))")
                     self.isLoading = false
                 }
                 
@@ -317,15 +314,12 @@ class ProjectDetailViewModel: ObservableObject {
             do {
                 // Get customerId using fetchEffectiveUserID which gets ownerID from users collection
                 let customerId = try await FirebasePathHelper.shared.fetchEffectiveUserID()
-                print("📊 fetchApprovedExpenses: Using customerId: \(customerId), projectId: \(projectId)")
                 
                 // Fetch all approved expenses for this project
                 let expensesSnapshot = try await FirebasePathHelper.shared
                     .expensesCollection(customerId: customerId, projectId: projectId)
                     .whereField("status", isEqualTo: ExpenseStatus.approved.rawValue)
                     .getDocuments()
-                
-                print("📊 fetchApprovedExpenses: Found \(expensesSnapshot.documents.count) approved expense documents")
                 
                 var departmentTotals: [String: Double] = [:]
                 var totalApproved: Double = 0
@@ -357,8 +351,7 @@ class ProjectDetailViewModel: ObservableObject {
                     // This prevents overwriting a correct value from loadPhases() if there's a parsing issue
                     if parsedCount > 0 || expensesSnapshot.documents.isEmpty {
                         self.totalApprovedExpenses = totalApproved
-                        print("✅ fetchApprovedExpenses: Total approved expenses = ₹\(totalApproved) (Parsed: \(parsedCount), Failed: \(failedCount), Total docs: \(expensesSnapshot.documents.count))")
-                    } else {
+                    } else if failedCount > 0 {
                         print("⚠️ fetchApprovedExpenses: All expenses failed to parse. Keeping existing totalApprovedExpenses value of ₹\(self.totalApprovedExpenses)")
                     }
                 }

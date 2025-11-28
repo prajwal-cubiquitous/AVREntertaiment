@@ -208,7 +208,6 @@ struct ProjectListView: View {
                     let expenseId = expenseItem.id
                     let isExpenseChat = navigationManager.expenseScreenType == .chat
                     let screenType = navigationManager.expenseScreenType ?? .detail
-                    print("🧾 Expense navigation trigger detected for expense ID: \(expenseId), isChat: \(isExpenseChat)")
                     
                     Task {
                         guard let customerId = authService.currentCustomerId else {
@@ -236,7 +235,6 @@ struct ProjectListView: View {
                             // Ensure project is set and expenseId is preserved with correct screen type
                             navigationManager.setProjectId(projectId)
                             navigationManager.setExpenseId(expenseId, screenType: screenType)
-                            print("✅ Expense navigation: project \(projectId), expense \(expenseId), screenType: \(screenType)")
                         }
                     }
                 }

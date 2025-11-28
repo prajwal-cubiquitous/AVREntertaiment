@@ -58,7 +58,7 @@ struct ExpenseChatView: View {
             do{
                 try await viewModel.loadChatMessages()
             }catch{
-                print("error")
+                print("❌ Expense Chat View: Error loading messages: \(error.localizedDescription)")
             }
         }
         .onChange(of: selectedPhotos) { _, newPhotos in

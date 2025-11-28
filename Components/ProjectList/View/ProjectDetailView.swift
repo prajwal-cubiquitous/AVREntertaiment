@@ -309,7 +309,6 @@ struct ProjectDetailView: View {
         }
         .onChange(of: navigationManager.activeChatId) { oldValue, newValue in
             if let chatItem = newValue {
-                print("💬 Chat navigation trigger detected in ProjectDetailView for chat ID: \(chatItem.id)")
                 // Open ChatsView sheet - it will handle navigation to the specific chat
                 showingChats = true
             }

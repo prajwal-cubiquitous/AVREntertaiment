@@ -157,6 +157,16 @@ class NotificationManager: ObservableObject {
             return
         }
         
+        // Check type field to determine if expense notification should be chat
+        let notificationType = data["type"] as? String
+        let isExpenseChat = notificationType == "expense_chat_staff" || notificationType == "expense_chat_customer"
+        
+        // Determine actual screen - if type indicates expense_chat, override screen
+        var actualScreen = screen
+        if isExpenseChat && (screen == "expense_detail" || screen == "expense_review") {
+            actualScreen = "expense_chat"
+        }
+        
         let projectId = data["projectId"] as? String
         let chatId = data["chatId"] as? String
         let expenseId = data["expenseId"] as? String
@@ -164,23 +174,26 @@ class NotificationManager: ObservableObject {
         let requestId = data["requestId"] as? String
         let customerId = data["customerId"] as? String
         
-        print("🔔 Notification navigation triggered: screen=\(screen), projectId=\(projectId ?? "nil"), role=\(currentRole?.rawValue ?? "nil")")
         
         // Determine if we need to navigate to project first
         // For screens that require a project context, we always need projectId
-        let requiresProject = ["project_detail", "chat_detail", "expense_detail", "expense_chat", "phase_detail", "project_creation"].contains(screen)
+        let requiresProject = ["project_detail", "chat_detail", "expense_detail", "expense_chat", "phase_detail", "project_creation"].contains(actualScreen)
         
         if requiresProject && projectId == nil {
-            print("⚠️ Notification navigation: Screen \(screen) requires projectId but none provided")
+            print("⚠️ Notification navigation: Screen \(actualScreen) requires projectId but none provided")
             return
         }
+        
+        // Update data with corrected screen value
+        var updatedData = data
+        updatedData["screen"] = actualScreen
         
         // Post notification for navigation (existing system)
         // The navigation will be handled by AVREntertainmentApp.swift which knows the user role
         NotificationCenter.default.post(
             name: Notification.Name("NavigateFromNotification"),
             object: nil,
-            userInfo: data
+            userInfo: updatedData
         )
     }
     

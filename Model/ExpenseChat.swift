@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ExpenseChat: Identifiable, Codable {
+struct ExpenseChat: Identifiable, Codable, Equatable {
     let id: String // Document ID
     let textMessage: String
     let mediaURL: [String]
@@ -24,5 +24,10 @@ struct ExpenseChat: Identifiable, Codable {
         self.mention = mention
         self.senderId = senderId
         self.senderRole = senderRole
+    }
+    
+    // Equatable conformance - compare by ID since that's unique
+    static func == (lhs: ExpenseChat, rhs: ExpenseChat) -> Bool {
+        return lhs.id == rhs.id
     }
 }

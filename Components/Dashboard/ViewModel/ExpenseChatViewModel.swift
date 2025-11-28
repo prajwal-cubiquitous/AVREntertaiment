@@ -40,9 +40,11 @@ class ExpenseChatViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         guard let ExpenseId = expense.id else {
+            print("❌ Expense Chat: Expense ID is nil")
             self.isLoading = false
             return
         }
+        
         let customerID = try await FirebasePathHelper.shared.fetchEffectiveUserID()
         
         let chatCollection = db.collection("customers").document(customerID)
@@ -54,6 +56,7 @@ class ExpenseChatViewModel: ObservableObject {
                 self?.isLoading = false
                 
                 if let error = error {
+                    print("❌ Expense Chat Error: Failed to load messages: \(error.localizedDescription)")
                     self?.errorMessage = "Failed to load messages: \(error.localizedDescription)"
                     return
                 }
@@ -63,9 +66,28 @@ class ExpenseChatViewModel: ObservableObject {
                     return
                 }
                 
-                self?.messages = documents.compactMap { document in
-                    try? document.data(as: ExpenseChat.self)
+                let parsedMessages = documents.compactMap { document -> ExpenseChat? in
+                    do {
+                        let message = try document.data(as: ExpenseChat.self)
+                        // Create new message with document ID
+                        let messageWithId = ExpenseChat(
+                            id: document.documentID,
+                            textMessage: message.textMessage,
+                            mediaURL: message.mediaURL,
+                            timeStamp: message.timeStamp,
+                            mention: message.mention,
+                            senderId: message.senderId,
+                            senderRole: message.senderRole
+                        )
+                        
+                        return messageWithId
+                    } catch {
+                        print("❌ Expense Chat: Failed to parse message document \(document.documentID): \(error.localizedDescription)")
+                        return nil
+                    }
                 }
+                
+                self?.messages = parsedMessages
             }
         }
     }
@@ -97,7 +119,7 @@ class ExpenseChatViewModel: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    print("Error sending message: \(error)")
+                    print("❌ Expense Chat: Error sending message: \(error.localizedDescription)")
                     self.isSendingMessage = false
                 }
             }
