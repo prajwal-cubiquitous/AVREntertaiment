@@ -2971,32 +2971,63 @@ private struct AddDepartmentSheet: View {
             return
         }
 
-        // Format department key as phaseId_departmentName
-        let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: departmentName)
-        
-        FirebasePathHelper.shared
-            .phasesCollection(customerId: customerId, projectId: projectId)
-            .document(phaseId)
-            .setData([
-                "departments": [
-                    departmentKey: amount
-                ]
-            ], merge: true) { error in
-                if let error = error {
+        Task {
+            do {
+                let phaseRef = FirebasePathHelper.shared
+                    .phasesCollection(customerId: customerId, projectId: projectId)
+                    .document(phaseId)
+                
+                // Format department key as phaseId_departmentName (for backward compatibility)
+                let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: departmentName)
+                
+                // Update phase's departments dictionary (for backward compatibility)
+                try await phaseRef.setData([
+                    "departments": [
+                        departmentKey: amount
+                    ]
+                ], merge: true)
+                
+                // Create department document in departments subcollection
+                let deptRef = phaseRef.collection("departments").document()
+                
+                // Convert DepartmentLineItem to DepartmentLineItemData
+                let lineItemsData = lineItems.map { lineItem in
+                    DepartmentLineItemData(
+                        itemType: lineItem.itemType,
+                        item: lineItem.item,
+                        spec: lineItem.spec,
+                        quantity: Double(lineItem.quantity.replacingOccurrences(of: ",", with: "")) ?? 0,
+                        unitPrice: Double(lineItem.unitPrice.replacingOccurrences(of: ",", with: "")) ?? 0
+                    )
+                }
+                
+                let departmentData = Department(
+                    id: deptRef.documentID,
+                    name: departmentName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    contractorMode: contractorMode.rawValue,
+                    lineItems: lineItemsData,
+                    phaseId: phaseId,
+                    projectId: projectId,
+                    createdAt: Timestamp(),
+                    updatedAt: Timestamp()
+                )
+                
+                try await deptRef.setData(from: departmentData)
+                
+                // Update project budget after adding department
+                await updateProjectBudget(projectId: projectId, customerId: customerId)
+                
+                await MainActor.run {
+                    isSaving = false
+                    showingSuccessAlert = true
+                }
+            } catch {
+                await MainActor.run {
                     isSaving = false
                     errorMessage = "Failed to save: \(error.localizedDescription)"
-                } else {
-                    // Update project budget after adding department
-                    Task {
-                        await updateProjectBudget(projectId: projectId, customerId: customerId)
-                        await MainActor.run {
-                            isSaving = false
-                            showingSuccessAlert = true
-                        }
-                    }
                 }
             }
-
+        }
     }
     
     // Helper function to update project budget
@@ -6034,7 +6065,7 @@ private struct AddPhaseSheet: View {
                     )
                 }
                 
-                // Create departments dictionary with phaseId_departmentName format
+                // Create departments dictionary with phaseId_departmentName format (for backward compatibility)
                 let phaseId = phaseRef.documentID
                 let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { dept in
                     let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: dept.name)
@@ -6056,6 +6087,37 @@ private struct AddPhaseSheet: View {
                 )
                 
                 try await phaseRef.setData(from: phaseData)
+                
+                // Save departments separately in departments subcollection
+                for dept in departments {
+                    guard !dept.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                    
+                    let deptRef = phaseRef.collection("departments").document()
+                    
+                    // Convert DepartmentLineItem to DepartmentLineItemData
+                    let lineItemsData = dept.lineItems.map { lineItem in
+                        DepartmentLineItemData(
+                            itemType: lineItem.itemType,
+                            item: lineItem.item,
+                            spec: lineItem.spec,
+                            quantity: Double(lineItem.quantity.replacingOccurrences(of: ",", with: "")) ?? 0,
+                            unitPrice: Double(lineItem.unitPrice.replacingOccurrences(of: ",", with: "")) ?? 0
+                        )
+                    }
+                    
+                    let departmentData = Department(
+                        id: deptRef.documentID,
+                        name: dept.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                        contractorMode: dept.contractorMode.rawValue,
+                        lineItems: lineItemsData,
+                        phaseId: phaseId,
+                        projectId: projectId,
+                        createdAt: Timestamp(),
+                        updatedAt: Timestamp()
+                    )
+                    
+                    try await deptRef.setData(from: departmentData)
+                }
                 
                 // Calculate total phase budget from departments (using line items totals)
                 let totalBudget = departments.reduce(0.0) { sum, dept in

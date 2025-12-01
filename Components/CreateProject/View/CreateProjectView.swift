@@ -14,7 +14,7 @@ import AVFoundation
 
 // MARK: - Data Models for Department Line Items (Shared with DashboardView)
 
-enum ContractorMode: String, CaseIterable {
+enum ContractorMode: String, CaseIterable, Codable {
     case labourOnly = "Labour-Only"
     case turnkey = "Turnkey"
     
@@ -28,13 +28,22 @@ enum ContractorMode: String, CaseIterable {
     }
 }
 
-struct DepartmentLineItem: Identifiable {
-    let id = UUID()
+struct DepartmentLineItem: Identifiable, Codable {
+    let id: UUID
     var itemType: String = ""
     var item: String = ""
     var spec: String = ""
     var quantity: String = ""
     var unitPrice: String = ""
+    
+    init(id: UUID = UUID(), itemType: String = "", item: String = "", spec: String = "", quantity: String = "", unitPrice: String = "") {
+        self.id = id
+        self.itemType = itemType
+        self.item = item
+        self.spec = spec
+        self.quantity = quantity
+        self.unitPrice = unitPrice
+    }
     
     var total: Double {
         let qty = Double(quantity.replacingOccurrences(of: ",", with: "")) ?? 0

@@ -19,11 +19,19 @@ struct DepartmentItem: Identifiable, Codable {
     let id: UUID
     var name: String = ""
     var amount: String = "" // Use String for TextField, convert to Double later
+    var contractorMode: ContractorMode = .labourOnly
+    var lineItems: [DepartmentLineItem] = [DepartmentLineItem()]
     
-    init(id: UUID = UUID(), name: String = "", amount: String = "") {
+    init(id: UUID = UUID(), name: String = "", amount: String = "", contractorMode: ContractorMode = .labourOnly, lineItems: [DepartmentLineItem] = [DepartmentLineItem()]) {
         self.id = id
         self.name = name
         self.amount = amount
+        self.contractorMode = contractorMode
+        self.lineItems = lineItems.isEmpty ? [DepartmentLineItem()] : lineItems
+    }
+    
+    var totalBudget: Double {
+        lineItems.reduce(0) { $0 + $1.total }
     }
 }
 
@@ -930,26 +938,62 @@ class CreateProjectViewModel: ObservableObject {
             dateFormatter.dateFormat = "dd/MM/yyyy"
             
             for doc in phasesSnapshot.documents {
-                if let phase = try? doc.data(as: Phase.self) {
-                    var phaseItem = PhaseItem(phaseNumber: phase.phaseNumber)
-                    phaseItem.phaseName = phase.phaseName
+                let phaseId = doc.documentID
+                guard let phase = try? doc.data(as: Phase.self) else {
+                    continue
+                }
+                
+                var phaseItem = PhaseItem(phaseNumber: phase.phaseNumber)
+                phaseItem.phaseName = phase.phaseName
+                
+                // Parse dates
+                if let startDateStr = phase.startDate,
+                   let startDate = dateFormatter.date(from: startDateStr) {
+                    phaseItem.startDate = startDate
+                    phaseItem.hasStartDate = true
+                }
+                if let endDateStr = phase.endDate,
+                   let endDate = dateFormatter.date(from: endDateStr) {
+                    phaseItem.endDate = endDate
+                    phaseItem.hasEndDate = true
+                }
+                
+                // Load departments from departments subcollection
+                var departments: [DepartmentItem] = []
+                do {
+                    let departmentsSnapshot = try await FirebasePathHelper.shared
+                        .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                        .getDocuments()
                     
-                    // Parse dates
-                    if let startDateStr = phase.startDate,
-                       let startDate = dateFormatter.date(from: startDateStr) {
-                        phaseItem.startDate = startDate
-                        phaseItem.hasStartDate = true
+                    for deptDoc in departmentsSnapshot.documents {
+                        if let department = try? deptDoc.data(as: Department.self) {
+                            // Convert DepartmentLineItemData back to DepartmentLineItem
+                            let lineItems = department.lineItems.map { lineItemData in
+                                var lineItem = DepartmentLineItem()
+                                lineItem.itemType = lineItemData.itemType
+                                lineItem.item = lineItemData.item
+                                lineItem.spec = lineItemData.spec
+                                lineItem.quantity = formatIndianNumber(lineItemData.quantity)
+                                lineItem.unitPrice = formatIndianNumber(lineItemData.unitPrice)
+                                return lineItem
+                            }
+                            
+                            // Convert ContractorMode string back to enum
+                            let contractorMode = ContractorMode(rawValue: department.contractorMode) ?? .labourOnly
+                            
+                            departments.append(DepartmentItem(
+                                id: UUID(),
+                                name: department.name,
+                                amount: formatIndianNumber(department.totalBudget),
+                                contractorMode: contractorMode,
+                                lineItems: lineItems.isEmpty ? [DepartmentLineItem()] : lineItems
+                            ))
+                        }
                     }
-                    if let endDateStr = phase.endDate,
-                       let endDate = dateFormatter.date(from: endDateStr) {
-                        phaseItem.endDate = endDate
-                        phaseItem.hasEndDate = true
-                    }
-                    
-                    // Load departments
-                    var departments: [DepartmentItem] = []
+                } catch {
+                    print("⚠️ Error loading departments for phase \(phaseId): \(error.localizedDescription)")
+                    // Fallback to loading from phase.departments dictionary (backward compatibility)
                     for (deptKey, amount) in phase.departments {
-                        // Extract department name from key (handles "phaseId_departmentName" format)
                         let deptName: String
                         if let underscoreIndex = deptKey.firstIndex(of: "_") {
                             deptName = String(deptKey[deptKey.index(after: underscoreIndex)...])
@@ -962,11 +1006,12 @@ class CreateProjectViewModel: ObservableObject {
                             amount: formatIndianNumber(amount)
                         ))
                     }
-                    phaseItem.departments = departments.isEmpty ? [DepartmentItem()] : departments
-                    phaseItem.categories = phase.categories
-                    
-                    loadedPhases.append(phaseItem)
                 }
+                
+                phaseItem.departments = departments.isEmpty ? [DepartmentItem()] : departments
+                phaseItem.categories = phase.categories
+                
+                loadedPhases.append(phaseItem)
             }
             
             phases = loadedPhases.isEmpty ? [PhaseItem(phaseNumber: 1)] : loadedPhases
@@ -1242,10 +1287,12 @@ class CreateProjectViewModel: ObservableObject {
                     let startDateStr = dateFormatter.string(from: phase.startDate)
                     let endDateStr = dateFormatter.string(from: phase.endDate)
                     
-                    // Create departments dictionary with phaseId_departmentName format
+                    // Create departments dictionary with phaseId_departmentName format (for backward compatibility)
                     let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { dept in
                         let departmentKey = "\(phaseId)_\(dept.name)"
-                        return (departmentKey, Double(removeFormatting(from: dept.amount)) ?? 0)
+                        // Use totalBudget from line items if available, otherwise use amount
+                        let budget = dept.totalBudget > 0 ? dept.totalBudget : (Double(removeFormatting(from: dept.amount)) ?? 0)
+                        return (departmentKey, budget)
                     })
                     
                     let phaseData = Phase(
@@ -1262,6 +1309,37 @@ class CreateProjectViewModel: ObservableObject {
                     )
                     
                     try await phaseRef.setData(from: phaseData)
+                    
+                    // Save departments separately in departments subcollection
+                    for dept in phase.departments {
+                        guard !dept.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                        
+                        let deptRef = phaseRef.collection("departments").document()
+                        
+                        // Convert DepartmentLineItem to DepartmentLineItemData
+                        let lineItemsData = dept.lineItems.map { lineItem in
+                            DepartmentLineItemData(
+                                itemType: lineItem.itemType,
+                                item: lineItem.item,
+                                spec: lineItem.spec,
+                                quantity: Double(lineItem.quantity.replacingOccurrences(of: ",", with: "")) ?? 0,
+                                unitPrice: Double(lineItem.unitPrice.replacingOccurrences(of: ",", with: "")) ?? 0
+                            )
+                        }
+                        
+                        let departmentData = Department(
+                            id: deptRef.documentID,
+                            name: dept.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                            contractorMode: dept.contractorMode.rawValue,
+                            lineItems: lineItemsData,
+                            phaseId: phaseId,
+                            projectId: docRef.documentID,
+                            createdAt: Timestamp(),
+                            updatedAt: Timestamp()
+                        )
+                        
+                        try await deptRef.setData(from: departmentData)
+                    }
                 }
                 
                 // Delete draft from draft_projects collection if one was loaded

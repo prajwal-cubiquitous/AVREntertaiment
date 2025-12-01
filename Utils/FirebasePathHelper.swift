@@ -74,6 +74,22 @@ class FirebasePathHelper {
     func chatsCollection(customerId: String, projectId: String) -> CollectionReference {
         return db.collection("customers").document(customerId).collection("projects").document(projectId).collection("chats")
     }
+    
+    /// Get a departments subcollection reference for a phase
+    /// - Parameters:
+    ///   - customerId: The customer ID
+    ///   - projectId: The project ID
+    ///   - phaseId: The phase ID
+    /// - Returns: CollectionReference for customers/{customerId}/projects/{projectId}/phases/{phaseId}/departments
+    func departmentsCollection(customerId: String, projectId: String, phaseId: String) -> CollectionReference {
+        return db.collection("customers")
+            .document(customerId)
+            .collection("projects")
+            .document(projectId)
+            .collection("phases")
+            .document(phaseId)
+            .collection("departments")
+    }
     func fetchEffectiveUserID() async throws -> String {
             guard let currentUser = Auth.auth().currentUser else {
                 throw NSError(domain: "AuthHelper", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])
