@@ -3065,16 +3065,6 @@ private struct AddDepartmentSheet: View {
                     .phasesCollection(customerId: customerId, projectId: projectId)
                     .document(phaseId)
                 
-                // Format department key as phaseId_departmentName (for backward compatibility)
-                let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: departmentName)
-                
-                // Update phase's departments dictionary (for backward compatibility)
-                try await phaseRef.setData([
-                    "departments": [
-                        departmentKey: amount
-                    ]
-                ], merge: true)
-                
                 // Create department document in departments subcollection
                 let deptRef = phaseRef.collection("departments").document()
                 
@@ -6201,13 +6191,8 @@ private struct AddPhaseSheet: View {
                     )
                 }
                 
-                // Create departments dictionary with phaseId_departmentName format (for backward compatibility)
+                // Create phase with empty departments dictionary (departments are stored in subcollection)
                 let phaseId = phaseRef.documentID
-                let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { dept in
-                    let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: dept.name)
-                    // Use totalBudget from line items instead of amount
-                    return (departmentKey, dept.totalBudget)
-                })
                 
                 let phaseData = Phase(
                     id: phaseId,
@@ -6215,7 +6200,7 @@ private struct AddPhaseSheet: View {
                     phaseNumber: phaseNumber,
                     startDate: startDateStr,
                     endDate: endDateStr,
-                    departments: departmentsDict,
+                    departments: [:], // Empty dictionary - departments are stored in subcollection
                     categories: [],
                     isEnabled: true,
                     createdAt: Timestamp(),

@@ -1287,21 +1287,14 @@ class CreateProjectViewModel: ObservableObject {
                     let startDateStr = dateFormatter.string(from: phase.startDate)
                     let endDateStr = dateFormatter.string(from: phase.endDate)
                     
-                    // Create departments dictionary with phaseId_departmentName format (for backward compatibility)
-                    let departmentsDict = Dictionary(uniqueKeysWithValues: phase.departments.map { dept in
-                        let departmentKey = "\(phaseId)_\(dept.name)"
-                        // Use totalBudget from line items if available, otherwise use amount
-                        let budget = dept.totalBudget > 0 ? dept.totalBudget : (Double(removeFormatting(from: dept.amount)) ?? 0)
-                        return (departmentKey, budget)
-                    })
-                    
+                    // Create phase with empty departments dictionary (departments are stored in subcollection)
                     let phaseData = Phase(
                         id: phaseId,
                         phaseName: phase.phaseName,
                         phaseNumber: phase.phaseNumber,
                         startDate: startDateStr,
                         endDate: endDateStr,
-                        departments: departmentsDict,
+                        departments: [:], // Empty dictionary - departments are stored in subcollection
                         categories: phase.categories,
                         isEnabled: true,
                         createdAt: Timestamp(),
