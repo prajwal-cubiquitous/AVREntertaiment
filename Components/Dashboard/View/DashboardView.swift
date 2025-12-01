@@ -5293,6 +5293,8 @@ private struct AddPhaseSheet: View {
     @State private var startDate: Date = Date()
     @State private var endDate: Date = Date().addingTimeInterval(86400 * 30)
     @State private var departments: [AddPhaseDepartmentItem] = [AddPhaseDepartmentItem()]
+    @State private var expandedDepartmentId: UUID? = nil
+    @State private var expandedLineItemIds: [UUID: UUID] = [:] // departmentId: lineItemId
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var nextPhaseNumber: Int = 1
@@ -5505,190 +5507,240 @@ private struct AddPhaseSheet: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                Section {
-                    TextField("Enter phase name", text: $phaseName)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .phaseName)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(phaseNameError != nil ? Color.red : Color.clear, lineWidth: 1)
-                        )
-                        .onChange(of: phaseName) { _, _ in
-                            validatePhaseName()
+            ScrollView {
+                VStack(spacing: DesignSystem.Spacing.large) {
+                    // Phase Name Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        Text("Phase Name")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                        
+                        TextField("Enter phase name", text: $phaseName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .phaseName)
+                            .font(DesignSystem.Typography.body)
+                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                            .padding(.vertical, DesignSystem.Spacing.small)
+                            .background(Color(.tertiarySystemGroupedBackground))
+                            .cornerRadius(DesignSystem.CornerRadius.field)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                    .stroke(phaseNameError != nil ? Color.red : Color.clear, lineWidth: 1.5)
+                            )
+                            .onChange(of: phaseName) { _, _ in
+                                validatePhaseName()
+                            }
+                        
+                        if let error = phaseNameError {
+                            HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.red)
+                                Text(error)
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.red)
+                            }
+                            .padding(.top, DesignSystem.Spacing.extraSmall)
                         }
-                    
-                    if let error = phaseNameError {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.red)
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                        }
-                        .padding(.top, 4)
                     }
-                } header: {
-                    Text("Phase Name")
-                        .textCase(.none)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                Section {
-                    DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.top, DesignSystem.Spacing.medium)
                     
-                    DatePicker("End Date", selection: $endDate, displayedComponents: .date)
-                        .datePickerStyle(.compact)
-                    
-                    if endDate <= startDate {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Text("End date must be after start date")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
-                        .padding(.top, 4)
-                    }
-                } header: {
-                    Text("Timeline")
-                        .textCase(.none)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                Section {
-                    ForEach($departments) { $dept in
-                        VStack(spacing: 12) {
-                            HStack(alignment: .top, spacing: 16) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("Department")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .textCase(.uppercase)
-                                    
-                                    TextField("e.g., Marketing", text: $dept.name)
-                                        .font(.body)
-                                        .textFieldStyle(.plain)
-                                        .focused($focusedField, equals: .departmentName)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(isDepartmentNameDuplicate(dept.name, excludingId: dept.id) ? Color.red : Color.clear, lineWidth: 1)
-                                        )
-                                        .onChange(of: dept.name) { _, _ in
-                                            // Trigger validation check
-                                        }
-                                    
-                                    if isDepartmentNameDuplicate(dept.name, excludingId: dept.id) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "exclamationmark.circle.fill")
-                                                .font(.caption2)
-                                                .foregroundColor(.red)
-                                            Text("\"\(dept.name.trimmingCharacters(in: .whitespacesAndNewlines))\" already exists in \"\(phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "this phase" : phaseName.trimmingCharacters(in: .whitespacesAndNewlines))\". Enter a unique department name.")
-                                                .font(.caption2)
-                                                .foregroundColor(.red)
-                                        }
-                                        .padding(.top, 2)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    // Timeline Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        Text("Timeline")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                        
+                        VStack(spacing: DesignSystem.Spacing.medium) {
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                                Text("Start Date")
+                                    .font(DesignSystem.Typography.subheadline)
+                                    .foregroundColor(.secondary)
                                 
-                                VStack(alignment: .trailing, spacing: 6) {
-                                    Text("Budget")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                        .textCase(.uppercase)
-                                    
-                                    HStack(spacing: 4) {
-                                        Text("₹")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
-                                        TextField("0", text: Binding(
-                                            get: { dept.amount },
-                                            set: { newValue in
-                                                // Format the input according to Indian numbering system
-                                                dept.amount = formatAmountInput(newValue)
-                                            }
-                                        ))
-                                            .keyboardType(.decimalPad)
-                                            .font(.body)
-                                            .fontWeight(.medium)
-                                            .multilineTextAlignment(.trailing)
-                                            .textFieldStyle(.plain)
-                                            .frame(width: 80)
-                                            .focused($focusedField, equals: .departmentBudget)
-                                    }
-                                    .onSubmit {
-                                        if dept.amount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            dept.amount = "0"
-                                        }
-                                    }
-                                }
+                                DatePicker("Start Date", selection: $startDate, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
                             }
                             
-                            if dept.id != departments.last?.id {
-                                Divider()
-                                    .padding(.top, 4)
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                                Text("End Date")
+                                    .font(DesignSystem.Typography.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                DatePicker("End Date", selection: $endDate, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                            }
+                            
+                            if endDate <= startDate {
+                                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.orange)
+                                    Text("End date must be after start date")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.orange)
+                                }
+                                .padding(.top, DesignSystem.Spacing.extraSmall)
                             }
                         }
-                        .padding(.vertical, 4)
                     }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
                     
-                    Button(action: {
-                        HapticManager.selection()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            departments.append(AddPhaseDepartmentItem())
+                    // Departments Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Departments")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                            
+                            Spacer()
+                            
+                            if hasDuplicateDepartmentNames() {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.red)
+                                    Text("Unique names required")
+                                        .font(DesignSystem.Typography.caption2)
+                                        .foregroundColor(.red)
+                                }
+                            }
                         }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 16, weight: .medium))
-                            Text("Add Department")
-                                .font(.body)
+                        
+                        VStack(spacing: DesignSystem.Spacing.medium) {
+                            ForEach($departments) { $dept in
+                                AddPhaseDepartmentRowView(
+                                    department: $dept,
+                                    isExpanded: expandedDepartmentId == dept.id,
+                                    expandedLineItemId: expandedLineItemIds[dept.id],
+                                    onToggleExpand: {
+                                        withAnimation(DesignSystem.Animation.standardSpring) {
+                                            if expandedDepartmentId == dept.id {
+                                                expandedDepartmentId = nil
+                                                expandedLineItemIds.removeValue(forKey: dept.id)
+                                            } else {
+                                                expandedDepartmentId = dept.id
+                                            }
+                                        }
+                                    },
+                                    onToggleLineItemExpand: { lineItemId in
+                                        withAnimation(DesignSystem.Animation.standardSpring) {
+                                            if expandedLineItemIds[dept.id] == lineItemId {
+                                                expandedLineItemIds.removeValue(forKey: dept.id)
+                                            } else {
+                                                expandedLineItemIds[dept.id] = lineItemId
+                                            }
+                                        }
+                                    },
+                                    onDelete: {
+                                        if departments.count > 1 {
+                                            if expandedDepartmentId == dept.id {
+                                                expandedDepartmentId = nil
+                                                expandedLineItemIds.removeValue(forKey: dept.id)
+                                            }
+                                            departments.removeAll { $0.id == dept.id }
+                                        }
+                                    },
+                                    onDeleteLineItem: { lineItemId in
+                                        if dept.lineItems.count > 1 {
+                                            dept.lineItems.removeAll { $0.id == lineItemId }
+                                            if expandedLineItemIds[dept.id] == lineItemId {
+                                                expandedLineItemIds.removeValue(forKey: dept.id)
+                                            }
+                                        }
+                                    },
+                                    canDelete: departments.count > 1,
+                                    isDuplicate: isDepartmentNameDuplicate(dept.name, excludingId: dept.id),
+                                    phaseName: phaseName,
+                                    formatAmountInput: formatAmountInput
+                                )
+                            }
+                            
+                            Button(action: {
+                                HapticManager.selection()
+                                withAnimation(DesignSystem.Animation.standardSpring) {
+                                    expandedDepartmentId = nil // Collapse all when adding new
+                                    let newDept = AddPhaseDepartmentItem()
+                                    departments.append(newDept)
+                                    // Expand the new department after a brief delay
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                                        withAnimation(DesignSystem.Animation.standardSpring) {
+                                            expandedDepartmentId = newDept.id
+                                        }
+                                    }
+                                }
+                            }) {
+                                HStack(spacing: DesignSystem.Spacing.small) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                    Text("Add Department")
+                                        .font(DesignSystem.Typography.callout)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.blue)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .foregroundColor(.accentColor)
+                        
+                        // Footer Note
+                        if !hasDuplicateDepartmentNames() {
+                            Text("At least one department with a name is required. Budget is calculated from line items. Department names must be unique within this phase.")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                                .padding(.top, DesignSystem.Spacing.small)
+                        }
                     }
-                    .buttonStyle(.plain)
-                } header: {
-                    Text("Departments")
-                        .textCase(.none)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                } footer: {
-                    if hasDuplicateDepartmentNames() {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption2)
-                                .foregroundColor(.red)
-                            Text("Department names must be unique within this phase. Enter unique department names.")
-                                .font(.caption)
-                                .foregroundColor(.red)
+                    .padding(DesignSystem.Spacing.medium)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Phase Budget Summary
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        HStack {
+                            Text("Phase Budget")
+                                .font(DesignSystem.Typography.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text(departments.reduce(0.0) { $0 + $1.totalBudget }.formattedCurrency)
+                                .font(DesignSystem.Typography.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
                         }
-                    } else {
-                        Text("At least one department with a name is required. Budget can be 0. Department names must be unique within this phase.")
-                            .font(.caption)
                     }
-                }
-                
-                if let error = errorMessage {
-                    Section {
-                        HStack(spacing: 8) {
+                    .padding(DesignSystem.Spacing.medium)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    if let error = errorMessage {
+                        HStack(spacing: DesignSystem.Spacing.small) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .font(.caption)
+                                .font(.system(size: 14))
                                 .foregroundColor(.red)
                             Text(error)
-                                .font(.caption)
+                                .font(DesignSystem.Typography.caption1)
                                 .foregroundColor(.red)
                         }
+                        .padding(DesignSystem.Spacing.medium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(DesignSystem.CornerRadius.small)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
                     }
                 }
+                .padding(.bottom, DesignSystem.Spacing.extraLarge)
             }
-            .scrollContentBackground(.hidden)
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Add Phase")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -5986,7 +6038,8 @@ private struct AddPhaseSheet: View {
                 let phaseId = phaseRef.documentID
                 let departmentsDict = Dictionary(uniqueKeysWithValues: departments.map { dept in
                     let departmentKey = String.departmentKey(phaseId: phaseId, departmentName: dept.name)
-                    return (departmentKey, Double(removeFormatting(from: dept.amount)) ?? 0)
+                    // Use totalBudget from line items instead of amount
+                    return (departmentKey, dept.totalBudget)
                 })
                 
                 let phaseData = Phase(
@@ -6004,9 +6057,9 @@ private struct AddPhaseSheet: View {
                 
                 try await phaseRef.setData(from: phaseData)
                 
-                // Calculate total phase budget from departments
+                // Calculate total phase budget from departments (using line items totals)
                 let totalBudget = departments.reduce(0.0) { sum, dept in
-                    sum + (Double(removeFormatting(from: dept.amount)) ?? 0)
+                    sum + dept.totalBudget
                 }
                 
                 // Update project budget after adding phase
@@ -6296,11 +6349,277 @@ private struct AddPhaseSheet: View {
     }
 }
 
+// MARK: - Department Row View for Add Phase Sheet
+private struct AddPhaseDepartmentRowView: View {
+    @Binding var department: AddPhaseDepartmentItem
+    let isExpanded: Bool
+    let expandedLineItemId: UUID?
+    let onToggleExpand: () -> Void
+    let onToggleLineItemExpand: (UUID) -> Void
+    let onDelete: () -> Void
+    let onDeleteLineItem: (UUID) -> Void
+    let canDelete: Bool
+    let isDuplicate: Bool
+    let phaseName: String
+    let formatAmountInput: (String) -> String
+    
+    private func updateDepartmentAmount() {
+        department.amount = formatAmountInput(String(department.totalBudget))
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Collapsed Header - Always Visible
+            Button(action: {
+                HapticManager.selection()
+                onToggleExpand()
+            }) {
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    // Chevron
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 20)
+                    
+                    // Department Name
+                    VStack(alignment: .leading, spacing: 2) {
+                        if department.name.isEmpty {
+                            Text("Department")
+                                .font(DesignSystem.Typography.subheadline)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text(department.name)
+                                .font(DesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                        }
+                        
+                        if !department.lineItems.isEmpty {
+                            Text("\(department.lineItems.count) item\(department.lineItems.count == 1 ? "" : "s")")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Total Budget
+                    Text(department.totalBudget.formattedCurrency)
+                        .font(DesignSystem.Typography.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    
+                    // Delete Button
+                    if canDelete {
+                        Button(action: {
+                            HapticManager.selection()
+                            onDelete()
+                        }) {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                                .font(.system(size: 14, weight: .medium))
+                                .frame(width: 28, height: 28)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading, DesignSystem.Spacing.small)
+                    }
+                }
+                .padding(DesignSystem.Spacing.medium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                    .stroke(isDuplicate ? Color.red : Color.clear, lineWidth: 1.5)
+            )
+            
+            // Expanded Content
+            if isExpanded {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                    Divider()
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        // Department Name Input
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Department Name")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                            
+                            TextField("Enter department name", text: $department.name)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .font(DesignSystem.Typography.body)
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .cornerRadius(DesignSystem.CornerRadius.field)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                        .stroke(isDuplicate ? Color.red : Color.clear, lineWidth: 1.5)
+                                )
+                            
+                            if isDuplicate {
+                                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.red)
+                                    Text("\"\(department.name.trimmingCharacters(in: .whitespacesAndNewlines))\" already exists in \"\(phaseName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "this phase" : phaseName.trimmingCharacters(in: .whitespacesAndNewlines))\". Enter a unique department name.")
+                                        .font(DesignSystem.Typography.caption2)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.top, DesignSystem.Spacing.extraSmall)
+                            }
+                        }
+                        
+                        // Contractor Mode
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Contractor Mode")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                            
+                            HStack(spacing: DesignSystem.Spacing.small) {
+                                ForEach(ContractorMode.allCases, id: \.self) { mode in
+                                    Button(action: {
+                                        HapticManager.selection()
+                                        department.contractorMode = mode
+                                    }) {
+                                        Text(mode.displayName)
+                                            .font(DesignSystem.Typography.subheadline)
+                                            .fontWeight(department.contractorMode == mode ? .semibold : .regular)
+                                            .foregroundColor(department.contractorMode == mode ? .blue : .primary)
+                                            .multilineTextAlignment(.center)
+                                            .padding(.horizontal, DesignSystem.Spacing.medium)
+                                            .padding(.vertical, DesignSystem.Spacing.medium)
+                                            .frame(maxWidth: .infinity)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                                    .fill(department.contractorMode == mode ? Color.blue.opacity(0.12) : Color(.tertiarySystemGroupedBackground))
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                                    .stroke(department.contractorMode == mode ? Color.blue.opacity(0.3) : Color(.separator), lineWidth: department.contractorMode == mode ? 1.5 : 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        
+                        // Line Items
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text("Items")
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                                    .textCase(.uppercase)
+                                
+                                Spacer()
+                                
+                                Text("sum must equal Department Budget")
+                                    .font(DesignSystem.Typography.caption2)
+                                    .foregroundColor(.secondary)
+                                    .italic()
+                            }
+                            
+                            VStack(spacing: DesignSystem.Spacing.medium) {
+                                ForEach($department.lineItems) { $lineItem in
+                                    LineItemRowView(
+                                        lineItem: $lineItem,
+                                        onDelete: {
+                                            onDeleteLineItem(lineItem.id)
+                                        },
+                                        canDelete: department.lineItems.count > 1,
+                                        isExpanded: expandedLineItemId == lineItem.id,
+                                        onToggleExpand: {
+                                            onToggleLineItemExpand(lineItem.id)
+                                        }
+                                    )
+                                    .onChange(of: lineItem.quantity) { _, _ in
+                                        updateDepartmentAmount()
+                                    }
+                                    .onChange(of: lineItem.unitPrice) { _, _ in
+                                        updateDepartmentAmount()
+                                    }
+                                }
+                            }
+                            .onAppear {
+                                updateDepartmentAmount()
+                            }
+                            
+                            Button(action: {
+                                HapticManager.selection()
+                                // Collapse all line items when adding new
+                                onToggleLineItemExpand(UUID())
+                                let newItem = DepartmentLineItem()
+                                department.lineItems.append(newItem)
+                                // Expand the new item after a brief delay
+                                Task { @MainActor in
+                                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                                    onToggleLineItemExpand(newItem.id)
+                                }
+                            }) {
+                                HStack(spacing: DesignSystem.Spacing.small) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 16, weight: .medium))
+                                    Text("Add row")
+                                        .font(DesignSystem.Typography.callout)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.blue)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            // Total Display
+                            Divider()
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                            
+                            HStack {
+                                Text("Total")
+                                    .font(DesignSystem.Typography.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.primary)
+                                
+                                Spacer()
+                                
+                                Text(department.totalBudget.formattedCurrency)
+                                    .font(DesignSystem.Typography.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.green)
+                            }
+                        }
+                        .padding(DesignSystem.Spacing.medium)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(DesignSystem.CornerRadius.medium)
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.bottom, DesignSystem.Spacing.medium)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .cornerRadius(DesignSystem.CornerRadius.medium)
+    }
+}
+
 // MARK: - Department Item for Add Phase Sheet
 private struct AddPhaseDepartmentItem: Identifiable {
     let id = UUID()
     var name: String = ""
     var amount: String = "0"
+    var contractorMode: ContractorMode = .labourOnly
+    var lineItems: [DepartmentLineItem] = [DepartmentLineItem()]
+    
+    var totalBudget: Double {
+        lineItems.reduce(0) { $0 + $1.total }
+    }
 }
 
 // MARK: - Edit Phase Sheet
