@@ -2551,6 +2551,7 @@ private struct AddDepartmentSheet: View {
     @State private var budgetText: String = ""
     @State private var contractorMode: ContractorMode = .labourOnly
     @State private var lineItems: [DepartmentLineItem] = [DepartmentLineItem()]
+    @State private var expandedLineItemId: UUID? = nil
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var departmentNameError: String?
@@ -2808,17 +2809,40 @@ private struct AddDepartmentSheet: View {
                                     lineItem: $lineItem,
                                     onDelete: {
                                         if lineItems.count > 1 {
+                                            if expandedLineItemId == lineItem.id {
+                                                expandedLineItemId = nil
+                                            }
                                             lineItems.removeAll { $0.id == lineItem.id }
                                         }
                                     },
-                                    canDelete: lineItems.count > 1
+                                    canDelete: lineItems.count > 1,
+                                    isExpanded: expandedLineItemId == lineItem.id,
+                                    onToggleExpand: {
+                                        withAnimation(DesignSystem.Animation.standardSpring) {
+                                            if expandedLineItemId == lineItem.id {
+                                                expandedLineItemId = nil
+                                            } else {
+                                                expandedLineItemId = lineItem.id
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
                         
                         Button(action: {
                             HapticManager.selection()
-                            lineItems.append(DepartmentLineItem())
+                            // Collapse all when adding new
+                            expandedLineItemId = nil
+                            let newItem = DepartmentLineItem()
+                            lineItems.append(newItem)
+                            // Expand the new item after animation completes
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                                withAnimation(DesignSystem.Animation.standardSpring) {
+                                    expandedLineItemId = newItem.id
+                                }
+                            }
                         }) {
                             HStack(spacing: DesignSystem.Spacing.small) {
                                 Image(systemName: "plus.circle.fill")

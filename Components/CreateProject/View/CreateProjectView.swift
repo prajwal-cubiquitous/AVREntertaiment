@@ -83,6 +83,8 @@ struct LineItemRowView: View {
     @Binding var lineItem: DepartmentLineItem
     let onDelete: () -> Void
     let canDelete: Bool
+    let isExpanded: Bool
+    let onToggleExpand: () -> Void
     
     @State private var quantityText: String = ""
     @State private var unitPriceText: String = ""
@@ -155,232 +157,291 @@ struct LineItemRowView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
-            // Header with Delete Button
-            HStack {
-                Text("Line Item")
-                    .font(DesignSystem.Typography.caption1)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                
-                Spacer()
-                
-                if canDelete {
-                    Button(action: {
-                        HapticManager.selection()
-                        onDelete()
-                    }) {
-                        Image(systemName: "trash")
-                            .foregroundColor(.red)
-                            .font(.system(size: 14, weight: .medium))
-                            .frame(width: 28, height: 28)
-                            .background(Color.red.opacity(0.1))
-                            .clipShape(Circle())
+        VStack(alignment: .leading, spacing: 0) {
+            // Collapsed Header - Always Visible
+            Button(action: {
+                HapticManager.selection()
+                onToggleExpand()
+            }) {
+                HStack(spacing: DesignSystem.Spacing.medium) {
+                    // Chevron
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 20)
+                    
+                    // Item Summary
+                    VStack(alignment: .leading, spacing: 2) {
+                        if !lineItem.itemType.isEmpty {
+                            Text(lineItem.itemType)
+                                .font(DesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                        } else {
+                            Text("Line Item")
+                                .font(DesignSystem.Typography.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        if !lineItem.item.isEmpty {
+                            HStack(spacing: 4) {
+                                Text(lineItem.item)
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                                if !lineItem.spec.isEmpty {
+                                    Text("•")
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                    Text(lineItem.spec)
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
-                }
-            }
-            
-            // Item Type
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text("Item Type")
-                    .font(DesignSystem.Typography.caption1)
-                    .foregroundColor(.secondary)
-                
-                Menu {
-                    ForEach(DepartmentItemData.itemTypeKeys, id: \.self) { itemType in
+                    
+                    Spacer()
+                    
+                    // Total Budget
+                    Text(lineItem.total.formattedCurrency)
+                        .font(DesignSystem.Typography.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    
+                    // Delete Button
+                    if canDelete {
                         Button(action: {
                             HapticManager.selection()
-                            lineItem.itemType = itemType
-                            lineItem.item = ""
-                            lineItem.spec = ""
+                            onDelete()
                         }) {
-                            HStack {
-                                Text(itemType)
-                                if lineItem.itemType == itemType {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                                .font(.system(size: 14, weight: .medium))
+                                .frame(width: 28, height: 28)
+                                .background(Color.red.opacity(0.1))
+                                .clipShape(Circle())
                         }
+                        .buttonStyle(.plain)
+                        .padding(.leading, DesignSystem.Spacing.small)
                     }
-                } label: {
-                    HStack {
-                        Text(lineItem.itemType.isEmpty ? "Select Item Type" : lineItem.itemType)
-                            .font(DesignSystem.Typography.body)
-                            .foregroundColor(lineItem.itemType.isEmpty ? .secondary : .primary)
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                    .padding(.vertical, DesignSystem.Spacing.small)
-                    .background(Color(.tertiarySystemGroupedBackground))
-                    .cornerRadius(DesignSystem.CornerRadius.field)
                 }
+                .padding(DesignSystem.Spacing.medium)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
             
-            // Item + Spec
-            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                Text("Item + Spec")
-                    .font(DesignSystem.Typography.caption1)
-                    .foregroundColor(.secondary)
-                
-                VStack(spacing: DesignSystem.Spacing.small) {
-                    // Item Dropdown
-                    Menu {
-                        ForEach(DepartmentItemData.items(for: lineItem.itemType), id: \.self) { item in
-                            Button(action: {
-                                HapticManager.selection()
-                                lineItem.item = item
-                                lineItem.spec = ""
-                            }) {
-                                HStack {
-                                    Text(item)
-                                    if lineItem.item == item {
-                                        Image(systemName: "checkmark")
+            // Expanded Content
+            if isExpanded {
+                VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                    Divider()
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        // Item Type
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                            Text("Item Type")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                            
+                            Menu {
+                                ForEach(DepartmentItemData.itemTypeKeys, id: \.self) { itemType in
+                                    Button(action: {
+                                        HapticManager.selection()
+                                        lineItem.itemType = itemType
+                                        lineItem.item = ""
+                                        lineItem.spec = ""
+                                    }) {
+                                        HStack {
+                                            Text(itemType)
+                                            if lineItem.itemType == itemType {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
                                     }
                                 }
+                            } label: {
+                                HStack {
+                                    Text(lineItem.itemType.isEmpty ? "Select Item Type" : lineItem.itemType)
+                                        .font(DesignSystem.Typography.body)
+                                        .foregroundColor(lineItem.itemType.isEmpty ? .secondary : .primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .cornerRadius(DesignSystem.CornerRadius.field)
                             }
                         }
-                    } label: {
-                        HStack {
-                            Text(lineItem.item.isEmpty ? "Select Item" : lineItem.item)
-                                .font(DesignSystem.Typography.body)
-                                .foregroundColor(lineItem.item.isEmpty ? .secondary : .primary)
-                            Spacer()
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 12, weight: .medium))
+                        
+                        // Item + Spec
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                            Text("Item + Spec")
+                                .font(DesignSystem.Typography.caption1)
                                 .foregroundColor(.secondary)
-                        }
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
-                        .padding(.vertical, DesignSystem.Spacing.small)
-                        .background(Color(.tertiarySystemGroupedBackground))
-                        .cornerRadius(DesignSystem.CornerRadius.field)
-                    }
-                    .disabled(lineItem.itemType.isEmpty)
-                    .opacity(lineItem.itemType.isEmpty ? 0.6 : 1.0)
-                    
-                    // Spec Dropdown
-                    Menu {
-                        ForEach(DepartmentItemData.specs(for: lineItem.itemType, item: lineItem.item), id: \.self) { spec in
-                            Button(action: {
-                                HapticManager.selection()
-                                lineItem.spec = spec
-                            }) {
-                                HStack {
-                                    Text(spec)
-                                    if lineItem.spec == spec {
-                                        Image(systemName: "checkmark")
+                            
+                            VStack(spacing: DesignSystem.Spacing.small) {
+                                // Item Dropdown
+                                Menu {
+                                    ForEach(DepartmentItemData.items(for: lineItem.itemType), id: \.self) { item in
+                                        Button(action: {
+                                            HapticManager.selection()
+                                            lineItem.item = item
+                                            lineItem.spec = ""
+                                        }) {
+                                            HStack {
+                                                Text(item)
+                                                if lineItem.item == item {
+                                                    Image(systemName: "checkmark")
+                                                }
+                                            }
+                                        }
                                     }
+                                } label: {
+                                    HStack {
+                                        Text(lineItem.item.isEmpty ? "Select Item" : lineItem.item)
+                                            .font(DesignSystem.Typography.body)
+                                            .foregroundColor(lineItem.item.isEmpty ? .secondary : .primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                                    .padding(.vertical, DesignSystem.Spacing.small)
+                                    .background(Color(.tertiarySystemGroupedBackground))
+                                    .cornerRadius(DesignSystem.CornerRadius.field)
+                                }
+                                .disabled(lineItem.itemType.isEmpty)
+                                .opacity(lineItem.itemType.isEmpty ? 0.6 : 1.0)
+                                
+                                // Spec Dropdown
+                                Menu {
+                                    ForEach(DepartmentItemData.specs(for: lineItem.itemType, item: lineItem.item), id: \.self) { spec in
+                                        Button(action: {
+                                            HapticManager.selection()
+                                            lineItem.spec = spec
+                                        }) {
+                                            HStack {
+                                                Text(spec)
+                                                if lineItem.spec == spec {
+                                                    Image(systemName: "checkmark")
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(lineItem.spec.isEmpty ? "Select Spec" : lineItem.spec)
+                                            .font(DesignSystem.Typography.body)
+                                            .foregroundColor(lineItem.spec.isEmpty ? .secondary : .primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                                    .padding(.vertical, DesignSystem.Spacing.small)
+                                    .background(Color(.tertiarySystemGroupedBackground))
+                                    .cornerRadius(DesignSystem.CornerRadius.field)
+                                }
+                                .disabled(lineItem.item.isEmpty)
+                                .opacity(lineItem.item.isEmpty ? 0.6 : 1.0)
+                            }
+                        }
+                        
+                        // Quantity and Unit Price in a row
+                        HStack(spacing: DesignSystem.Spacing.medium) {
+                            // Quantity
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                                Text("Quantity")
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                                
+                                TextField("0", text: Binding(
+                                    get: { quantityText.isEmpty ? lineItem.quantity : quantityText },
+                                    set: { newValue in
+                                        quantityText = formatAmountInput(newValue)
+                                        lineItem.quantity = quantityText
+                                    }
+                                ))
+                                .keyboardType(.decimalPad)
+                                .font(DesignSystem.Typography.body)
+                                .multilineTextAlignment(.trailing)
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .cornerRadius(DesignSystem.CornerRadius.field)
+                                .onAppear {
+                                    quantityText = lineItem.quantity
                                 }
                             }
-                        }
-                    } label: {
-                        HStack {
-                            Text(lineItem.spec.isEmpty ? "Select Spec" : lineItem.spec)
+                            .frame(maxWidth: .infinity)
+                            
+                            // Unit Price
+                            VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
+                                Text("Unit Price")
+                                    .font(DesignSystem.Typography.caption1)
+                                    .foregroundColor(.secondary)
+                                
+                                TextField("0", text: Binding(
+                                    get: { unitPriceText.isEmpty ? lineItem.unitPrice : unitPriceText },
+                                    set: { newValue in
+                                        unitPriceText = formatAmountInput(newValue)
+                                        lineItem.unitPrice = unitPriceText
+                                    }
+                                ))
+                                .keyboardType(.decimalPad)
                                 .font(DesignSystem.Typography.body)
-                                .foregroundColor(lineItem.spec.isEmpty ? .secondary : .primary)
-                            Spacer()
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 12, weight: .medium))
+                                .multilineTextAlignment(.trailing)
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .cornerRadius(DesignSystem.CornerRadius.field)
+                                .onAppear {
+                                    unitPriceText = lineItem.unitPrice
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        
+                        // Total
+                        HStack {
+                            Text("Total")
+                                .font(DesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
                                 .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text(lineItem.total.formattedCurrency)
+                                .font(DesignSystem.Typography.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
                         }
-                        .padding(.horizontal, DesignSystem.Spacing.medium)
-                        .padding(.vertical, DesignSystem.Spacing.small)
-                        .background(Color(.tertiarySystemGroupedBackground))
-                        .cornerRadius(DesignSystem.CornerRadius.field)
+                        .padding(.top, DesignSystem.Spacing.extraSmall)
+                        
+                        // Note for Labour
+                        if lineItem.itemType == "Labour" {
+                            HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.blue)
+                                Text("For Labour, Spec is rate band")
+                                    .font(DesignSystem.Typography.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, DesignSystem.Spacing.extraSmall)
+                        }
                     }
-                    .disabled(lineItem.item.isEmpty)
-                    .opacity(lineItem.item.isEmpty ? 0.6 : 1.0)
-                }
-            }
-            
-            // Quantity and Unit Price in a row
-            HStack(spacing: DesignSystem.Spacing.medium) {
-                // Quantity
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                    Text("Quantity")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("0", text: Binding(
-                        get: { quantityText.isEmpty ? lineItem.quantity : quantityText },
-                        set: { newValue in
-                            quantityText = formatAmountInput(newValue)
-                            lineItem.quantity = quantityText
-                        }
-                    ))
-                    .keyboardType(.decimalPad)
-                    .font(DesignSystem.Typography.body)
-                    .multilineTextAlignment(.trailing)
                     .padding(.horizontal, DesignSystem.Spacing.medium)
-                    .padding(.vertical, DesignSystem.Spacing.small)
-                    .background(Color(.tertiarySystemGroupedBackground))
-                    .cornerRadius(DesignSystem.CornerRadius.field)
-                    .onAppear {
-                        quantityText = lineItem.quantity
-                    }
+                    .padding(.bottom, DesignSystem.Spacing.medium)
                 }
-                .frame(maxWidth: .infinity)
-                
-                // Unit Price
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.extraSmall) {
-                    Text("Unit Price")
-                        .font(DesignSystem.Typography.caption1)
-                        .foregroundColor(.secondary)
-                    
-                    TextField("0", text: Binding(
-                        get: { unitPriceText.isEmpty ? lineItem.unitPrice : unitPriceText },
-                        set: { newValue in
-                            unitPriceText = formatAmountInput(newValue)
-                            lineItem.unitPrice = unitPriceText
-                        }
-                    ))
-                    .keyboardType(.decimalPad)
-                    .font(DesignSystem.Typography.body)
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, DesignSystem.Spacing.medium)
-                    .padding(.vertical, DesignSystem.Spacing.small)
-                    .background(Color(.tertiarySystemGroupedBackground))
-                    .cornerRadius(DesignSystem.CornerRadius.field)
-                    .onAppear {
-                        unitPriceText = lineItem.unitPrice
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-            
-            // Total
-            HStack {
-                Text("Total")
-                    .font(DesignSystem.Typography.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Text(lineItem.total.formattedCurrency)
-                    .font(DesignSystem.Typography.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.green)
-            }
-            .padding(.top, DesignSystem.Spacing.extraSmall)
-            
-            // Note for Labour
-            if lineItem.itemType == "Labour" {
-                HStack(spacing: DesignSystem.Spacing.extraSmall) {
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.blue)
-                    Text("For Labour, Spec is rate band")
-                        .font(DesignSystem.Typography.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.top, DesignSystem.Spacing.extraSmall)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(DesignSystem.Spacing.medium)
         .background(Color(.secondarySystemGroupedBackground))
         .cornerRadius(DesignSystem.CornerRadius.medium)
     }
@@ -1934,6 +1995,7 @@ private struct DepartmentInputRow: View {
     @State private var contractorMode: ContractorMode = .labourOnly
     @State private var lineItems: [DepartmentLineItem] = [DepartmentLineItem()]
     @State private var isExpanded: Bool = false
+    @State private var expandedLineItemId: UUID? = nil
     
     private var totalDepartmentBudget: Double {
         lineItems.reduce(0) { $0 + $1.total }
@@ -2069,18 +2131,41 @@ private struct DepartmentInputRow: View {
                                     lineItem: $lineItem,
                                     onDelete: {
                                         if lineItems.count > 1 {
+                                            if expandedLineItemId == lineItem.id {
+                                                expandedLineItemId = nil
+                                            }
                                             lineItems.removeAll { $0.id == lineItem.id }
                                             updateDepartmentBudget()
                                         }
                                     },
-                                    canDelete: lineItems.count > 1
+                                    canDelete: lineItems.count > 1,
+                                    isExpanded: expandedLineItemId == lineItem.id,
+                                    onToggleExpand: {
+                                        withAnimation(DesignSystem.Animation.standardSpring) {
+                                            if expandedLineItemId == lineItem.id {
+                                                expandedLineItemId = nil
+                                            } else {
+                                                expandedLineItemId = lineItem.id
+                                            }
+                                        }
+                                    }
                                 )
                             }
                         }
                         
                         Button(action: {
                             HapticManager.selection()
-                            lineItems.append(DepartmentLineItem())
+                            // Collapse all when adding new
+                            expandedLineItemId = nil
+                            let newItem = DepartmentLineItem()
+                            lineItems.append(newItem)
+                            // Expand the new item after animation completes
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                                withAnimation(DesignSystem.Animation.standardSpring) {
+                                    expandedLineItemId = newItem.id
+                                }
+                            }
                         }) {
                             HStack(spacing: DesignSystem.Spacing.small) {
                                 Image(systemName: "plus.circle.fill")
