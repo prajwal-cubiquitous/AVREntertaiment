@@ -76,73 +76,28 @@ struct AddExpenseView: View {
                     .padding(.vertical, 8)
                 }
                 
-                // MARK: - Basic Information
+                // MARK: - Expense Date
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Expense Date")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                             .fontWeight(.medium)
                         
                         DatePicker("Select expense date", selection: $viewModel.expenseDate, displayedComponents: .date)
                             .datePickerStyle(.compact)
+                            .labelsHidden()
                         
                         HStack(spacing: 6) {
                             Image(systemName: "info.circle.fill")
                                 .font(.caption2)
                                 .foregroundColor(.blue)
                             Text("Phase selection will be filtered based on this date")
-                                .font(.caption)
+                                .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
                         .padding(.top, 4)
                     }
-                    .padding(.vertical, 4)
-                    
-                    // Amount
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Amount")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        TextField("0", text: Binding(
-                            get: { viewModel.amount },
-                            set: { newValue in
-                                // Format the input according to Indian numbering system
-                                viewModel.amount = viewModel.formatAmountInput(newValue)
-                            }
-                        ))
-                            .keyboardType(.decimalPad)
-                            .font(.title3)
-                            .fontWeight(.medium)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(viewModel.amountError != nil ? Color.red : Color.clear, lineWidth: 1)
-                            )
-                        
-                        if let error = viewModel.amountError {
-                            InlineErrorMessage(message: error)
-                        }
-                    }
-                    .id("amount")
-                    .padding(.vertical, 4)
-                    
-                    // Description
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Description")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        TextEditor(text: $viewModel.description)
-                            .frame(minHeight: 100)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(viewModel.descriptionError != nil ? Color.red : Color(UIColor.systemGray4), lineWidth: viewModel.descriptionError != nil ? 1 : 1)
-                            )
-                        
-                        if let error = viewModel.descriptionError {
-                            InlineErrorMessage(message: error)
-                        }
-                    }
-                    .id("description")
                     .padding(.vertical, 4)
                 } header: {
                     Text("Expense Details")
@@ -151,9 +106,121 @@ struct AddExpenseView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // MARK: - Phase Selection
+                // MARK: - Phase and Department Selection (Side by Side)
                 Section {
-                    phasePickerView
+                    HStack(spacing: 12) {
+                        // Phase
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Phase")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                            
+                            Menu {
+                                let availablePhases = viewModel.availablePhases.filter { $0.canAddExpense }
+                                if !availablePhases.isEmpty {
+                                    ForEach(availablePhases) { phase in
+                                        Button {
+                                            viewModel.selectedPhaseId = phase.id
+                                            viewModel.updateDepartmentForPhase()
+                                        } label: {
+                                            Text(phase.name)
+                                        }
+                                    }
+                                } else {
+                                    Text("No phases available")
+                                        .foregroundColor(.secondary)
+                                        .disabled(true)
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    if let selectedPhase = viewModel.selectedPhase {
+                                        Text(selectedPhase.name)
+                                            .font(.body)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.primary)
+                                        Text("Remaining: \(formatCurrency(selectedPhase.remainingAmount))")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    } else {
+                                        Text("Select Phase")
+                                            .font(.body)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(Color(.secondarySystemGroupedBackground))
+                                .cornerRadius(10)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        
+                        // Department
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Department")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                            
+                            if let selectedPhase = viewModel.selectedPhase {
+                                Menu {
+                                    ForEach(selectedPhase.departments.keys.sorted(), id: \.self) { department in
+                                        Button {
+                                            viewModel.selectedDepartment = department
+                                            viewModel.loadAvailableItemTypes()
+                                            viewModel.checkAdminApprovalConditions()
+                                        } label: {
+                                            HStack {
+                                                Text(formatDepartmentName(department))
+                                                Spacer()
+                                                if let remaining = selectedPhase.departmentRemainingAmounts[department] {
+                                                    Text(formatCurrency(remaining))
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        if !viewModel.selectedDepartment.isEmpty {
+                                            Text(formatDepartmentName(viewModel.selectedDepartment))
+                                                .font(.body)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.primary)
+                                            if let remaining = selectedPhase.departmentRemainingAmounts[viewModel.selectedDepartment] {
+                                                Text("Remaining: \(formatCurrency(remaining))")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        } else {
+                                            Text("Select Department")
+                                                .font(.body)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                    .cornerRadius(10)
+                                }
+                                .disabled(!selectedPhase.canAddExpense)
+                            } else {
+                                Text("Select Phase first")
+                                    .font(.body)
+                                    .foregroundColor(.secondary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(.secondarySystemGroupedBackground))
+                                    .cornerRadius(10)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
                     
                     // Admin approval message
                     if let message = viewModel.adminApprovalMessage {
@@ -175,25 +242,25 @@ struct AddExpenseView: View {
                     }
                 }
                 
-                // MARK: - Department Selection
+                // MARK: - Material Details
                 Section {
-                    departmentPickerView
+                    materialDetailsView
                 } header: {
-                    Text("Department Selection")
+                    Text("Material Details")
                         .textCase(.none)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
                 
-                // MARK: - Categories
+                // MARK: - Notes
                 Section {
-                    categoriesView
+                    notesView
                 } header: {
-                    categoriesHeader
+                    Text("Notes")
+                        .textCase(.none)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
-//                footer: {
-//                    categoriesFooter
-//                }
                 
                 // MARK: - Payment Mode
                 Section {
@@ -376,13 +443,17 @@ struct AddExpenseView: View {
                 // Reload phases when date changes
                 viewModel.loadPhases(for: newDate)
             }
-            .onChange(of: viewModel.amount) { _ in
-                viewModel.checkAdminApprovalConditions()
-            }
             .onChange(of: viewModel.selectedPhaseId) { _ in
                 viewModel.checkAdminApprovalConditions()
             }
             .onChange(of: viewModel.selectedDepartment) { _ in
+                viewModel.loadAvailableItemTypes()
+                viewModel.checkAdminApprovalConditions()
+            }
+            .onChange(of: viewModel.quantity) { _ in
+                viewModel.checkAdminApprovalConditions()
+            }
+            .onChange(of: viewModel.unitPrice) { _ in
                 viewModel.checkAdminApprovalConditions()
             }
     }
@@ -587,6 +658,299 @@ struct AddExpenseView: View {
             }
         }
         .id("department")
+        .padding(.vertical, 4)
+    }
+    
+    // MARK: - Material Details View (Card-based Design)
+    private var materialDetailsView: some View {
+        VStack(spacing: 12) {
+            // Sub-category (Global) - Full Width
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sub-category (Global)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.medium)
+                
+                Menu {
+                    ForEach(viewModel.availableItemTypes, id: \.self) { itemType in
+                        Button {
+                            viewModel.selectedItemType = itemType
+                            viewModel.selectedItem = ""
+                            viewModel.selectedSpec = ""
+                        } label: {
+                            Text(itemType)
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text(viewModel.selectedItemType.isEmpty ? "Select Sub-category" : viewModel.selectedItemType)
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(viewModel.selectedItemType.isEmpty ? .secondary : .primary)
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(10)
+                }
+            }
+            
+            // Material and Brand - Side by Side
+            HStack(spacing: 12) {
+                // Material
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Material")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    if !viewModel.selectedItemType.isEmpty {
+                        Menu {
+                            ForEach(viewModel.availableItems, id: \.self) { item in
+                                Button {
+                                    viewModel.selectedItem = item
+                                    viewModel.selectedSpec = ""
+                                } label: {
+                                    Text(item)
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(viewModel.selectedItem.isEmpty ? "Select Material" : viewModel.selectedItem)
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(viewModel.selectedItem.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                        }
+                    } else {
+                        Text("Select Sub-category first")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                
+                // Brand
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Brand")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    TextField("Optional", text: $viewModel.brand)
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            
+            // Grade and Thickness - Side by Side
+            HStack(spacing: 12) {
+                // Grade
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Grade")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    if !viewModel.selectedItemType.isEmpty && !viewModel.selectedItem.isEmpty {
+                        Menu {
+                            ForEach(viewModel.availableSpecs, id: \.self) { spec in
+                                Button {
+                                    viewModel.selectedSpec = spec
+                                } label: {
+                                    Text(spec)
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(viewModel.selectedSpec.isEmpty ? "Select Grade" : viewModel.selectedSpec)
+                                    .font(.body)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(viewModel.selectedSpec.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.down")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                        }
+                    } else {
+                        Text("Select Material first")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                
+                // Thickness
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Thickness")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(viewModel.thickness)
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.tertiarySystemFill))
+                        .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            
+            // Quantity and UoM - Side by Side
+            HStack(spacing: 12) {
+                // Quantity
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Quantity")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    TextField("0", text: Binding(
+                        get: { viewModel.quantity },
+                        set: { newValue in
+                            let filtered = newValue.filter { "0123456789.".contains($0) }
+                            viewModel.quantity = filtered
+                        }
+                    ))
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .keyboardType(.decimalPad)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+                
+                // UoM
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("UoM")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    TextField("ton", text: $viewModel.uom)
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+            }
+            
+            // Unit Price and Line Amount - Side by Side
+            HStack(spacing: 12) {
+                // Unit Price
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Unit Price")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    TextField("0", text: Binding(
+                        get: { viewModel.unitPrice },
+                        set: { newValue in
+                            viewModel.unitPrice = viewModel.formatAmountInput(newValue)
+                        }
+                    ))
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .keyboardType(.decimalPad)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+                
+                // Line Amount
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Line Amount")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fontWeight(.medium)
+                    
+                    Text(formatCurrency(viewModel.lineAmount))
+                        .font(.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .cornerRadius(10)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    // MARK: - Notes Section
+    private var notesView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Notes")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fontWeight(.medium)
+            
+            TextEditor(text: $viewModel.description)
+                .font(.body)
+                .frame(minHeight: 80)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 8)
+                .background(Color(.secondarySystemGroupedBackground))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(viewModel.descriptionError != nil ? Color.red : Color.clear, lineWidth: 1)
+                )
+            
+            if let error = viewModel.descriptionError {
+                InlineErrorMessage(message: error)
+            }
+        }
         .padding(.vertical, 4)
     }
     

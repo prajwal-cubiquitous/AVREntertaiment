@@ -18,6 +18,17 @@ class AddExpenseViewModel: ObservableObject {
     @Published var categoryCustomNames: [Int: String] = [:] // Store custom names for "Misc / Other" selections (keyed by index)
     @Published var categorySearchTexts: [Int: String] = [:] // Track search text for each category field
     @Published var description: String = ""
+    
+    // MARK: - Line Item Fields
+    @Published var selectedItemType: String = "" // Sub-category (Global)
+    @Published var selectedItem: String = "" // Material
+    @Published var brand: String = "" // Brand (optional, manual entry)
+    @Published var selectedSpec: String = "" // Grade (from spec)
+    @Published var thickness: String = "16 mm" // Thickness (default value)
+    @Published var quantity: String = "" // Quantity (numbers only)
+    @Published var uom: String = "ton" // Unit of Measure
+    @Published var unitPrice: String = "" // Unit Price (manual entry)
+    @Published var availableItemTypes: [String] = [] // Available item types from department
     @Published var selectedPaymentMode: PaymentMode = .cash
     @Published var attachmentURL: String?
     @Published var attachmentName: String?
@@ -457,8 +468,85 @@ class AddExpenseViewModel: ObservableObject {
             selectedDepartment = phase.departments.keys.sorted().first ?? ""
         }
         
+        // Load available item types from department
+        loadAvailableItemTypes()
+        
         // Check admin approval conditions when department changes
         checkAdminApprovalConditions()
+    }
+    
+    // MARK: - Load Available Item Types from Department
+    func loadAvailableItemTypes() {
+        guard let projectId = project.id,
+              let customerId = customerId,
+              !selectedPhaseId.isEmpty,
+              !selectedDepartment.isEmpty else {
+            availableItemTypes = []
+            return
+        }
+        
+        Task {
+            do {
+                // Format department name (remove phaseId prefix if exists)
+                let departmentName: String
+                if let underscoreIndex = selectedDepartment.firstIndex(of: "_") {
+                    departmentName = String(selectedDepartment[selectedDepartment.index(after: underscoreIndex)...])
+                } else {
+                    departmentName = selectedDepartment
+                }
+                
+                // Load department from subcollection
+                let departmentsSnapshot = try await FirebasePathHelper.shared
+                    .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: selectedPhaseId)
+                    .whereField("name", isEqualTo: departmentName)
+                    .getDocuments()
+                
+                var itemTypesSet: Set<String> = []
+                
+                for deptDoc in departmentsSnapshot.documents {
+                    if let department = try? deptDoc.data(as: Department.self) {
+                        // Extract unique item types from line items
+                        for lineItem in department.lineItems {
+                            if !lineItem.itemType.isEmpty {
+                                itemTypesSet.insert(lineItem.itemType)
+                            }
+                        }
+                    }
+                }
+                
+                // If no item types found in department, use all available from DepartmentItemData
+                if itemTypesSet.isEmpty {
+                    itemTypesSet = Set(DepartmentItemData.itemTypeKeys)
+                }
+                
+                await MainActor.run {
+                    self.availableItemTypes = Array(itemTypesSet).sorted()
+                }
+            } catch {
+                print("Error loading item types: \(error)")
+                // Fallback to all available item types
+                await MainActor.run {
+                    self.availableItemTypes = DepartmentItemData.itemTypeKeys
+                }
+            }
+        }
+    }
+    
+    // MARK: - Line Item Computed Properties
+    var availableItems: [String] {
+        guard !selectedItemType.isEmpty else { return [] }
+        return DepartmentItemData.items(for: selectedItemType)
+    }
+    
+    var availableSpecs: [String] {
+        guard !selectedItemType.isEmpty, !selectedItem.isEmpty else { return [] }
+        return DepartmentItemData.specs(for: selectedItemType, item: selectedItem)
+    }
+    
+    var lineAmount: Double {
+        let qty = Double(quantity.replacingOccurrences(of: ",", with: "")) ?? 0
+        let price = Double(unitPrice.replacingOccurrences(of: ",", with: "")) ?? 0
+        return qty * price
     }
     
     // MARK: - Admin Approval Check
