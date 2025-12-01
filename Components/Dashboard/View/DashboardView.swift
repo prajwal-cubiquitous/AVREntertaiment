@@ -120,7 +120,15 @@ struct DashboardView: View {
         let name: String
         let start: Date?
         let end: Date?
-        let departments: [String: Double]
+        let departments: [String: Double] // Keep for backward compatibility
+        let departmentList: [DepartmentSummary] // New: List of departments from subcollection
+    }
+    
+    struct DepartmentSummary: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let budget: Double
+        let contractorMode: String
     }
     
     struct PhaseBudget: Identifiable {
@@ -1445,56 +1453,79 @@ struct DashboardView: View {
                             ZStack(alignment: .leading) {
                                 ScrollView(.horizontal, showsIndicators: true) {
                                     HStack(spacing: DesignSystem.Spacing.medium) {
-                                        ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
-                                            // Strip phaseId_ prefix for display
-                                            let displayName = deptKey.displayDepartmentName()
-                                            
-                                            // Look up spent amount - try both deptKey formats
-                                            // phaseDepartmentSpentMap stores keys with phaseId prefix (e.g., "phaseId_departmentName")
-                                            // But phase.departments might have keys with or without prefix
-                                            let spentAmount: Double = {
-                                                // First try exact match
-                                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
-                                                    return spent
-                                                }
-                                                
-                                                // If deptKey has prefix, try without prefix
-                                                if deptKey.hasPrefix("\(phase.id)_") {
-                                                    let deptWithoutPrefix = deptKey.displayDepartmentName()
-                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                                        // Use departmentList if available, otherwise fallback to departments dictionary
+                                        if !phase.departmentList.isEmpty {
+                                            ForEach(phase.departmentList.sorted(by: { $0.name < $1.name })) { dept in
+                                                // Look up spent amount by department name
+                                                let spentAmount: Double = {
+                                                    // Try with phaseId prefix
+                                                    let deptKeyWithPrefix = "\(phase.id)_\(dept.name)"
+                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptKeyWithPrefix] {
                                                         return spent
                                                     }
-                                                } else {
-                                                    // deptKey doesn't have prefix - try with prefix
-                                                    let deptWithPrefix = "\(phase.id)_\(deptKey)"
-                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                                    // Try without prefix
+                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[dept.name] {
                                                         return spent
                                                     }
-                                                }
-                                                
-                                                // Debug: log when no match is found
-                                                if let deptMap = phaseDepartmentSpentMap[phase.id], !deptMap.isEmpty {
-                                                    print("⚠️ No match for deptKey '\(deptKey)' in phase '\(phase.id)'")
-                                                    print("   Available keys: \(deptMap.keys.joined(separator: ", "))")
-                                                }
-                                                
-                                                return 0
-                                            }()
-                                            
-                                            DepartmentMiniCard(
-                                                title: displayName,
-                                                amount: amount,
-                                                spent: spentAmount,
-                                                onTap: {
-                                                    // Use the display name (without phaseId prefix) for selection
-                                                    selectedDepartmentForDetail = displayName
-                                                    selectedPhaseIdForDetail = phase.id
-                                                    // Small delay to ensure state is set before showing sheet
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                                        showingDepartmentDetail = true
+                                                    // Try matching by name in expense keys
+                                                    for (expenseDeptKey, amount) in phaseDepartmentSpentMap[phase.id] ?? [:] {
+                                                        let expenseDeptName = expenseDeptKey.displayDepartmentName()
+                                                        if expenseDeptName == dept.name {
+                                                            return amount
+                                                        }
                                                     }
-                                                }
-                                            )
+                                                    return 0
+                                                }()
+                                                
+                                                DepartmentMiniCard(
+                                                    title: dept.name,
+                                                    amount: dept.budget,
+                                                    spent: spentAmount,
+                                                    onTap: {
+                                                        selectedDepartmentForDetail = dept.name
+                                                        selectedPhaseIdForDetail = phase.id
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                            showingDepartmentDetail = true
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        } else {
+                                            // Fallback to departments dictionary (backward compatibility)
+                                            ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
+                                                let displayName = deptKey.displayDepartmentName()
+                                                
+                                                let spentAmount: Double = {
+                                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
+                                                        return spent
+                                                    }
+                                                    if deptKey.hasPrefix("\(phase.id)_") {
+                                                        let deptWithoutPrefix = deptKey.displayDepartmentName()
+                                                        if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                                                            return spent
+                                                        }
+                                                    } else {
+                                                        let deptWithPrefix = "\(phase.id)_\(deptKey)"
+                                                        if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                                            return spent
+                                                        }
+                                                    }
+                                                    return 0
+                                                }()
+                                                
+                                                DepartmentMiniCard(
+                                                    title: displayName,
+                                                    amount: amount,
+                                                    spent: spentAmount,
+                                                    onTap: {
+                                                        selectedDepartmentForDetail = displayName
+                                                        selectedPhaseIdForDetail = phase.id
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                            showingDepartmentDetail = true
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
                                         
                                         // Add "Other" department card for anonymous expenses
@@ -1899,11 +1930,53 @@ struct DashboardView: View {
                 .getDocuments()
             var collected: [PhaseSummary] = []
             for doc in snapshot.documents {
+                let phaseId = doc.documentID
                 if let p = try? doc.data(as: Phase.self) {
                     let s = p.startDate.flatMap { phaseDateFormatter.date(from: $0) }
                     let e = p.endDate.flatMap { phaseDateFormatter.date(from: $0) }
-                    collected.append(PhaseSummary(id: doc.documentID, name: p.phaseName, start: s, end: e, departments: p.departments))
-                    phaseEnabledMap[doc.documentID] = p.isEnabledValue
+                    
+                    // Load departments from departments subcollection
+                    var departmentList: [DepartmentSummary] = []
+                    var departmentsDict: [String: Double] = [:]
+                    
+                    do {
+                        let departmentsSnapshot = try await FirebasePathHelper.shared
+                            .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                            .getDocuments()
+                        
+                        for deptDoc in departmentsSnapshot.documents {
+                            if let department = try? deptDoc.data(as: Department.self) {
+                                let deptId = deptDoc.documentID
+                                let deptBudget = department.totalBudget
+                                
+                                // Add to dictionary for backward compatibility (using phaseId_departmentName format)
+                                let deptKey = String.departmentKey(phaseId: phaseId, departmentName: department.name)
+                                departmentsDict[deptKey] = deptBudget
+                                
+                                // Add to department list
+                                departmentList.append(DepartmentSummary(
+                                    id: deptId,
+                                    name: department.name,
+                                    budget: deptBudget,
+                                    contractorMode: department.contractorMode
+                                ))
+                            }
+                        }
+                    } catch {
+                        print("⚠️ Error loading departments for phase \(phaseId): \(error.localizedDescription)")
+                        // Fallback to phase.departments dictionary (backward compatibility)
+                        departmentsDict = p.departments
+                    }
+                    
+                    collected.append(PhaseSummary(
+                        id: phaseId,
+                        name: p.phaseName,
+                        start: s,
+                        end: e,
+                        departments: departmentsDict,
+                        departmentList: departmentList
+                    ))
+                    phaseEnabledMap[phaseId] = p.isEnabledValue
                 }
             }
             await MainActor.run { 
@@ -2054,7 +2127,14 @@ struct DashboardView: View {
             // Calculate total budget and create PhaseBudget for each phase
             var budgetMap: [String: PhaseBudget] = [:]
             for phase in allPhases {
-                let totalBudget = phase.departments.values.reduce(0, +)
+                // Use departmentList if available, otherwise fallback to departments dictionary
+                let totalBudget: Double = {
+                    if !phase.departmentList.isEmpty {
+                        return phase.departmentList.reduce(0) { $0 + $1.budget }
+                    } else {
+                        return phase.departments.values.reduce(0, +)
+                    }
+                }()
                 let spent = phaseSpentMap[phase.id] ?? 0
                 budgetMap[phase.id] = PhaseBudget(
                     id: phase.id,
@@ -2671,24 +2751,32 @@ private struct AddDepartmentSheet: View {
                     return
                 }
                 
-                let phaseDoc = try await FirebasePathHelper.shared
-                    .phasesCollection(customerId: customerId, projectId: projectId)
-                    .document(phaseId)
-                    .getDocument()
+                // Load departments from departments subcollection
+                let departmentsSnapshot = try await FirebasePathHelper.shared
+                    .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                    .getDocuments()
                 
-                guard let phaseData = phaseDoc.data(),
-                      let departments = phaseData["departments"] as? [String: Any] else {
-                    await MainActor.run {
-                        existingDepartmentNames = []
+                var departmentNames: [String] = []
+                for deptDoc in departmentsSnapshot.documents {
+                    if let department = try? deptDoc.data(as: Department.self) {
+                        departmentNames.append(department.name)
                     }
-                    return
                 }
                 
-                // Extract department names from keys (remove phaseId_ prefix if present)
-                var departmentNames: [String] = []
-                for deptKey in departments.keys {
-                    let displayName = deptKey.displayDepartmentName()
-                    departmentNames.append(displayName)
+                // Fallback to phase.departments dictionary if subcollection is empty (backward compatibility)
+                if departmentNames.isEmpty {
+                    let phaseDoc = try await FirebasePathHelper.shared
+                        .phasesCollection(customerId: customerId, projectId: projectId)
+                        .document(phaseId)
+                        .getDocument()
+                    
+                    if let phaseData = phaseDoc.data(),
+                       let departments = phaseData["departments"] as? [String: Any] {
+                        for deptKey in departments.keys {
+                            let displayName = deptKey.displayDepartmentName()
+                            departmentNames.append(displayName)
+                        }
+                    }
                 }
                 
                 await MainActor.run {
@@ -3039,8 +3127,31 @@ private struct AddDepartmentSheet: View {
             
             var totalBudget: Double = 0
             for doc in phasesSnapshot.documents {
-                if let phase = try? doc.data(as: Phase.self) {
-                    totalBudget += phase.departments.values.reduce(0, +)
+                let phaseId = doc.documentID
+                // Try to load from departments subcollection first
+                do {
+                    let departmentsSnapshot = try await FirebasePathHelper.shared
+                        .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                        .getDocuments()
+                    
+                    if !departmentsSnapshot.documents.isEmpty {
+                        // Calculate from departments subcollection
+                        for deptDoc in departmentsSnapshot.documents {
+                            if let department = try? deptDoc.data(as: Department.self) {
+                                totalBudget += department.totalBudget
+                            }
+                        }
+                    } else {
+                        // Fallback to phase.departments dictionary
+                        if let phase = try? doc.data(as: Phase.self) {
+                            totalBudget += phase.departments.values.reduce(0, +)
+                        }
+                    }
+                } catch {
+                    // Fallback to phase.departments dictionary on error
+                    if let phase = try? doc.data(as: Phase.self) {
+                        totalBudget += phase.departments.values.reduce(0, +)
+                    }
                 }
             }
             
@@ -3569,7 +3680,14 @@ private struct AllPhasesView: View {
                 // Calculate total budget and create PhaseBudget for each phase
                 var budgetMap: [String: DashboardView.PhaseBudget] = [:]
                 for phase in displayPhases {
-                    let totalBudget = phase.departments.values.reduce(0, +)
+                    // Use departmentList if available, otherwise fallback to departments dictionary
+                    let totalBudget: Double = {
+                        if !phase.departmentList.isEmpty {
+                            return phase.departmentList.reduce(0) { $0 + $1.budget }
+                        } else {
+                            return phase.departments.values.reduce(0, +)
+                        }
+                    }()
                     let spent = phaseSpentMap[phase.id] ?? 0
                     budgetMap[phase.id] = DashboardView.PhaseBudget(
                         id: phase.id,
@@ -4189,55 +4307,73 @@ private struct AllPhasesView: View {
             // Horizontal scroller
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 12) {
-                    ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
-                        // Strip phaseId_ prefix for display
-                        let displayName = deptKey.displayDepartmentName()
-                        
-                        // Look up spent amount - try both deptKey formats
-                        // phaseDepartmentSpentMap stores keys with phaseId prefix (e.g., "phaseId_departmentName")
-                        // But phase.departments might have keys with or without prefix
-                        let spentAmount: Double = {
-                            // First try exact match
-                            if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
-                                return spent
-                            }
-                            
-                            // If deptKey has prefix, try without prefix
-                            if deptKey.hasPrefix("\(phase.id)_") {
-                                let deptWithoutPrefix = deptKey.displayDepartmentName()
-                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                    // Use departmentList if available, otherwise fallback to departments dictionary
+                    if !phase.departmentList.isEmpty {
+                        ForEach(phase.departmentList.sorted(by: { $0.name < $1.name })) { dept in
+                            let spentAmount: Double = {
+                                let deptKeyWithPrefix = "\(phase.id)_\(dept.name)"
+                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptKeyWithPrefix] {
                                     return spent
                                 }
-                            } else {
-                                // deptKey doesn't have prefix - try with prefix
-                                let deptWithPrefix = "\(phase.id)_\(deptKey)"
-                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                if let spent = phaseDepartmentSpentMap[phase.id]?[dept.name] {
                                     return spent
                                 }
-                            }
-                            
-                            // Debug: log when no match is found
-                            if let deptMap = phaseDepartmentSpentMap[phase.id], !deptMap.isEmpty {
-                                print("⚠️ No match for deptKey '\(deptKey)' in phase '\(phase.id)'")
-                                print("   Available keys: \(deptMap.keys.joined(separator: ", "))")
-                            }
-                            
-                            return 0
-                        }()
-                        
-                        DepartmentMiniCard(
-                            title: displayName,
-                            amount: amount,
-                            spent: spentAmount,
-                            onTap: {
-                                // Use the display name (without phaseId prefix) for selection
-                                selectedDepartment = DepartmentSelection(name: displayName, phaseId: phase.id)
-                                // Small delay to ensure state is set before showing sheet
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    showingDepartmentDetail = true
+                                for (expenseDeptKey, amount) in phaseDepartmentSpentMap[phase.id] ?? [:] {
+                                    let expenseDeptName = expenseDeptKey.displayDepartmentName()
+                                    if expenseDeptName == dept.name {
+                                        return amount
+                                    }
                                 }
-                            }
-                        )
+                                return 0
+                            }()
+                            
+                            DepartmentMiniCard(
+                                title: dept.name,
+                                amount: dept.budget,
+                                spent: spentAmount,
+                                onTap: {
+                                    selectedDepartment = DepartmentSelection(name: dept.name, phaseId: phase.id)
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        showingDepartmentDetail = true
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        // Fallback to departments dictionary (backward compatibility)
+                        ForEach(phase.departments.sorted(by: { $0.key < $1.key }), id: \.key) { deptKey, amount in
+                            let displayName = deptKey.displayDepartmentName()
+                            
+                            let spentAmount: Double = {
+                                if let spent = phaseDepartmentSpentMap[phase.id]?[deptKey] {
+                                    return spent
+                                }
+                                if deptKey.hasPrefix("\(phase.id)_") {
+                                    let deptWithoutPrefix = deptKey.displayDepartmentName()
+                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithoutPrefix] {
+                                        return spent
+                                    }
+                                } else {
+                                    let deptWithPrefix = "\(phase.id)_\(deptKey)"
+                                    if let spent = phaseDepartmentSpentMap[phase.id]?[deptWithPrefix] {
+                                        return spent
+                                    }
+                                }
+                                return 0
+                            }()
+                            
+                            DepartmentMiniCard(
+                                title: displayName,
+                                amount: amount,
+                                spent: spentAmount,
+                                onTap: {
+                                    selectedDepartment = DepartmentSelection(name: displayName, phaseId: phase.id)
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        showingDepartmentDetail = true
+                                    }
+                                }
+                            )
+                        }
                     }
                     
                     // Add "Other" department card for anonymous expenses
@@ -6224,8 +6360,31 @@ private struct AddPhaseSheet: View {
             
             var totalBudget: Double = 0
             for doc in phasesSnapshot.documents {
-                if let phase = try? doc.data(as: Phase.self) {
-                    totalBudget += phase.departments.values.reduce(0, +)
+                let phaseId = doc.documentID
+                // Try to load from departments subcollection first
+                do {
+                    let departmentsSnapshot = try await FirebasePathHelper.shared
+                        .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                        .getDocuments()
+                    
+                    if !departmentsSnapshot.documents.isEmpty {
+                        // Calculate from departments subcollection
+                        for deptDoc in departmentsSnapshot.documents {
+                            if let department = try? deptDoc.data(as: Department.self) {
+                                totalBudget += department.totalBudget
+                            }
+                        }
+                    } else {
+                        // Fallback to phase.departments dictionary
+                        if let phase = try? doc.data(as: Phase.self) {
+                            totalBudget += phase.departments.values.reduce(0, +)
+                        }
+                    }
+                } catch {
+                    // Fallback to phase.departments dictionary on error
+                    if let phase = try? doc.data(as: Phase.self) {
+                        totalBudget += phase.departments.values.reduce(0, +)
+                    }
                 }
             }
             
@@ -7221,8 +7380,31 @@ private struct EditPhaseSheet: View {
             
             var totalBudget: Double = 0
             for doc in phasesSnapshot.documents {
-                if let phase = try? doc.data(as: Phase.self) {
-                    totalBudget += phase.departments.values.reduce(0, +)
+                let phaseId = doc.documentID
+                // Try to load from departments subcollection first
+                do {
+                    let departmentsSnapshot = try await FirebasePathHelper.shared
+                        .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                        .getDocuments()
+                    
+                    if !departmentsSnapshot.documents.isEmpty {
+                        // Calculate from departments subcollection
+                        for deptDoc in departmentsSnapshot.documents {
+                            if let department = try? deptDoc.data(as: Department.self) {
+                                totalBudget += department.totalBudget
+                            }
+                        }
+                    } else {
+                        // Fallback to phase.departments dictionary
+                        if let phase = try? doc.data(as: Phase.self) {
+                            totalBudget += phase.departments.values.reduce(0, +)
+                        }
+                    }
+                } catch {
+                    // Fallback to phase.departments dictionary on error
+                    if let phase = try? doc.data(as: Phase.self) {
+                        totalBudget += phase.departments.values.reduce(0, +)
+                    }
                 }
             }
             

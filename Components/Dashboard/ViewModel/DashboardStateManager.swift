@@ -106,7 +106,8 @@ class DashboardStateManager: ObservableObject {
                 name: updatedPhase.name,
                 start: updatedPhase.start,
                 end: updatedPhase.end,
-                departments: updatedDepartments
+                departments: updatedDepartments,
+                departmentList: updatedPhase.departmentList
             )
             allPhases[index] = updatedPhase
             
@@ -133,7 +134,8 @@ class DashboardStateManager: ObservableObject {
                 name: updatedPhase.name,
                 start: updatedPhase.start,
                 end: updatedPhase.end,
-                departments: updatedDepartments
+                departments: updatedDepartments,
+                departmentList: updatedPhase.departmentList
             )
             allPhases[index] = updatedPhase
             
@@ -149,7 +151,14 @@ class DashboardStateManager: ObservableObject {
     /// Recalculate phase budget after department changes
     private func recalculatePhaseBudget(phaseId: String) {
         guard let phase = allPhases.first(where: { $0.id == phaseId }) else { return }
-        let totalBudget = phase.departments.values.reduce(0, +)
+        // Use departmentList if available, otherwise fallback to departments dictionary
+        let totalBudget: Double = {
+            if !phase.departmentList.isEmpty {
+                return phase.departmentList.reduce(0) { $0 + $1.budget }
+            } else {
+                return phase.departments.values.reduce(0, +)
+            }
+        }()
         let spent = phaseBudgetMap[phaseId]?.spent ?? 0
         
         phaseBudgetMap[phaseId] = DashboardView.PhaseBudget(
@@ -239,7 +248,8 @@ class DashboardStateManager: ObservableObject {
                 name: updatedPhase.name,
                 start: updatedPhase.start,
                 end: updatedPhase.end,
-                departments: updatedDepartments
+                departments: updatedDepartments,
+                departmentList: updatedPhase.departmentList
             )
             allPhases[index] = updatedPhase
             
@@ -252,7 +262,15 @@ class DashboardStateManager: ObservableObject {
     func recalculateProjectTotals() {
         // Calculate total project budget from all phases
         totalProjectBudget = allPhases.reduce(0) { total, phase in
-            total + phase.departments.values.reduce(0, +)
+            // Use departmentList if available, otherwise fallback to departments dictionary
+            let phaseBudget: Double = {
+                if !phase.departmentList.isEmpty {
+                    return phase.departmentList.reduce(0) { $0 + $1.budget }
+                } else {
+                    return phase.departments.values.reduce(0, +)
+                }
+            }()
+            return total + phaseBudget
         }
         
         // Calculate total project spent from all phases
@@ -263,22 +281,35 @@ class DashboardStateManager: ObservableObject {
         var deptTotals: [String: (total: Double, spent: Double)] = [:]
         
         for phase in allPhases {
-            for (deptKey, budget) in phase.departments {
-                // Extract department name from key (handle both formats)
-                let departmentName: String
-                if deptKey.contains("_") {
-                    // New format: phaseId_department
-                    departmentName = String(deptKey.split(separator: "_").dropFirst().joined(separator: "_"))
-                } else {
-                    // Old format: department
-                    departmentName = deptKey
+            // Use departmentList if available, otherwise fallback to departments dictionary
+            if !phase.departmentList.isEmpty {
+                for dept in phase.departmentList {
+                    let current = deptTotals[dept.name] ?? (0, 0)
+                    // Get spent from department spent map (try both formats)
+                    let deptKeyWithPrefix = "\(phase.id)_\(dept.name)"
+                    let spent = phaseDepartmentSpentMap[phase.id]?[deptKeyWithPrefix] ?? 
+                               phaseDepartmentSpentMap[phase.id]?[dept.name] ?? 0
+                    deptTotals[dept.name] = (current.total + dept.budget, current.spent + spent)
                 }
-                
-                let current = deptTotals[departmentName] ?? (0, 0)
-                // Get spent from department spent map (try both formats)
-                let spent = phaseDepartmentSpentMap[phase.id]?[departmentName] ?? 
-                           phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0
-                deptTotals[departmentName] = (current.total + budget, current.spent + spent)
+            } else {
+                // Fallback to departments dictionary
+                for (deptKey, budget) in phase.departments {
+                    // Extract department name from key (handle both formats)
+                    let departmentName: String
+                    if deptKey.contains("_") {
+                        // New format: phaseId_department
+                        departmentName = String(deptKey.split(separator: "_").dropFirst().joined(separator: "_"))
+                    } else {
+                        // Old format: department
+                        departmentName = deptKey
+                    }
+                    
+                    let current = deptTotals[departmentName] ?? (0, 0)
+                    // Get spent from department spent map (try both formats)
+                    let spent = phaseDepartmentSpentMap[phase.id]?[departmentName] ?? 
+                               phaseDepartmentSpentMap[phase.id]?[deptKey] ?? 0
+                    deptTotals[departmentName] = (current.total + budget, current.spent + spent)
+                }
             }
         }
         
@@ -413,17 +444,53 @@ class DashboardStateManager: ObservableObject {
             var enabledMap: [String: Bool] = [:]
             
             for doc in snapshot.documents {
+                let phaseId = doc.documentID
                 if let p = try? doc.data(as: Phase.self) {
                     let s = p.startDate.flatMap { dateFormatter.date(from: $0) }
                     let e = p.endDate.flatMap { dateFormatter.date(from: $0) }
+                    
+                    // Load departments from departments subcollection
+                    var departmentList: [DashboardView.DepartmentSummary] = []
+                    var departmentsDict: [String: Double] = [:]
+                    
+                    do {
+                        let departmentsSnapshot = try await FirebasePathHelper.shared
+                            .departmentsCollection(customerId: customerId, projectId: projectId, phaseId: phaseId)
+                            .getDocuments()
+                        
+                        for deptDoc in departmentsSnapshot.documents {
+                            if let department = try? deptDoc.data(as: Department.self) {
+                                let deptId = deptDoc.documentID
+                                let deptBudget = department.totalBudget
+                                
+                                // Add to dictionary for backward compatibility (using phaseId_departmentName format)
+                                let deptKey = String.departmentKey(phaseId: phaseId, departmentName: department.name)
+                                departmentsDict[deptKey] = deptBudget
+                                
+                                // Add to department list
+                                departmentList.append(DashboardView.DepartmentSummary(
+                                    id: deptId,
+                                    name: department.name,
+                                    budget: deptBudget,
+                                    contractorMode: department.contractorMode
+                                ))
+                            }
+                        }
+                    } catch {
+                        print("⚠️ Error loading departments for phase \(phaseId): \(error.localizedDescription)")
+                        // Fallback to phase.departments dictionary (backward compatibility)
+                        departmentsDict = p.departments
+                    }
+                    
                     collected.append(DashboardView.PhaseSummary(
-                        id: doc.documentID,
+                        id: phaseId,
                         name: p.phaseName,
                         start: s,
                         end: e,
-                        departments: p.departments
+                        departments: departmentsDict,
+                        departmentList: departmentList
                     ))
-                    enabledMap[doc.documentID] = p.isEnabledValue
+                    enabledMap[phaseId] = p.isEnabledValue
                 }
             }
             
@@ -453,7 +520,14 @@ class DashboardStateManager: ObservableObject {
             
             var budgetMap: [String: DashboardView.PhaseBudget] = [:]
             for phase in allPhases {
-                let totalBudget = phase.departments.values.reduce(0, +)
+                // Use departmentList if available, otherwise fallback to departments dictionary
+                let totalBudget: Double = {
+                    if !phase.departmentList.isEmpty {
+                        return phase.departmentList.reduce(0) { $0 + $1.budget }
+                    } else {
+                        return phase.departments.values.reduce(0, +)
+                    }
+                }()
                 let spent = phaseSpentMap[phase.id] ?? 0
                 budgetMap[phase.id] = DashboardView.PhaseBudget(
                     id: phase.id,
