@@ -2549,6 +2549,8 @@ private struct AddDepartmentSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var departmentName: String = ""
     @State private var budgetText: String = ""
+    @State private var contractorMode: ContractorMode = .labourOnly
+    @State private var lineItems: [DepartmentLineItem] = [DepartmentLineItem()]
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var departmentNameError: String?
@@ -2561,6 +2563,10 @@ private struct AddDepartmentSheet: View {
     private var isFormValid: Bool {
         !departmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         departmentNameError == nil
+    }
+    
+    private var totalDepartmentBudget: Double {
+        lineItems.reduce(0) { $0 + $1.total }
     }
     
     // MARK: - Indian Number Formatting Helpers
@@ -2697,74 +2703,211 @@ private struct AddDepartmentSheet: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section {
-                    VStack(alignment: .leading, spacing: 2) {
+            ScrollView {
+                VStack(spacing: DesignSystem.Spacing.large) {
+                    // Department Name Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
                         Text("Add a department to \(phaseName)")
-                            .font(.headline)
+                            .font(DesignSystem.Typography.headline)
                             .foregroundColor(.primary)
-                    }
-                    .padding(.vertical, 2)
-                }
-
-                Section {
-                    TextField("Department name", text: $departmentName)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled()
-                        .focused($focusedField, equals: .name)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(departmentNameError != nil ? Color.red : Color.clear, lineWidth: 1)
-                        )
-                        .onChange(of: departmentName) { _, _ in
-                            validateDepartmentName()
+                        
+                        VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                            Text("Department Name")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                            
+                            TextField("Enter department name", text: $departmentName)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .focused($focusedField, equals: .name)
+                                .font(DesignSystem.Typography.body)
+                                .padding(.horizontal, DesignSystem.Spacing.medium)
+                                .padding(.vertical, DesignSystem.Spacing.small)
+                                .background(Color(.tertiarySystemGroupedBackground))
+                                .cornerRadius(DesignSystem.CornerRadius.field)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.field)
+                                        .stroke(departmentNameError != nil ? Color.red : Color.clear, lineWidth: 1.5)
+                                )
+                                .onChange(of: departmentName) { _, _ in
+                                    validateDepartmentName()
+                                }
+                            
+                            if let error = departmentNameError {
+                                HStack(spacing: DesignSystem.Spacing.extraSmall) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.red)
+                                    Text(error)
+                                        .font(DesignSystem.Typography.caption1)
+                                        .foregroundColor(.red)
+                                }
+                                .padding(.top, DesignSystem.Spacing.extraSmall)
+                            }
                         }
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    .padding(.top, DesignSystem.Spacing.medium)
                     
-                    if let error = departmentNameError {
-                        HStack(spacing: 6) {
+                    // Contractor Mode Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        Text("Contractor Mode")
+                            .font(DesignSystem.Typography.caption1)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                        
+                        HStack(spacing: DesignSystem.Spacing.small) {
+                            ForEach(ContractorMode.allCases, id: \.self) { mode in
+                                Button(action: {
+                                    HapticManager.selection()
+                                    contractorMode = mode
+                                }) {
+                                    Text(mode.displayName)
+                                        .font(DesignSystem.Typography.subheadline)
+                                        .fontWeight(contractorMode == mode ? .semibold : .regular)
+                                        .foregroundColor(contractorMode == mode ? .blue : .primary)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, DesignSystem.Spacing.medium)
+                                        .padding(.vertical, DesignSystem.Spacing.medium)
+                                        .frame(maxWidth: .infinity)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                                .fill(contractorMode == mode ? Color.blue.opacity(0.12) : Color(.tertiarySystemGroupedBackground))
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: DesignSystem.CornerRadius.medium)
+                                                .stroke(contractorMode == mode ? Color.blue.opacity(0.3) : Color(.separator), lineWidth: contractorMode == mode ? 1.5 : 1)
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Line Items Section
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.medium) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Items")
+                                .font(DesignSystem.Typography.caption1)
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+                            
+                            Spacer()
+                            
+                            Text("sum must equal Department Budget")
+                                .font(DesignSystem.Typography.caption2)
+                                .foregroundColor(.secondary)
+                                .italic()
+                        }
+                        
+                        VStack(spacing: DesignSystem.Spacing.medium) {
+                            ForEach($lineItems) { $lineItem in
+                                LineItemRowView(
+                                    lineItem: $lineItem,
+                                    onDelete: {
+                                        if lineItems.count > 1 {
+                                            lineItems.removeAll { $0.id == lineItem.id }
+                                        }
+                                    },
+                                    canDelete: lineItems.count > 1
+                                )
+                            }
+                        }
+                        
+                        Button(action: {
+                            HapticManager.selection()
+                            lineItems.append(DepartmentLineItem())
+                        }) {
+                            HStack(spacing: DesignSystem.Spacing.small) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Add row")
+                                    .font(DesignSystem.Typography.callout)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.blue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, DesignSystem.Spacing.small)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // Total Display
+                        Divider()
+                            .padding(.vertical, DesignSystem.Spacing.small)
+                        
+                        HStack {
+                            Text("Total")
+                                .font(DesignSystem.Typography.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Text(totalDepartmentBudget.formattedCurrency)
+                                .font(DesignSystem.Typography.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(DesignSystem.Spacing.medium)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    // Department Budget Summary
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.small) {
+                        HStack {
+                            Text("Department Budget")
+                                .font(DesignSystem.Typography.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text(totalDepartmentBudget.formattedCurrency)
+                                .font(DesignSystem.Typography.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .padding(DesignSystem.Spacing.medium)
+                    .background(Color(.tertiarySystemGroupedBackground))
+                    .cornerRadius(DesignSystem.CornerRadius.medium)
+                    .padding(.horizontal, DesignSystem.Spacing.medium)
+                    
+                    if let error = errorMessage {
+                        HStack(spacing: DesignSystem.Spacing.small) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .font(.caption)
+                                .font(.system(size: 14))
                                 .foregroundColor(.red)
                             Text(error)
-                                .font(.caption)
+                                .font(DesignSystem.Typography.caption1)
                                 .foregroundColor(.red)
                         }
-                        .padding(.top, 4)
+                        .padding(DesignSystem.Spacing.medium)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(DesignSystem.CornerRadius.small)
+                        .padding(.horizontal, DesignSystem.Spacing.medium)
                     }
-
-                    HStack {
-                        TextField("Budget (₹)", text: Binding(
-                            get: { budgetText },
-                            set: { newValue in
-                                budgetText = formatAmountInput(newValue)
-                            }
-                        ))
-                            .keyboardType(.decimalPad)
-                            .focused($focusedField, equals: .budget)
-                        if let amount = Double(removeFormatting(from: budgetText)) {
-                            Text(Int(amount).formattedCurrency)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } header: { Text("Department Details").textCase(.uppercase) } footer: { Text("Budget is optional and can be 0.") }
-
-                if let error = errorMessage {
-                    Section { Text(error).foregroundColor(.red) }
                 }
+                .padding(.bottom, DesignSystem.Spacing.extraLarge)
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle("Add Department")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .foregroundColor(.blue)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button("Create Department") { save() }
                         .disabled(!isFormValid || isSaving)
                         .fontWeight(.semibold)
+                        .foregroundColor(.green)
                 }
-                // Removed custom keyboard toolbar per request
             }
             .onAppear {
                 focusedField = .name
@@ -2792,7 +2935,8 @@ private struct AddDepartmentSheet: View {
             return
         }
         
-        let amount = Double(removeFormatting(from: budgetText)) ?? 0
+        // Use total from line items as department budget
+        let amount = totalDepartmentBudget
         isSaving = true
         errorMessage = nil
 
